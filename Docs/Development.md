@@ -27,7 +27,7 @@ psql --version   # should print psql (PostgreSQL) 15.x or higher
 ## 1. Clone the repo
 
 ```bash
-git clone https://github.com/your-username/soulwe.git
+git clone https://github.com/breodoyo/soulwe.git
 cd soulwe
 ```
 
