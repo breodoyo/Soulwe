@@ -1,42 +1,41 @@
 # Architecture
 
-This document explains how Soulwe is structured and why each decision
-was made. Read this before touching any code.
+This document explains how Soulwe is structured and why each decision was made. Read this before touching any code.
 
 ---
 
 ## System overview
 
-```
+```text
                         ┌─────────────────────┐
-                        │   React Frontend     │
-                        │   (Vercel)           │
-                        └────────┬────────────┘
-                                 │ HTTPS / JSON
-                        ┌────────▼────────────┐
-                        │   Go API Server      │
-                        │   (Render)           │
+                        │   React Frontend    │
+                        │      (Vercel)       │
+                        └──────────┬──────────┘
+                                   │ HTTPS / JSON
+                        ┌──────────▼──────────┐
+                        │    Go API Server    │
+                        │       (Render)      │
                         │                     │
                         │  ┌───────────────┐  │
                         │  │  Chi Router   │  │
                         │  └──────┬────────┘  │
                         │         │           │
                         │  ┌──────▼────────┐  │
-                        │  │  Middleware   │  │
-                        │  │  Auth/CORS/   │  │
-                        │  │  RateLimit    │  │
+                        │  │  Middleware    │  │
+                        │  │ Auth/CORS/     │  │
+                        │  │ RateLimit      │  │
                         │  └──────┬────────┘  │
                         │         │           │
                         │  ┌──────▼────────┐  │
-                        │  │   Handlers    │  │
+                        │  │   Handlers     │  │
                         │  └──────┬────────┘  │
                         │         │           │
                         │  ┌──────▼────────┐  │
-                        │  │   Services    │  │
+                        │  │   Services     │  │
                         │  └──────┬────────┘  │
                         │         │           │
                         │  ┌──────▼────────┐  │
-                        │  │  Repository   │  │
+                        │  │  Repository    │  │
                         │  └──────┬────────┘  │
                         └─────────┼───────────┘
                                   │
@@ -44,7 +43,7 @@ was made. Read this before touching any code.
                   │               │               │
          ┌────────▼──────┐ ┌─────▼──────┐ ┌─────▼──────┐
          │  PostgreSQL   │ │ Claude API │ │  (Future)  │
-         │  (Render)     │ │ (Anthropic)│ │  Redis     │
+         │    (Render)   │ │ (Anthropic)│ │    Redis    │
          └───────────────┘ └────────────┘ └────────────┘
 ```
 
@@ -56,43 +55,43 @@ The backend uses a strict 3-layer architecture. Each layer has one job.
 
 ### Handler layer (`internal/*/handler.go`)
 
-- Receives HTTP requests
-- Validates input (checks that required fields exist, types are right)
-- Calls the service layer
-- Writes the HTTP response
+* Receives HTTP requests
+* Validates input
+* Calls the service layer
+* Writes HTTP responses
 
-A handler never talks to the database directly. It never contains business
-logic. Its only job is HTTP in, HTTP out.
+Handlers never access the database directly or contain business logic.
 
-```
+```text
 Request → Handler → Service → Repository → Database
+
 Response ← Handler ← Service ← Repository ← Database
 ```
 
 ### Service layer (`internal/*/service.go`)
 
-- Contains all business logic
-- Calls the repository for data
-- Calls external APIs (Claude, etc.)
-- Orchestrates multi-step operations
+* Contains business logic
+* Calls repositories
+* Calls external services such as Claude
+* Orchestrates multi-step operations
 
-Example: saving a journal entry is a multi-step operation:
-1. Validate the entry content
-2. Save it to the database (repository)
-3. Call Claude API for a reflection (external)
-4. Return both the saved entry and the reflection
+For example, saving a journal entry may involve:
 
-The service knows about all of this. The handler just calls `service.SaveEntry()`.
+1. Validate the entry
+2. Save it through the repository
+3. Request a reflection from Claude
+4. Return the saved entry and reflection
+
+The handler only needs to call something like `service.SaveEntry()`.
 
 ### Repository layer (`internal/*/repository.go`)
 
-- Only talks to the database
-- Contains all SQL queries
-- Returns Go structs, not raw rows
-- Never contains business logic
+* Communicates only with the database
+* Contains SQL queries
+* Returns Go structs
+* Contains no business logic
 
-If you want to change from PostgreSQL to something else one day, you only
-change the repository. Nothing else needs to touch.
+Keeping database access here makes the rest of the application independent of PostgreSQL-specific details.
 
 ---
 
@@ -100,106 +99,131 @@ change the repository. Nothing else needs to touch.
 
 ### Pages vs Components
 
-**Pages** (`src/pages/`) are route-level components. Each page maps to a URL.
-They fetch data, manage top-level state, and compose components.
+**Pages** (`src/pages/`) are route-level components. They fetch data, manage top-level state, and compose components.
 
-**Components** (`src/components/`) are reusable building blocks. They receive
-props, they don't fetch their own data (with a few exceptions using hooks).
+**Components** (`src/components/`) are reusable UI building blocks. They receive data through props and generally do not fetch application data directly.
 
 ### Data flow
 
-```
+```text
 Page
- ├── fetches data via hook (useJournal, useCircle, etc.)
- ├── passes data down as props
- └── handles user actions (save, send, book)
-      └── calls API via lib/api.ts
+ ├── fetches data through hooks
+ ├── passes data to components
+ └── handles user actions
+        └── calls API through lib/api.ts
 ```
 
 ### Custom hooks (`src/hooks/`)
 
-Each feature has its own hook that encapsulates:
-- API calls
-- Loading/error state
-- Local state management
+Feature-specific hooks encapsulate:
 
-This keeps pages clean and makes logic testable.
+* API calls
+* Loading and error states
+* Local state management
+
+This keeps pages clean and makes feature logic easier to test.
 
 ---
 
 ## Authentication design
 
-Soulwe has two identity modes:
+Soulwe has two identity modes.
 
 ### Anonymous users
-- Get a random anonymous name ("Anon Baobab", "Anon Willow")
-- Can use circles, breathe, and limited journaling
-- No email or phone required
-- Token stored in localStorage
+
+* Receive a random anonymous name such as `Anon Baobab`
+* Can use circles, breathing, and limited journaling
+* No email or phone required
+* Anonymous token stored in `localStorage`
 
 ### Registered users
-- Email + password (hashed with bcrypt)
-- Full journal access (encrypted entries)
-- Can match with therapists
-- JWT access token (15 min) + refresh token (30 days)
 
-The anonymous token system is important. Many users will never register —
-especially early on, when trust is being built. The app should be useful
-before it asks for anything personal.
+* Email + password
+* Passwords hashed with bcrypt
+* Full journal access
+* Encrypted journal entries
+* Therapist matching
+* JWT access token — 15 minutes
+* Refresh token — 30 days
+
+The anonymous system allows users to experience Soulwe before sharing personal information.
 
 ---
 
 ## Privacy decisions
 
 ### Journal encryption
-Journal entries are encrypted at rest using AES-256-GCM. The encryption key
-is derived from the user's password using Argon2id. This means:
-- Even if the database is breached, entries are unreadable
-- If a user forgets their password, their journal is permanently lost
-  (this is a feature, not a bug — it's the privacy guarantee)
 
-This is explained clearly to users before they create an account.
+Journal entries are encrypted at rest using **AES-256-GCM**. The encryption key is derived from the user's password using **Argon2id**.
+
+This means:
+
+* A database breach should not expose readable journal entries.
+* If a user permanently loses their password, encrypted journal data may be unrecoverable.
+
+This trade-off must be clearly explained before account creation.
 
 ### Circle anonymity
-Messages in circles store a user ID for moderation purposes (flagging abuse),
-but the ID maps to an anonymous name, never a real identity. The mapping is
-stored separately and only accessible to the backend — it never leaves the
-server.
+
+Circle messages store a user ID for moderation, but that ID maps to an anonymous identity rather than a real identity.
+
+The mapping is stored separately and is accessible only by the backend.
 
 ### AI data handling
-Journal content sent to Claude is never stored by Soulwe after the
-reflection is returned. The Anthropic API itself has its own data policies,
-which are surfaced to users in the privacy notice.
+
+Journal content sent to Claude is not stored by Soulwe after the reflection is returned.
+
+Anthropic's data policies are disclosed to users through Soulwe's privacy notice.
 
 ---
 
-## Why Go for the backend?
+## Technology choices
 
-1. Single binary deployment — easy to run on Render's free tier
-2. Strong standard library — net/http, crypto, encoding/json are all built in
-3. Fast — handles concurrent requests well without much configuration
-4. Great fit with your Zone01 background — you already know it
-
-## Why Chi instead of Gin or Fiber?
-
-Chi is idiomatic Go. It uses the standard `net/http` interfaces, which means:
-- Middleware is just `func(http.Handler) http.Handler`
-- You learn patterns that work anywhere in Go, not just Chi
-- It's lightweight — just routing, nothing else opinionated
-
-## Why PostgreSQL?
-
-- Reliable, mature, feature-rich
-- JSON support for flexible fields (therapist availability, preferences)
-- Full-text search built in (useful for searching journal entries later)
-- Render free tier includes PostgreSQL
+* **Go** — Backend language; chosen for its simplicity, performance, concurrency, and straightforward deployment.
+* **Chi** — HTTP router; lightweight, idiomatic Go, and built on `net/http`.
+* **PostgreSQL** — Primary database; provides reliable relational storage and strong querying capabilities.
+* **React** — Frontend framework for the web application and mobile-first PWA.
+* **Claude API** — Provides AI-powered journal reflections.
+* **Redis** — Planned for future caching, rate limiting, and real-time features.
 
 ---
 
-## What we are not building (yet)
+## Deployment
 
-- **Real-time circles** — Messages are polled every few seconds for now.
-  WebSockets are v2 once we have users.
-- **SMS/USSD** — Africa's Talking integration is v2.
-- **Voice journaling** — Whisper API transcription is v3.
-- **Mobile app** — The React app is mobile-first PWA. Native is v3.
+| Component      | Platform             |
+| -------------- | -------------------- |
+| React Frontend | Vercel               |
+| Go API         | Render               |
+| PostgreSQL     | Render               |
+| AI             | Anthropic Claude API |
+| Redis          | Future               |
+
+---
+
+## What We Are Not Building Yet
+
+### Real-time circles — V2
+
+Messages use polling initially. WebSockets will be introduced when real-time communication becomes necessary.
+
+### SMS / USSD — V2
+
+Africa's Talking integration will be considered for users with limited internet access.
+
+### Voice journaling — V3
+
+Voice recording and transcription will be added after the core journaling experience is stable.
+
+### Native mobile app — V3
+
+The initial application is a mobile-first React PWA. Native Android/iOS development comes later.
+
+---
+
+## Architectural principles
+
+1. **Keep layers separate** — handlers handle HTTP, services handle business logic, repositories handle persistence.
+2. **Privacy by design** — minimize, protect, and control sensitive data.
+3. **Keep infrastructure simple** — introduce complexity only when needed.
+4. **Design for testing** — dependencies should be easy to mock and replace.
+5. **Build incrementally** — prioritize real user needs over premature features.
