@@ -1,0 +1,70 @@
+:root {
+  /* Palette */
+  --night:       #1A1210;   /* app shell background — deep, safe darkness   */
+  --night-mid:   #2C1F1A;   /* card background on dark surfaces              */
+  --night-soft:  #3D2B24;   /* hover states, subtle borders on dark          */
+  --clay:        #C4714A;   /* primary accent — warm ember, active states    */
+  --clay-light:  #F2E0D6;   /* clay tint — tag backgrounds, highlights       */
+  --clay-muted:  #E8C4B0;   /* clay border, secondary accent                 */
+  --cream:       #FAF6F1;   /* page background for light surfaces, cards     */
+  --cream-mid:   #F0E8DF;   /* input backgrounds, subdued cards              */
+  --sage:        #4A6741;   /* positive states, anonymous badge, healthy     */
+  --sage-light:  #D4E8D0;   /* sage tint                                     */
+  --earth:       #5C3D2E;   /* body text on light, secondary headings        */
+  --muted:       #8C7B73;   /* placeholder text, meta labels, secondary      */
+  --border:      rgba(255,255,255,0.07);  /* borders on dark surfaces        */
+  --border-card: rgba(92,61,46,0.12);     /* borders on light surfaces       */
+
+  /* Typography */
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body:    'DM Sans', system-ui, -apple-system, sans-serif;
+
+  /* Type scale */
+  --text-xs:   11px;
+  --text-sm:   13px;
+  --text-base: 15px;
+  --text-lg:   18px;
+  --text-xl:   22px;
+  --text-2xl:  28px;
+  --text-3xl:  36px;
+
+  /* Spacing */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+
+  /* Radius */
+  --radius-sm:  8px;
+  --radius-md:  12px;
+  --radius-lg:  18px;
+  --radius-xl:  24px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-card: 0 2px 20px rgba(26,18,16,0.18);
+  --shadow-float: 0 8px 32px rgba(26,18,16,0.28);
+
+  /* Transitions */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --duration-slow: 360ms;
+
+  /* Layout */
+  --max-width: 680px;
+  --tab-height: 64px;
+  --nav-height: 56px;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
