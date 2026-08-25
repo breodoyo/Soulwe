@@ -1,0 +1,178 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  max-width: var(--max-width);
+  margin: 0 auto;
+  background: var(--night);
+  position: relative;
+}
+
+/* ── Top nav ── */
+.topnav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-4);
+  height: var(--nav-height);
+  background: var(--night);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  /* Subtle glass blur on scroll */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.brandMark {
+  width: 30px;
+  height: 30px;
+  background: var(--clay);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.brandMark svg {
+  width: 16px;
+  height: 16px;
+  color: #fff;
+}
+
+.brandName {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  color: var(--cream);
+  letter-spacing: -0.02em;
+}
+
+.anonBadge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--sage);
+  background: rgba(74, 103, 65, 0.15);
+  border: 1px solid rgba(74, 103, 65, 0.25);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.anonDot {
+  width: 6px;
+  height: 6px;
+  background: var(--sage);
+  border-radius: 50%;
+  animation: pulse 2.5s ease infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+/* ── Main content ── */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: calc(var(--tab-height) + var(--space-4));
+  /* Smooth scroll on iOS */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Tab bar ── */
+.tabbar {
+  display: flex;
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: var(--max-width);
+  height: var(--tab-height);
+  background: var(--night-mid);
+  border-top: 1px solid var(--border);
+  z-index: 20;
+  /* Safe area for phones with home indicator */
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--muted);
+  transition: color var(--duration-base) var(--ease);
+  position: relative;
+  padding-top: var(--space-2);
+}
+
+/* Active glow line at top of tab */
+.tab::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%) scaleX(0);
+  width: 24px;
+  height: 2px;
+  background: var(--clay);
+  border-radius: var(--radius-full);
+  transition: transform var(--duration-base) var(--ease);
+}
+
+.tabActive {
+  color: var(--clay);
+}
+
+.tabActive::before {
+  transform: translateX(-50%) scaleX(1);
+}
+
+.tabIcon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tabIcon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.tabLabel {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.tabSwahili {
+  font-size: 9px;
+  color: var(--muted);
+  opacity: 0.6;
+  line-height: 1;
+  font-style: italic;
+}
+
+.tabActive .tabSwahili {
+  color: var(--clay);
+  opacity: 0.7;
+}

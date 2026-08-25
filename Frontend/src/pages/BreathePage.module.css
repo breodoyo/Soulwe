@@ -1,0 +1,137 @@
+.page {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+  text-align: center;
+}
+
+.header { width: 100%; }
+.heading { font-family: var(--font-display); font-size: var(--text-xl); color: var(--cream); margin-bottom: 4px; }
+.sub { font-size: var(--text-sm); color: var(--muted); }
+.sub em { font-style: italic; color: var(--clay); }
+
+/* ── Breathing circle ── */
+.circleWrap {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: var(--space-4) 0;
+}
+
+.ring1, .ring2 {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid rgba(196,113,74,0.2);
+}
+
+.ring1 { width: 190px; height: 190px; animation: rotateRing 20s linear infinite; }
+.ring2 { width: 160px; height: 160px; animation: rotateRing 14s linear infinite reverse; }
+
+@keyframes rotateRing {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.core {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 38%, #D98B68, var(--clay));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+  transition: transform 4s ease-in-out;
+  box-shadow: 0 0 40px rgba(196,113,74,0.3);
+}
+
+.coreTech {
+  font-size: 11px;
+  color: rgba(255,255,255,0.8);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+/* ── Phase display ── */
+.phaseDisplay { }
+.phaseLabel {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  color: var(--cream);
+  font-style: italic;
+  line-height: 1.2;
+  margin-bottom: var(--space-2);
+  min-height: 2em;
+}
+.phaseCount { font-size: var(--text-sm); color: var(--muted); }
+
+/* ── Controls ── */
+.controls { }
+
+.startBtn {
+  background: var(--clay);
+  color: #fff;
+  font-size: var(--text-base);
+  font-weight: 500;
+  padding: var(--space-3) var(--space-10);
+  border-radius: var(--radius-full);
+  transition: background var(--duration-base) var(--ease), transform var(--duration-fast) var(--ease);
+  box-shadow: 0 4px 20px rgba(196,113,74,0.35);
+}
+.startBtn:hover { transform: scale(1.03); }
+.startBtn:active { transform: scale(0.98); }
+.startBtnStop { background: var(--earth); box-shadow: none; }
+
+/* ── Technique list ── */
+.techniqueList {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  text-align: left;
+}
+
+.techniqueItem {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  background: var(--night-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  width: 100%;
+  text-align: left;
+  transition: border-color var(--duration-base) var(--ease), background var(--duration-base) var(--ease);
+}
+.techniqueItem:hover { border-color: rgba(196,113,74,0.3); }
+.techniqueItemActive { border-color: var(--clay); background: rgba(196,113,74,0.08); }
+
+.techNum {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--clay);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.techniqueItem:not(.techniqueItemActive) .techNum {
+  background: var(--night-soft);
+  color: var(--muted);
+}
+
+.techInfo { }
+.techName { font-size: var(--text-sm); font-weight: 500; color: var(--cream); margin-bottom: 2px; }
+.techDesc { font-size: var(--text-xs); color: var(--muted); }
