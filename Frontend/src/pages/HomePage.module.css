@@ -1,0 +1,236 @@
+.page {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* ── Greet band ── */
+.greetBand {
+  background: linear-gradient(145deg, #2C1F1A 0%, #3D2B24 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Decorative circle */
+.greetBand::after {
+  content: '';
+  position: absolute;
+  right: -30px;
+  top: -30px;
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: rgba(196, 113, 74, 0.12);
+  pointer-events: none;
+}
+
+.greetEyebrow {
+  font-size: var(--text-xs);
+  color: var(--clay);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: var(--space-2);
+}
+
+.greetHeading {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  color: var(--cream);
+  line-height: 1.25;
+  margin-bottom: var(--space-2);
+}
+
+.greetHeading em {
+  color: rgba(250, 246, 241, 0.6);
+  font-style: italic;
+}
+
+.greetSub {
+  font-size: var(--text-sm);
+  color: rgba(250, 246, 241, 0.5);
+  line-height: 1.5;
+  margin-bottom: var(--space-4);
+}
+
+/* ── Mood picker ── */
+.moodRow {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.moodBtn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: var(--space-2) var(--space-1);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  transition:
+    background var(--duration-base) var(--ease),
+    border-color var(--duration-base) var(--ease);
+}
+
+.moodBtn:hover {
+  background: rgba(196, 113, 74, 0.2);
+  border-color: rgba(196, 113, 74, 0.4);
+}
+
+.moodBtnActive {
+  background: rgba(196, 113, 74, 0.3);
+  border-color: var(--clay);
+}
+
+.moodEmoji {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.moodLabel {
+  font-size: 9px;
+  color: rgba(250, 246, 241, 0.7);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.moodBtnActive .moodLabel {
+  color: var(--clay-muted);
+}
+
+/* ── Affirmation ── */
+.affirmation {
+  background: var(--night-mid);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--clay);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-4);
+}
+
+.affirmationEyebrow {
+  font-size: var(--text-xs);
+  color: var(--clay);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: var(--space-2);
+}
+
+.affirmationText {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-style: italic;
+  color: var(--cream);
+  line-height: 1.65;
+  margin-bottom: var(--space-2);
+}
+
+.affirmationSource {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* ── Section label ── */
+.sectionLabel {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: var(--space-3);
+}
+
+/* ── Quick grid ── */
+.quickGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.quickCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  background: var(--night-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  text-align: left;
+  transition:
+    background var(--duration-base) var(--ease),
+    border-color var(--duration-base) var(--ease),
+    transform var(--duration-fast) var(--ease);
+}
+
+.quickCard:hover {
+  transform: translateY(-1px);
+}
+
+.quickCard:active {
+  transform: translateY(0);
+}
+
+.quickCard_clay:hover  { background: rgba(196,113,74,0.12); border-color: rgba(196,113,74,0.3); }
+.quickCard_sage:hover  { background: rgba(74,103,65,0.12);  border-color: rgba(74,103,65,0.3);  }
+.quickCard_earth:hover { background: rgba(92,61,46,0.12);   border-color: rgba(92,61,46,0.3);   }
+
+.quickIcon {
+  font-size: 22px;
+  margin-bottom: var(--space-1);
+}
+
+.quickLabel {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--cream);
+  line-height: 1.3;
+}
+
+.quickSub {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* ── Stats ── */
+.statsRow {
+  display: flex;
+  align-items: center;
+  background: var(--night-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.statItem {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.statNum {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  color: var(--clay);
+  line-height: 1;
+}
+
+.statLabel {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  text-align: center;
+}
+
+.statDivider {
+  width: 1px;
+  height: 36px;
+  background: var(--border);
+}
