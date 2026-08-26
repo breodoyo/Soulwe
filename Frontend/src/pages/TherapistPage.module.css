@@ -1,0 +1,75 @@
+.page { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-5); }
+.heading { font-family: var(--font-display); font-size: var(--text-xl); color: var(--cream); margin-bottom: 3px; }
+.sub { font-size: var(--text-sm); color: var(--muted); }
+.sub em { font-style: italic; color: var(--clay); }
+
+.filterRow { display: flex; gap: var(--space-2); overflow-x: auto; padding-bottom: var(--space-1); scrollbar-width: none; }
+.filterRow::-webkit-scrollbar { display: none; }
+
+.filterPill {
+  flex-shrink: 0; font-size: var(--text-xs); padding: 6px 14px;
+  border-radius: var(--radius-full); border: 1px solid var(--border);
+  background: var(--night-mid); color: var(--muted); white-space: nowrap;
+  transition: all var(--duration-base) var(--ease);
+}
+.filterPill:hover { color: var(--cream); border-color: var(--night-soft); }
+.filterPillActive { background: var(--clay); color: #fff; border-color: var(--clay); }
+
+.cardList { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.card {
+  background: var(--night-mid); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: var(--space-4);
+  display: flex; flex-direction: column; gap: var(--space-3);
+}
+
+.cardTop { display: flex; gap: var(--space-3); align-items: flex-start; }
+
+.avatar {
+  width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: var(--text-lg); font-style: italic; color: #fff;
+}
+
+.info { flex: 1; }
+.name { font-size: var(--text-base); font-weight: 500; color: var(--cream); margin-bottom: 3px; }
+.creds { font-size: var(--text-xs); color: var(--muted); line-height: 1.5; margin-bottom: 4px; }
+.location { display: flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--muted); }
+
+.tags { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.tag { font-size: 11px; background: rgba(196,113,74,0.12); color: var(--clay-muted); padding: 3px 10px; border-radius: var(--radius-full); }
+.tagLang { background: rgba(74,103,65,0.12); color: var(--sage); }
+
+.priceRow { display: flex; align-items: center; gap: var(--space-3); }
+.price { font-size: var(--text-sm); color: var(--sage); font-weight: 500; }
+.freeTag { font-size: 11px; background: rgba(74,103,65,0.15); color: var(--sage); padding: 3px 10px; border-radius: var(--radius-full); border: 1px solid rgba(74,103,65,0.25); }
+
+.cardBottom { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.avail { font-size: var(--text-xs); color: var(--muted); display: flex; align-items: center; gap: var(--space-1); }
+
+.onlineDot {
+  width: 7px; height: 7px; background: var(--clay); border-radius: 50%;
+  animation: pulse 2.5s ease infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+.bookBtn {
+  background: var(--cream); color: var(--earth); font-size: var(--text-sm); font-weight: 500;
+  padding: var(--space-2) var(--space-4); border-radius: var(--radius-md);
+  transition: all var(--duration-base) var(--ease); flex-shrink: 0;
+}
+.bookBtn:hover { background: var(--clay); color: #fff; }
+.bookBtnBooked { background: var(--sage); color: #fff; }
+.bookBtnBooked:hover { background: var(--sage); opacity: 0.85; }
+
+.bookConfirm {
+  font-size: var(--text-xs); color: var(--sage);
+  background: rgba(74,103,65,0.1); border: 1px solid rgba(74,103,65,0.2);
+  border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3);
+  animation: fadeIn 0.3s ease;
+}
+@keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+
+.empty { text-align: center; padding: var(--space-10) var(--space-4); }
+.empty p { font-size: var(--text-sm); color: var(--muted); margin-bottom: var(--space-4); }
+.clearFilter { font-size: var(--text-sm); color: var(--clay); text-decoration: underline; }
