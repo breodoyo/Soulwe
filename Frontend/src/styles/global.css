@@ -1,8 +1,3 @@
-/* ─────────────────────────────────────────────
-   Soulwe Global Styles
-   Reset + base styles only. No component styles here.
-───────────────────────────────────────────── */
-
 @import './tokens.css';
 
 *, *::before, *::after {
@@ -20,8 +15,8 @@ body {
   font-family: var(--font-body);
   font-size: var(--text-base);
   line-height: 1.5;
-  background: var(--night);
-  color: var(--cream);
+  background: var(--bg);
+  color: var(--ink);
   min-height: 100dvh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
@@ -34,14 +29,12 @@ body {
   flex-direction: column;
 }
 
-/* Focus visible — keyboard accessibility */
 :focus-visible {
-  outline: 2px solid var(--clay);
+  outline: 2px solid var(--sun);
   outline-offset: 2px;
   border-radius: 2px;
 }
 
-/* Buttons reset */
 button {
   cursor: pointer;
   border: none;
@@ -52,7 +45,6 @@ button {
   line-height: inherit;
 }
 
-/* Inputs reset */
 input, textarea, select {
   font-family: inherit;
   font-size: inherit;
@@ -62,37 +54,25 @@ input, textarea, select {
   background: none;
 }
 
-/* Links */
 a {
   color: inherit;
   text-decoration: none;
 }
 
-/* Images */
 img {
   max-width: 100%;
   display: block;
 }
 
-/* Lists */
-ul, ol {
-  list-style: none;
-}
+ul, ol { list-style: none; }
 
-/* Scrollbar — thin and themed */
-::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: var(--night-soft);
+  background: var(--sun-muted);
   border-radius: var(--radius-full);
 }
 
-/* Screen reader only utility */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -100,19 +80,12 @@ ul, ol {
   padding: 0;
   margin: -1px;
   overflow: hidden;
-  clip: rect(0, 0, 0, 0);
+  clip: rect(0,0,0,0);
   white-space: nowrap;
   border: 0;
 }
 
-/* ── Desktop baseline ── */
 @media (min-width: 768px) {
-  body {
-    overflow: hidden; /* shell handles its own scroll */
-  }
-
-  #root {
-    height: 100dvh;
-    overflow: hidden;
-  }
+  body { overflow: hidden; }
+  #root { height: 100dvh; overflow: hidden; }
 }

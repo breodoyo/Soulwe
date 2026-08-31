@@ -1,26 +1,46 @@
 /* ─────────────────────────────────────────────
    Soulwe Design Tokens
-   Single source of truth for every visual decision.
+   A home of happiness, peace and hope.
 ───────────────────────────────────────────── */
 
 :root {
-  /* Palette */
-  --night:       #1A1210;
-  --night-mid:   #2C1F1A;
-  --night-soft:  #3D2B24;
-  --clay:        #C4714A;
-  --clay-light:  #F2E0D6;
-  --clay-muted:  #E8C4B0;
-  --cream:       #FAF6F1;
-  --cream-mid:   #F0E8DF;
-  --sage:        #4A6741;
-  --sage-light:  #D4E8D0;
-  --earth:       #5C3D2E;
-  --muted:       #8C7B73;
-  --border:      rgba(255,255,255,0.07);
-  --border-card: rgba(92,61,46,0.12);
+  /* ── Palette ── */
 
-  /* Typography */
+  /* Backgrounds */
+  --bg:          #FFFBF5;
+  --bg-mid:      #FFF6EC;
+  --bg-soft:     #FEF0DE;
+
+  /* Sunrise amber — primary, joy, action */
+  --sun:         #F59E2A;
+  --sun-light:   #FEF3DC;
+  --sun-muted:   #FBDFA0;
+  --sun-deep:    #D4780A;
+
+  /* Teal — calm, peace, breathing */
+  --teal:        #0D9488;
+  --teal-light:  #CCFBF1;
+  --teal-deep:   #0F766E;
+  /* Sage — growth, hope, wellbeing */
+  --sage:        #22C55E;
+  --sage-light:  #DCFCE7;
+  --sage-deep:   #16A34A;
+  /* Text */
+  --ink:         #1C1917;
+  --ink-mid:     #44403C;
+  --muted:       #78716C;
+  --subtle:      #A8A29E;
+
+  /* Borders */
+  --border:      rgba(245,158,42,0.15);
+  --border-soft: rgba(28,25,23,0.07);
+
+  /* Shadows — warm and gentle */
+  --shadow-sm:   0 1px 8px rgba(245,158,42,0.08);
+  --shadow-card: 0 4px 24px rgba(245,158,42,0.10);
+  --shadow-float:0 8px 40px rgba(245,158,42,0.15);
+
+  /* ── Typography ── */
   --font-display: 'DM Serif Display', Georgia, serif;
   --font-body:    'DM Sans', system-ui, -apple-system, sans-serif;
 
@@ -33,7 +53,7 @@
   --text-2xl:  28px;
   --text-3xl:  36px;
 
-  /* Spacing */
+  /* ── Spacing ── */
   --space-1:  4px;
   --space-2:  8px;
   --space-3:  12px;
@@ -43,24 +63,20 @@
   --space-8:  32px;
   --space-10: 40px;
 
-  /* Radius */
+  /* ── Radius ── */
   --radius-sm:   8px;
   --radius-md:   12px;
   --radius-lg:   18px;
   --radius-xl:   24px;
   --radius-full: 9999px;
 
-  /* Shadows */
-  --shadow-card:  0 2px 20px rgba(26,18,16,0.18);
-  --shadow-float: 0 8px 32px rgba(26,18,16,0.28);
-
-  /* Transitions */
+  /* ── Transitions ── */
   --ease:           cubic-bezier(0.4, 0, 0.2, 1);
   --duration-fast:  150ms;
   --duration-base:  220ms;
   --duration-slow:  360ms;
 
-  /* Layout — mobile first */
+  /* ── Layout ── */
   --sidebar-width: 240px;
   --max-content:   720px;
   --tab-height:    64px;
