@@ -234,3 +234,59 @@
   height: 36px;
   background: var(--border);
 }
+
+/* ── Desktop ── */
+@media (min-width: 768px) {
+  .page {
+    padding: var(--space-8) var(--space-8);
+  }
+}
+
+@media (min-width: 1280px) {
+  .page {
+    padding: var(--space-10) var(--space-10);
+  }
+}
+
+/* ── Desktop-specific layout ── */
+@media (min-width: 768px) {
+  .greetBand {
+    padding: var(--space-8);
+  }
+
+  .greetHeading {
+    font-size: var(--text-3xl);
+  }
+
+  .moodRow {
+    gap: var(--space-3);
+  }
+
+  .moodBtn {
+    padding: var(--space-3) var(--space-2);
+  }
+
+  .moodEmoji {
+    font-size: 26px;
+  }
+
+  .moodLabel {
+    font-size: 11px;
+  }
+
+  .quickGrid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .statsRow {
+    padding: var(--space-6);
+  }
+
+  .statNum {
+    font-size: var(--text-3xl);
+  }
+
+  .affirmationText {
+    font-size: var(--text-lg);
+  }
+}

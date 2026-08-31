@@ -40,7 +40,7 @@ const BreatheIcon = () => (
 
 const tabs = [
   { to: '/home',      label: 'Home',      swahili: 'Mwanzo',  Icon: HomeIcon      },
-  { to: '/journal',   label: 'Journal',   swahili: 'Diary',   Icon: JournalIcon   },
+  { to: '/journal',   label: 'Journal',   swahili: 'Shajara',   Icon: JournalIcon   },
   { to: '/circle',    label: 'Circle',    swahili: 'Kikundi',   Icon: CircleIcon    },
   { to: '/therapist', label: 'Therapist', swahili: 'Mshauri', Icon: TherapistIcon },
   { to: '/breathe',   label: 'Breathe',   swahili: 'Pumzi', Icon: BreatheIcon   },

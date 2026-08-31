@@ -135,3 +135,16 @@
 .techInfo { }
 .techName { font-size: var(--text-sm); font-weight: 500; color: var(--cream); margin-bottom: 2px; }
 .techDesc { font-size: var(--text-xs); color: var(--muted); }
+
+/* ── Desktop ── */
+@media (min-width: 768px) {
+  .page {
+    padding: var(--space-8) var(--space-8);
+  }
+}
+
+@media (min-width: 1280px) {
+  .page {
+    padding: var(--space-10) var(--space-10);
+  }
+}

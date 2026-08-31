@@ -104,3 +104,15 @@ ul, ol {
   white-space: nowrap;
   border: 0;
 }
+
+/* ── Desktop baseline ── */
+@media (min-width: 768px) {
+  body {
+    overflow: hidden; /* shell handles its own scroll */
+  }
+
+  #root {
+    height: 100dvh;
+    overflow: hidden;
+  }
+}

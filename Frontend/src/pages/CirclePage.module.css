@@ -117,3 +117,16 @@
 }
 .sendBtn:hover { opacity: 0.85; }
 .sendBtn svg { width: 15px; height: 15px; }
+
+/* ── Desktop ── */
+@media (min-width: 768px) {
+  .page {
+    padding: var(--space-8) var(--space-8);
+  }
+}
+
+@media (min-width: 1280px) {
+  .page {
+    padding: var(--space-10) var(--space-10);
+  }
+}

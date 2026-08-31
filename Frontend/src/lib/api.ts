@@ -1,11 +1,5 @@
 // Central API client for Soulwe.
-//
-// All HTTP calls go through this file. This means:
-//   - One place to change the base URL
-//   - One place to add auth headers
-//   - One place to handle token refresh
-//   - Easy to mock in tests
-//
+
 // Usage:
 //   import { api } from '@/lib/api'
 //   const entries = await api.journal.list()
@@ -44,7 +38,7 @@ function clearTokens(): void {
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   body?: unknown
-  anonymous?: boolean  // skip auth header
+  anonymous?: boolean
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {

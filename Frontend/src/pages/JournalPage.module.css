@@ -286,3 +286,16 @@
   padding: 2px 8px;
   border-radius: var(--radius-full);
 }
+
+/* ── Desktop ── */
+@media (min-width: 768px) {
+  .page {
+    padding: var(--space-8) var(--space-8);
+  }
+}
+
+@media (min-width: 1280px) {
+  .page {
+    padding: var(--space-10) var(--space-10);
+  }
+}

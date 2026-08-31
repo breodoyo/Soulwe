@@ -73,3 +73,16 @@
 .empty { text-align: center; padding: var(--space-10) var(--space-4); }
 .empty p { font-size: var(--text-sm); color: var(--muted); margin-bottom: var(--space-4); }
 .clearFilter { font-size: var(--text-sm); color: var(--clay); text-decoration: underline; }
+
+/* ── Desktop ── */
+@media (min-width: 768px) {
+  .page {
+    padding: var(--space-8) var(--space-8);
+  }
+}
+
+@media (min-width: 1280px) {
+  .page {
+    padding: var(--space-10) var(--space-10);
+  }
+}
