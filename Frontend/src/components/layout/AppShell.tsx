@@ -1,7 +1,6 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import styles from './AppShell.module.css'
 
-// Icons — inline SVGs so we have zero icon-library dependency
 const HomeIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -40,11 +39,11 @@ const BreatheIcon = () => (
 )
 
 const tabs = [
-  { to: '/home',      label: 'Home',      swahili: 'Nyumba',  Icon: HomeIcon      },
+  { to: '/home',      label: 'Home',      swahili: 'Mwanzo',  Icon: HomeIcon      },
   { to: '/journal',   label: 'Journal',   swahili: 'Diary',   Icon: JournalIcon   },
-  { to: '/circle',    label: 'Circle',    swahili: 'Duara',   Icon: CircleIcon    },
+  { to: '/circle',    label: 'Circle',    swahili: 'Kikundi',   Icon: CircleIcon    },
   { to: '/therapist', label: 'Therapist', swahili: 'Mshauri', Icon: TherapistIcon },
-  { to: '/breathe',   label: 'Breathe',   swahili: 'Pumzika', Icon: BreatheIcon   },
+  { to: '/breathe',   label: 'Breathe',   swahili: 'Pumzi', Icon: BreatheIcon   },
 ]
 
 export default function AppShell() {
