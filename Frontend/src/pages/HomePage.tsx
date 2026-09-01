@@ -1,52 +1,53 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { BookOpen, Users, Wind, UserCheck, CloudRain, Minus, TrendingUp, Leaf, Heart } from 'lucide-react'
 import styles from './HomePage.module.css'
 
 type Mood = 'Heavy' | 'Okay' | 'Better' | 'At peace' | 'Grateful'
 
-const moods: { emoji: string; label: Mood }[] = [
-  { emoji: '😔', label: 'Heavy'    },
-  { emoji: '😐', label: 'Okay'     },
-  { emoji: '🙂', label: 'Better'   },
-  { emoji: '😌', label: 'At peace' },
-  { emoji: '✨', label: 'Grateful' },
+const moods: { Icon: React.ElementType; label: Mood }[] = [
+  { Icon: CloudRain, label: 'Heavy'    },
+  { Icon: Minus,     label: 'Okay'     },
+  { Icon: TrendingUp,label: 'Better'   },
+  { Icon: Leaf,      label: 'At peace' },
+  { Icon: Heart,     label: 'Grateful' },
 ]
 
 const affirmations: Record<Mood, { text: string; attribution: string }> = {
   'Heavy': {
-    text: '"Haba na haba hujaza kibaba" — Little by little fills the measure. You are still moving forward, even when it does not feel like it.',
-    attribution: 'Swahili proverb',
+    text: '"Come to me, all you who are weary and burdened, and I will give you rest."',
+    attribution: 'Matthew 11:28',
   },
   'Okay': {
-    text: '"Pole pole ndio mwendo" — Slowly slowly is the way. Steady and present is more than enough for today.',
-    attribution: 'Swahili proverb',
+    text: '"The Lord is my shepherd, I lack nothing. He makes me lie down in green pastures, he leads me beside quiet waters."',
+    attribution: 'Psalm 23:1-2',
   },
   'Better': {
-    text: '"Baada ya dhiki faraja" — After hardship comes relief. You are already on the way up.',
-    attribution: 'Swahili proverb',
+    text: '"I can do all this through him who gives me strength."',
+    attribution: 'Philippians 4:13',
   },
   'At peace': {
-    text: '"Amani ya moyo ni utajiri" — Peace of the heart is true wealth. Rest in this moment. You have earned it.',
-    attribution: 'Swahili proverb',
+    text: '"And the peace of God, which transcends all understanding, will guard your hearts and your minds in Christ Jesus."',
+    attribution: 'Philippians 4:7',
   },
   'Grateful': {
-    text: '"Shukrani ni daraja" — Gratitude is a bridge. You are connected to something larger than your worries.',
-    attribution: 'Swahili proverb',
+    text: '"Give thanks to the Lord, for he is good; his love endures forever."',
+    attribution: 'Psalm 107:1',
   },
 }
 
 const quickCards = [
-  { to: '/journal',   icon: '✍️', label: 'Write in journal', sub: '3-day streak — keep going',   color: 'clay'  },
-  { to: '/circle',    icon: '🌿', label: 'Join a circle',     sub: '12 people online now',         color: 'sage'  },
-  { to: '/breathe',   icon: '🫁', label: 'Breathe',           sub: '2-minute calm reset',          color: 'earth' },
-  { to: '/therapist', icon: '🤝', label: 'Find a therapist',  sub: 'Starts from KES 500',          color: 'clay'  },
+  { to: '/journal',   Icon: BookOpen,  label: 'Write in journal', sub: '3-day streak — keep going', color: 'clay'  },
+  { to: '/circle',    Icon: Users,     label: 'Join a circle',    sub: '12 people online now',       color: 'sage'  },
+  { to: '/breathe',   Icon: Wind,      label: 'Breathe',          sub: '2-minute calm reset',        color: 'earth' },
+  { to: '/therapist', Icon: UserCheck, label: 'Find a therapist', sub: 'Starts from KES 500',        color: 'clay'  },
 ]
 
 export default function HomePage() {
   const [mood, setMood] = useState<Mood | null>(null)
   const navigate = useNavigate()
 
-  const affirmation = mood ? affirmations[mood] : affirmations['Okay']
+  const affirmation = mood ? affirmations[mood] : affirmations['Grateful']
 
   return (
     <div className={styles.page}>
@@ -65,17 +66,17 @@ export default function HomePage() {
         {/* Mood picker */}
         <div className={styles.moodRow} role="group" aria-label="How are you feeling?">
           {moods.map(({ emoji, label }) => (
-            <button
-              key={label}
-              className={[styles.moodBtn, mood === label ? styles.moodBtnActive : ''].join(' ')}
-              onClick={() => setMood(label)}
-              aria-pressed={mood === label}
-              aria-label={`Feeling ${label}`}
-            >
-              <span className={styles.moodEmoji} aria-hidden="true">{emoji}</span>
-              <span className={styles.moodLabel}>{label}</span>
-            </button>
-          ))}
+  <button
+    key={label}
+    className={[styles.moodBtn, mood === label ? styles.moodBtnActive : ''].join(' ')}
+    onClick={() => setMood(label)}
+    aria-pressed={mood === label}
+    aria-label={`Feeling ${label}`}
+  >
+    <span className={styles.moodEmoji} aria-hidden="true">{emoji}</span>
+    <span className={styles.moodLabel}>{label}</span>
+  </button>
+))}
         </div>
       </section>
 
@@ -92,14 +93,16 @@ export default function HomePage() {
       <section aria-label="Quick access">
         <p className={styles.sectionLabel}>Your space</p>
         <div className={styles.quickGrid}>
-          {quickCards.map(({ to, icon, label, sub, color }) => (
+          {quickCards.map(({ to, Icon, label, sub, color }) => (
             <button
               key={to}
               className={[styles.quickCard, styles[`quickCard_${color}`]].join(' ')}
               onClick={() => navigate(to)}
               aria-label={label}
             >
-              <span className={styles.quickIcon} aria-hidden="true">{icon}</span>
+              <span className={styles.quickIcon} aria-hidden="true">
+                <Icon size={22} strokeWidth={1.8} />
+              </span>
               <span className={styles.quickLabel}>{label}</span>
               <span className={styles.quickSub}>{sub}</span>
             </button>
