@@ -1,12 +1,14 @@
 /* ─────────────────────────────────────────────
    AppShell — responsive layout
+   Mobile:  bottom tab bar  (< 768px)
+   Desktop: LEFT sidebar    (≥ 768px)
 ───────────────────────────────────────────── */
 
 .shell {
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
-  background: var(--night);
+  background: var(--bg);
 }
 
 /* ════════════════════════════════════════
@@ -37,7 +39,7 @@
 .brandMark {
   width: 30px;
   height: 30px;
-  background: var(--clay);
+  background: var(--sun);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -54,7 +56,7 @@
 .brandName {
   font-family: var(--font-display);
   font-size: var(--text-lg);
-  color: var(--cream);
+  color: var(--ink);
   letter-spacing: -0.02em;
 }
 
@@ -103,8 +105,8 @@
   left: 0;
   right: 0;
   height: var(--tab-height);
-  background: var(--night-mid);
-  border-top: 1px solid var(--border);
+  background: var(--bg);
+  border-top: 1px solid var(--border-soft);
   z-index: 20;
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
@@ -172,8 +174,10 @@
   opacity: 0.7;
 }
 
-
-@media (min-width: 768px) {git 
+/* ════════════════════════════════════════
+   DESKTOP — LEFT sidebar (≥ 768px)
+════════════════════════════════════════ */
+@media (min-width: 768px) {
 
   .shell {
     flex-direction: row;
@@ -194,12 +198,127 @@
     flex-direction: column;
     width: var(--sidebar-width);
     height: 100dvh;
+    background: var(--bg-mid);
     border-top: none;
-    border-right: 1px solid var(--border);
+    border-right: 1px solid var(--border-soft);
     padding-bottom: 0;
     justify-content: flex-start;
     align-items: stretch;
     flex-shrink: 0;
     overflow: hidden;
   }
-}     
+
+  .tabbar::before {
+    content: 'Soulwe';
+    display: block;
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    color: var(--ink);
+    letter-spacing: -0.02em;
+    padding: var(--space-6) var(--space-5) var(--space-2);
+    border-bottom: 1px solid var(--border-soft);
+    margin-bottom: var(--space-3);
+    flex-shrink: 0;
+  }
+
+  .content {
+    flex: 1;
+    order: 2;
+    padding-bottom: var(--space-8);
+    overflow-y: auto;
+    max-width: none;
+    margin: 0;
+  }
+
+  .content > * {
+    max-width: var(--max-content);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .tab {
+    flex: 0;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-5);
+    border-radius: var(--radius-md);
+    margin: 2px var(--space-2);
+    width: auto;
+  }
+
+  .tab::before {
+    top: 50%;
+    left: 0;
+    right: auto;
+    transform: translateY(-50%) scaleY(0);
+    width: 3px;
+    height: 22px;
+    border-radius: var(--radius-full);
+    transition: transform var(--duration-base) var(--ease);
+  }
+
+  .tabActive::before {
+    transform: translateY(-50%) scaleY(1);
+  }
+
+  .tabActive {
+    background: var(--sun-light);
+    color: var(--sun-deep);
+  }
+
+  .tabIcon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+
+  .tabLabel {
+    font-size: var(--text-sm);
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  .tabSwahili {
+    margin-left: auto;
+    font-size: var(--text-xs);
+    opacity: 0.45;
+  }
+
+  .tabbar::after {
+    content: '● Anonymous';
+    display: block;
+    font-size: var(--text-xs);
+    color: var(--teal);
+    padding: var(--space-4) var(--space-5);
+    border-top: 1px solid var(--border-soft);
+    margin-top: auto;
+    letter-spacing: 0.04em;
+    font-weight: 500;
+  }
+}
+
+/* ════════════════════════════════════════
+   WIDE DESKTOP (≥ 1280px)
+════════════════════════════════════════ */
+@media (min-width: 1280px) {
+
+  :root {
+    --sidebar-width: 260px;
+    --max-content: 800px;
+  }
+
+  .tab {
+    padding: var(--space-3) var(--space-6);
+  }
+
+  .tabbar::before {
+    padding: var(--space-8) var(--space-6) var(--space-3);
+    font-size: var(--text-2xl);
+  }
+
+  .tabbar::after {
+    padding: var(--space-5) var(--space-6);
+  }
+}
