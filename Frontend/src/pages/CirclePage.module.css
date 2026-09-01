@@ -80,7 +80,7 @@
 }
 
 .msgName { font-size: 11px; color: var(--muted); margin-bottom: var(--space-1); }
-.msgText { font-size: var(--text-sm); color: rgba(250,246,241,0.9); line-height: 1.6; }
+.msgText { font-size: var(--text-sm); color: rgba(50, 47, 43, 0.9); line-height: 1.6; }
 
 .msgFooter { display: flex; align-items: center; justify-content: space-between; margin-top: var(--space-2); flex-wrap: wrap; gap: var(--space-1); }
 .msgTime { font-size: 10px; color: var(--muted); }

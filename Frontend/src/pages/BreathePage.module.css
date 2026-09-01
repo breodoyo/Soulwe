@@ -41,7 +41,7 @@
   width: 100px;
   height: 100px;
   border-radius: 50%;
-  background: radial-gradient(circle at 38% 38%, #D98B68, var(--clay));
+  background: radial-gradient(circle at 38% 38%, #c36c44, var(--clay));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -76,8 +76,8 @@
 .controls { }
 
 .startBtn {
-  background: var(--clay);
-  color: #fff;
+  background: var(--teal);
+  color: #563737;
   font-size: var(--text-base);
   font-weight: 500;
   padding: var(--space-3) var(--space-10);
@@ -87,7 +87,7 @@
 }
 .startBtn:hover { transform: scale(1.03); }
 .startBtn:active { transform: scale(0.98); }
-.startBtnStop { background: var(--earth); box-shadow: none; }
+.startBtnStop { background: var(--cream); box-shadow: none; }
 
 /* ── Technique list ── */
 .techniqueList {

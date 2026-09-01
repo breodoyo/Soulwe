@@ -59,7 +59,7 @@
   transition: all var(--duration-base) var(--ease); flex-shrink: 0;
 }
 .bookBtn:hover { background: var(--clay); color: #fff; }
-.bookBtnBooked { background: var(--sage); color: #fff; }
+.bookBtnBooked { background: var(--sage); color: #e8a9a9; }
 .bookBtnBooked:hover { background: var(--sage); opacity: 0.85; }
 
 .bookConfirm {
