@@ -13,7 +13,7 @@
   transition: all var(--duration-base) var(--ease);
 }
 .filterPill:hover { color: var(--cream); border-color: var(--night-soft); }
-.filterPillActive { background: var(--clay); color: #fff; border-color: var(--clay); }
+.filterPillActive { background: var(--clay); color: #cc6a6a; border-color: var(--clay); }
 
 .cardList { display: flex; flex-direction: column; gap: var(--space-4); }
 

@@ -299,3 +299,139 @@
     padding: var(--space-10) var(--space-10);
   }
 }
+
+/* ── Mode toggle ── */
+.modeToggle {
+  display: flex;
+  background: var(--bg-mid);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-full);
+  padding: 4px;
+  gap: 4px;
+}
+
+.modeBtn {
+  flex: 1;
+  padding: 8px var(--space-4);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--muted);
+  transition: all var(--duration-base) var(--ease);
+}
+
+.modeBtn:hover { color: var(--ink); }
+
+.modeBtnActive {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── Prayer mode ── */
+.prayerMode {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.prayerIntro {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-style: italic;
+  color: var(--muted);
+  line-height: 1.65;
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--sun-muted);
+  background: var(--sun-light);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.prayerSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.prayerLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.prayerPrompt {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.prayerTextarea {
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--ink);
+  line-height: 1.7;
+  resize: none;
+  transition: border-color var(--duration-base) var(--ease);
+  box-shadow: var(--shadow-sm);
+}
+
+.prayerTextarea:focus {
+  border-color: var(--sun-muted);
+  outline: none;
+}
+
+.prayerTextarea::placeholder { color: var(--subtle); }
+
+/* ── Blessing card ── */
+.blessingCard {
+  background: linear-gradient(135deg, #FEF3DC 0%, #FEE8B8 100%);
+  border: 1px solid var(--sun-muted);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  text-align: center;
+}
+
+.blessingEyebrow {
+  font-size: var(--text-xs);
+  color: var(--sun-deep);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: var(--space-3);
+}
+
+.blessingText {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-style: italic;
+  color: var(--ink);
+  line-height: 1.7;
+  margin-bottom: var(--space-2);
+}
+
+.blessingRef {
+  font-size: var(--text-xs);
+  color: var(--sun-deep);
+  font-weight: 500;
+}
+
+/* ── Entry mode tag ── */
+.entryMeta {
+  margin-bottom: var(--space-1);
+}
+
+.entryModeTag {
+  font-size: 10px;
+  background: var(--sun-light);
+  color: var(--sun-deep);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-weight: 500;
+}
