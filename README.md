@@ -2,137 +2,181 @@
 
 *Your soul. Your way. Your safe space.*
 
-Soulwe is a culturally-aware mental health companion for East Africa.
+Soulwe is a **culturally aware mental health companion for East Africa**.
 
-The name comes from *soul* — universal, immediately felt — and *-we*, a
-Luo and Bantu personal suffix meaning "yours" or "of you." Spoken aloud
-it sounds like "soul-way": a path inward. That is exactly what this is.
+It provides anonymous peer support, AI assisted journaling, therapist matching, and breathing exercises designed around African cultures, languages, and the stigma that often makes it difficult to ask for help.
 
-Soulwe provides anonymous peer support circles, AI-assisted journaling,
-therapist matching, and breathing exercises — designed specifically around
-African cultural contexts, languages, and the stigma patterns that prevent
-people from seeking help.
+## The Problem
 
----
+Mental health support in East Africa is difficult to access for many people. The problem is not only a lack of services. Several barriers prevent people from seeking help.
 
-## Who this is for
+### 1. Stigma
 
-People across East Africa who are dealing with grief, family pressure, work
-burnout, anxiety, or simply need a private space to process their feelings —
-without judgment, without exposing their identity, and without expensive
-Western-modeled therapy as the only option.
+Many people fear being judged or misunderstood when they talk about their mental health. Struggling can be seen as weakness, a family problem, or even a spiritual failure.
 
----
+### 2. Cost
 
-## Tech stack
+Professional therapy can be expensive, especially for young people, students, and people with limited income.
 
-| Layer      | Technology                           | Why                                        |
-|------------|--------------------------------------|--------------------------------------------|
-| Backend    | Go (Chi router)                      | Fast, simple, great for REST APIs          |
-| Database   | PostgreSQL                           | Relational, reliable, handles JSON well    |
-| Auth       | JWT (access) + refresh tokens        | Stateless, works on mobile and web         |
-| Frontend   | React + TypeScript + Vite            | Fast dev experience, type safety           |
-| Styling    | CSS Modules + design tokens          | Scoped styles, no class conflicts          |
-| AI         | Anthropic Claude API                 | Journal reflections, cultural context      |
-| Deploy     | Render (backend) + Vercel (frontend) | Free tiers, easy CI/CD                    |
+### 3. Cultural Gap
 
----
+Many mental health apps are designed for Western audiences. They do not always understand experiences such as family pressure, being the firstborn, community expectations, grief, or the pressure to "be strong."
 
-## Project structure
+### 4. Lack of Privacy
 
-```
+Some people are not ready to tell their family, friends, religious leaders, or even a therapist that they are struggling. They need a safe place to start anonymously.
+
+### 5. Limited Community Support
+
+African communities have a strong culture of sharing problems and supporting one another. Soulwe brings this idea into a safe, structured, and anonymous digital space.
+
+## How Soulwe Helps
+
+| Problem                  | Soulwe's Approach                                         |
+| ------------------------ | --------------------------------------------------------- |
+| Stigma                   | Anonymous identity by default                             |
+| High therapy costs       | Free mental wellness tools and affordable therapy options |
+| Cultural mismatch        | Content designed around East African experiences          |
+| Fear of being identified | No real name required for peer support                    |
+| Lack of safe community   | Anonymous peer support circles                            |
+
+## Who Soulwe Is For
+
+Soulwe is for people across East Africa who are dealing with:
+
+* Anxiety and stress
+* Grief and loss
+* Family pressure
+* Work or school burnout
+* Loneliness
+* Young adult challenges
+* Difficult emotions
+* The need for a private place to process their feelings
+
+## Core Features
+
+### Anonymous Identity
+
+Users can participate in peer support circles using an anonymous identity such as **"Anon Baobab."**
+
+### AI Assisted Journaling
+
+Users can privately write about their thoughts and experiences and receive supportive AI generated reflections.
+
+> The AI companion is not a therapist and does not replace professional mental health care.
+
+### Peer Support Circles
+
+Anonymous topic based communities where people can connect around experiences such as:
+
+* Grief
+* Family pressure
+* Work burnout
+* Relationships
+* Young adult identity
+
+### Therapist Matching
+
+Users can find therapists based on factors such as:
+
+* Language
+* Specialty
+* Price
+* Availability
+
+### Breathing Exercises
+
+Guided breathing exercises such as **4 7 8 breathing** and **box breathing** help users practice simple relaxation techniques.
+
+## Guiding Principles
+
+### Privacy First
+
+No selling personal data. No advertising. Anonymous by default.
+
+### Culturally Grounded
+
+Soulwe is designed around East African experiences rather than simply adapting Western mental health products.
+
+### Accessible
+
+Core mental wellness features should remain accessible to people regardless of income.
+
+### Human Support Matters
+
+Soulwe does not try to replace therapists or mental health professionals. It provides an entry point and helps users find professional support when needed.
+
+## Tech Stack
+
+| Layer          | Technology                  | Purpose             |
+| -------------- | --------------------------- | ------------------- |
+| Backend        | Go + Chi                    | REST API            |
+| Database       | PostgreSQL                  | Data storage        |
+| Authentication | JWT                         | User authentication |
+| Frontend       | React + TypeScript + Vite   | Web application     |
+| Styling        | CSS Modules + Design Tokens | UI styling          |
+| AI             | Anthropic Claude API        | Journal reflections |
+| Deployment     | Render + Vercel             | Hosting             |
+
+## Project Structure
+
+```text
 soulwe/
-├── README.md                  ← You are here
-├── docs/                      ← All documentation
-│   ├── ARCHITECTURE.md        ← How the system fits together
-│   ├── API.md                 ← Every endpoint documented
-│   ├── DATABASE.md            ← Schema and design decisions
-│   ├── DEVELOPMENT.md         ← How to run locally
-│   └── DEPLOYMENT.md          ← How to ship to production
+├── README.md
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── API.md
+│   ├── DATABASE.md
+│   ├── DEVELOPMENT.md
+│   └── DEPLOYMENT.md
 │
-├── backend/                   ← Go API server
-│   ├── cmd/server/main.go     ← Entry point
-│   ├── internal/              ← Private application code
-│   │   ├── auth/              ← JWT, sessions, anonymous tokens
-│   │   ├── journal/           ← Journal entries + AI reflection
-│   │   ├── circle/            ← Peer support groups + messages
-│   │   ├── therapist/         ← Therapist profiles + booking
-│   │   ├── breathing/         ← Session tracking
-│   │   └── user/              ← Profile, mood, preferences
+├── backend/
+│   ├── cmd/server/main.go
+│   ├── internal/
+│   │   ├── auth/
+│   │   ├── journal/
+│   │   ├── circle/
+│   │   ├── therapist/
+│   │   ├── breathing/
+│   │   └── user/
 │   ├── db/
-│   │   ├── migrations/        ← SQL files, versioned
-│   │   └── queries/           ← SQL queries
-│   ├── middleware/            ← Auth, logging, CORS, rate limit
-│   └── config/                ← Environment config loader
+│   │   ├── migrations/
+│   │   └── queries/
+│   ├── middleware/
+│   └── config/
 │
-└── frontend/                  ← React application
+└── frontend/
     └── src/
-        ├── pages/             ← Route-level components
-        ├── components/        ← Reusable UI pieces
-        ├── hooks/             ← Custom React hooks
-        ├── lib/api.ts         ← All API calls in one place
-        ├── styles/            ← Global CSS, design tokens
-        └── types/             ← TypeScript interfaces
+        ├── pages/
+        ├── components/
+        ├── hooks/
+        ├── lib/
+        ├── styles/
+        └── types/
 ```
 
----
+## Vision
 
-## Core features
+Soulwe is not trying to replace psychiatry or professional therapy.
 
-**Anonymous identity** — Every user gets an anonymous display name (e.g.
-"Anon Baobab") for circles. Real identity is never required.
+It aims to **close the gap between nothing and something**.
 
-**Journal with AI reflection** — Private encrypted entries. Claude reads
-each entry and responds with a warm, culturally-grounded reflection rooted
-in Ubuntu and African wisdom.
+For someone who is not ready to see a therapist, tell their family, or talk openly about their struggles, Soulwe provides a safe place to start.
 
-**Peer support circles** — Topic-based anonymous chat rooms around real
-African experiences: grief, family pressure, work burnout, young adult
-identity.
+From anonymous support and journaling to professional help, Soulwe aims to make mental health support **more private, accessible, affordable, and culturally relevant for East Africa.**
 
-**Therapist matching** — Kenyan therapists filterable by language (Swahili,
-Dholuo, Kikuyu), specialty, price, and availability. First sessions
-subsidised.
+## Status
 
-**Breathing exercises** — Guided 4-7-8 and box breathing with animation.
-Sessions logged so users can track their practice.
+Soulwe is currently under development.
 
----
+More features, documentation, and integrations are being added as development continues.
 
-## Guiding principles
+## Getting Started
 
-**Privacy first.** No data is sold. No ads. Anonymous by default.
-
-**Culturally grounded.** Content, language, and design are built around East
-African lived experience — not adapted from Western mental health apps.
-
-**Accessible.** Free tier for all. SMS/USSD fallback planned for v2 via
-Africa's Talking, so people without smartphones can access peer circles.
-
-**Honest about limits.** The AI companion is not a therapist. Soulwe makes
-this clear and always offers a path to human support.
-
----
-
-## Development phases
-
-- **Phase 1 (done):** Structure, documentation, type definitions
-- **Phase 2:** Backend — auth, user, journal endpoints
-- **Phase 3:** Backend — circles, therapist, AI integration
-- **Phase 4:** Frontend — shell, navigation, journal UI
-- **Phase 5:** Frontend — circles, therapist matching, breathe
-- **Phase 6:** Integration, testing, deployment
-
----
-
-## Getting started
-
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) to run locally.
-
----
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for instructions on running Soulwe locally.
 
 ## Links
 
-- Production: https://soulwe.vercel.app *(coming soon)*
-- API: https://soulwe-api.onrender.com *(coming soon)*
-- GitHub: https://github.com/breodoyo/soulwe
+* **Production:** https://soulwe.vercel.app *(Coming soon)*
+* **API:** https://soulwe-api.onrender.com *(Coming soon)*
+* **GitHub:** https://github.com/breodoyo/soulwe
