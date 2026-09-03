@@ -849,3 +849,26 @@
   font-size: var(--text-xs);
   color: rgba(255,255,255,0.2);
 }
+
+.navCta {
+  background: var(--ink);
+  color: #fff;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  padding: 10px var(--space-5);
+  border-radius: var(--radius-full);
+  transition: all var(--duration-base) var(--ease);
+}
+
+.heroCtaPrimary {
+  display: inline-block;
+  background: var(--ink);
+  color: #fff;
+  font-size: var(--text-base);
+  font-weight: 500;
+  padding: 14px var(--space-8);
+  border-radius: var(--radius-full);
+  margin-bottom: var(--space-6);
+  transition: all var(--duration-base) var(--ease);
+  box-shadow: 0 4px 20px rgba(28,25,23,0.2);
+}
