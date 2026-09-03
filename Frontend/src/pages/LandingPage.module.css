@@ -115,10 +115,26 @@
   content: '';
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(ellipse 80% 60% at 70% 40%, rgba(245,158,42,0.13) 0%, transparent 70%),
-    radial-gradient(ellipse 60% 40% at 20% 70%, rgba(13,148,136,0.07) 0%, transparent 60%);
+  background-image: url('/hero-hand.jpg');
+  background-size: cover;
+  background-position: 20%;
+  opacity: 0.75;
   pointer-events: none;
+  z-index: 0;
+}
+
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255,251,245,0.92) 0%,
+    rgba(255,251,245,0.75) 40%,
+    rgba(245,158,42,0.08) 100%
+  );
+  pointer-events: none;
+  z-index: 1;
 }
 
 @media (min-width: 900px) {
@@ -130,11 +146,20 @@
   }
 }
 
-/* Left side */
 .heroLeft {
   flex: 1;
   max-width: 560px;
   position: relative;
+  z-index: 2;
+}
+
+.heroRight {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  z-index: 2;
 }
 
 .heroHeading {
@@ -205,7 +230,11 @@
 .heroVisual {
   position: relative;
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
+  min-height: 500px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Large glowing orb */
@@ -214,7 +243,7 @@
   height: 340px;
   border-radius: 50%;
   background: radial-gradient(circle at 38% 38%, #FEE8B8 0%, #F59E2A 50%, #D4780A 100%);
-  opacity: 0.18;
+  opacity: 0.12;
   position: absolute;
   top: 50%;
   left: 50%;
@@ -222,16 +251,33 @@
   filter: blur(40px);
 }
 
+/* Warm amber overlay on the photo so it blends with our theme */
+.heroOrb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(255,251,245,0.15) 0%,
+    rgba(245,158,42,0.12) 50%,
+    rgba(255,251,245,0.4) 100%
+  );
+  border-radius: var(--radius-xl);
+}
+
 /* Floating affirmation card */
 .heroCard {
-  background: #fff;
-  border: 1px solid var(--border-soft);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.6);
   border-radius: var(--radius-lg);
-  padding: var(--space-5) var(--space-5);
-  box-shadow: var(--shadow-float);
+  padding: var(--space-5);
+  box-shadow: 0 8px 40px rgba(28,25,23,0.12);
   position: relative;
   z-index: 2;
   animation: floatCard 6s ease-in-out infinite;
+  margin: var(--space-6);
 }
 
 @keyframes floatCard {
