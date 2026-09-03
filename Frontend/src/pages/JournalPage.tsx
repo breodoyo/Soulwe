@@ -1,331 +1,307 @@
-import { useNavigate } from 'react-router-dom'
-import styles from './LandingPage.module.css'
+import { useState, useRef } from 'react'
+import styles from './JournalPage.module.css'
 
-const features = [
-  {
-    icon: '✍️',
-    title: 'Journal your truth',
-    desc: 'Private, encrypted, AI-reflected. Write freely or pray intentionally.',
-  },
-  {
-    icon: '🌿',
-    title: 'Find your circle',
-    desc: 'Anonymous peer support built around real African experiences.',
-  },
-  {
-    icon: '🤝',
-    title: 'Talk to a therapist',
-    desc: 'Kenyan therapists in Swahili, Dholuo, Kikuyu. From KES 500.',
-  },
-  {
-    icon: '🫁',
-    title: 'Breathe through it',
-    desc: 'Guided breathing exercises. Two minutes to shift from panic to peace.',
-  },
+type MoodTag = 'Anxious' | 'Hopeful' | 'Overwhelmed' | 'Grateful' |
+               'Lonely' | 'Calm' | 'Proud' | 'Grieving'
+
+type JournalMode = 'journal' | 'prayer'
+
+const moodTags: MoodTag[] = [
+  'Anxious', 'Hopeful', 'Overwhelmed', 'Grateful',
+  'Lonely', 'Calm', 'Proud', 'Grieving'
 ]
 
-const testimonials = [
-  {
-    text: "I typed into a circle at 2am and someone replied within minutes. That was the first time I felt less alone in years.",
-    name: 'Anon Baobab',
-    location: 'Nairobi',
-  },
-  {
-    text: "The prayer journal changed my mornings. Having a structured space to bring my fears to God — and an AI that responds with Scripture — it feels like being heard twice.",
-    name: 'Anon Willow',
-    location: 'Kisumu',
-  },
-  {
-    text: "I booked a therapist who speaks Dholuo. For the first time I could describe my pain in the language I dream in.",
-    name: 'Anon Savanna',
-    location: 'Eldoret',
-  },
+const prompts = [
+  { label: 'My day',            placeholder: "What's on your mind today..."                          },
+  { label: 'Gratitude',         placeholder: 'Something I am grateful for is...'                     },
+  { label: 'A challenge',       placeholder: 'A challenge I am facing is... and I feel...'           },
+  { label: 'Let go',            placeholder: 'Something I want to let go of is...'                   },
+  { label: 'Family & pressure', placeholder: 'What my family expects of me versus what I feel...'    },
+  { label: 'My strength',       placeholder: 'What makes me feel strong as an African is...'         },
 ]
 
-const circles = [
-  { icon:'🕊️', name:'Grief & loss'        },
-  { icon:'💼', name:'Work pressure'        },
-  { icon:'🌿', name:'Family expectations'  },
-  { icon:'💜', name:'Trauma & healing'     },
-  { icon:'💍', name:'Relationships'        },
-  { icon:'🙏', name:'Faith & doubt'        },
-  { icon:'🧠', name:'Anxiety & depression' },
-  { icon:'🌱', name:'Young adults'         },
+const blessingVerses = [
+  { text: '"The Lord bless you and keep you; the Lord make his face shine on you and be gracious to you."', ref: 'Numbers 6:24-25' },
+  { text: '"Trust in the Lord with all your heart and lean not on your own understanding."',                 ref: 'Proverbs 3:5'    },
+  { text: '"Be still, and know that I am God."',                                                             ref: 'Psalm 46:10'    },
+  { text: '"Cast all your anxiety on him because he cares for you."',                                        ref: '1 Peter 5:7'    },
+  { text: '"The Lord is close to the brokenhearted and saves those who are crushed in spirit."',             ref: 'Psalm 34:18'    },
+  { text: '"For I know the plans I have for you, declares the Lord, plans to prosper you and not to harm you."', ref: 'Jeremiah 29:11' },
 ]
 
-export default function LandingPage() {
-  const navigate = useNavigate()
+const pastEntries = [
+  { day: '18', month: 'Aug', preview: 'Talked to mama today. She still doesn\'t understand why I see a therapist but she hugged me after...', tags: ['Hopeful', 'Family'], mode: 'journal' },
+  { day: '16', month: 'Aug', preview: 'Lord, I am tired. I bring this job situation before you and ask for your peace...', tags: ['Calm'], mode: 'prayer' },
+  { day: '14', month: 'Aug', preview: 'I did the breathing exercise three times today. Something shifted. Feeling calmer.', tags: ['Calm', 'Proud'], mode: 'journal' },
+]
+
+export default function JournalPage() {
+  const [mode, setMode] = useState<JournalMode>('journal')
+
+  // Journal mode state
+  const [activePrompt, setActivePrompt] = useState(0)
+  const [content, setContent] = useState('')
+  const [selectedTags, setSelectedTags] = useState<MoodTag[]>([])
+
+  // Prayer mode state
+  const [gratitude, setGratitude] = useState('')
+  const [petition, setPetition] = useState('')
+  const [listening, setListening] = useState('')
+  const [blessing] = useState(
+    () => blessingVerses[Math.floor(Math.random() * blessingVerses.length)]
+  )
+
+  // Shared state
+  const [reflection, setReflection] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const wordCount = content.trim() === '' ? 0 : content.trim().split(/\s+/).length
+  const today = new Date().toLocaleDateString('en-KE', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  })
+
+  const switchMode = (m: JournalMode) => {
+    setMode(m)
+    setReflection(null)
+  }
+
+  const toggleTag = (tag: MoodTag) => {
+    setSelectedTags(prev =>
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    )
+  }
+
+  const handleSave = async () => {
+    const isPrayer = mode === 'prayer'
+    const hasContent = isPrayer
+      ? gratitude.trim() || petition.trim() || listening.trim()
+      : content.trim()
+
+    if (!hasContent) return
+    setLoading(true)
+    setReflection(null)
+
+    const entryText = isPrayer
+      ? `Gratitude: ${gratitude}\nPetition: ${petition}\nListening: ${listening}`
+      : content
+
+    const systemPrompt = isPrayer
+      ? `You are a warm, faith-based spiritual companion for Soulwe, a mental health app for East Africans. The user has just written a prayer journal entry with three sections: gratitude, petition, and listening to God. Respond with deep warmth — affirm their faith, gently reflect one truth from what they wrote, and close with an encouraging word rooted in Scripture. Keep it to 3–4 sentences. Write like a trusted pastor or spiritual mentor, not a therapist. No markdown, no asterisks.`
+      : `You are a warm, culturally-aware mental health companion for Soulwe, an app for East Africans. Respond to journal entries with deep empathy — acknowledge feelings first, offer one gentle insight rooted in African wisdom or Ubuntu values, and end with a simple affirming sentence. Keep response to 3–4 sentences. Never be clinical or preachy. No markdown, no asterisks.`
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1000,
+          system: systemPrompt,
+          messages: [{
+            role: 'user',
+            content: `${isPrayer ? 'Prayer journal entry' : 'Journal entry'}: "${entryText}"`
+          }]
+        })
+      })
+      const data = await res.json()
+      const text = data.content?.map((c: { text?: string }) => c.text || '').join('') || ''
+      setReflection(text || 'Amen. Your heart has been heard.')
+    } catch {
+      setReflection(
+        isPrayer
+          ? 'Amen. Your words have been lifted up. Keep trusting — He hears every prayer.'
+          : 'I hear you. What you\'re feeling matters deeply. You\'ve already done something brave by putting words to it.'
+      )
+    }
+
+    setLoading(false)
+  }
 
   return (
     <div className={styles.page}>
-
-      {/* ── Nav ── */}
-      <nav className={styles.nav}>
-        <div className={styles.navBrand}>
-          <div className={styles.navMark}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-              <path d="M12 21C12 21 4 13.5 4 8.5a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5-8 12.5-8 12.5z"/>
-            </svg>
-          </div>
-          <span className={styles.navName}>Soulwe</span>
-        </div>
-        <div className={styles.navLinks}>
-          <a href="#features"    className={styles.navLink}>Features</a>
-          <a href="#circles"     className={styles.navLink}>Circles</a>
-          <a href="#therapists"  className={styles.navLink}>Therapists</a>
-        </div>
-        <button className={styles.navCta} onClick={() => navigate('/home')}>
-          Start your journey
-        </button>
-      </nav>
-
-      {/* ── Hero ── */}
-      <section className={styles.hero}>
-        {/* Left — copy */}
-        <div className={styles.heroLeft}>
-          <h1 className={styles.heroHeading}>
-            Your soul deserves<br />
-            the same care as<br />
-            your body.
-          </h1>
-          <p className={styles.heroSub}>
-            Connect with peer support circles, AI-assisted journaling,
-            and Kenyan therapists who listen, guide, and walk with you —
-            every step of your healing journey.
-          </p>
-          <button className={styles.heroCtaPrimary} onClick={() => navigate('/home')}>
-            Enter Soulwe — it's free
-          </button>
-          <div className={styles.heroPills}>
-            <span className={styles.heroPill}>
-              <span className={styles.pillStar}>✦</span> Anonymous by default
-            </span>
-            <span className={styles.heroPill}>
-              <span className={styles.pillStar}>✦</span> Bible-grounded support
-            </span>
-            <span className={styles.heroPill}>
-              <span className={styles.pillStar}>✦</span> Kenyan therapists
-            </span>
-            <span className={styles.heroPill}>
-              <span className={styles.pillStar}>✦</span> Free for everyone
-            </span>
-          </div>
-        </div>
-
-        {/* Right — visual */}
-        <div className={styles.heroRight}>
-          <div className={styles.heroVisual}>
-            <div className={styles.heroOrb} />
-            <div className={styles.heroCard}>
-              <p className={styles.heroCardEyebrow}>Today's affirmation</p>
-              <p className={styles.heroCardVerse}>
-                "Come to me, all you who are weary and burdened,
-                and I will give you rest."
-              </p>
-              <p className={styles.heroCardRef}>Matthew 11:28</p>
-            </div>
-            <div className={styles.heroStat}>
-              <span className={styles.heroStatNum}>12</span>
-              <span className={styles.heroStatLabel}>people in your circle right now</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Stats bar ── */}
-      <div className={styles.statsBar}>
-        {[
-          { num: '8',    label: 'Support circles'     },
-          { num: '3+',   label: 'Kenyan languages'     },
-          { num: 'Free', label: 'Always, for everyone' },
-          { num: '24/7', label: 'Always open'          },
-        ].map(s => (
-          <div key={s.label} className={styles.statItem}>
-            <span className={styles.statNum}>{s.num}</span>
-            <span className={styles.statLabel}>{s.label}</span>
-          </div>
-        ))}
+      <div className={styles.header}>
+        <h1 className={styles.heading}>Your journal</h1>
+        <p className={styles.sub}>Private, encrypted, only yours — <em>ya siri</em></p>
       </div>
 
-      {/* ── Features ── */}
-      <section className={styles.features} id="features">
-        <div className={styles.inner}>
-          <span className={styles.eyebrow}>What Soulwe gives you</span>
-          <h2 className={styles.sectionHeading}>
-            Everything in one quiet place.
-          </h2>
-          <div className={styles.featuresGrid}>
-            {features.map(f => (
-              <div key={f.title} className={styles.featureCard}>
-                <span className={styles.featureIcon}>{f.icon}</span>
-                <h3 className={styles.featureTitle}>{f.title}</h3>
-                <p className={styles.featureDesc}>{f.desc}</p>
-              </div>
+      {/* Mode toggle */}
+      <div className={styles.modeToggle} role="group" aria-label="Journal mode">
+        <button
+          className={[styles.modeBtn, mode === 'journal' ? styles.modeBtnActive : ''].join(' ')}
+          onClick={() => switchMode('journal')}
+        >
+          ✍️ Journal
+        </button>
+        <button
+          className={[styles.modeBtn, mode === 'prayer' ? styles.modeBtnActive : ''].join(' ')}
+          onClick={() => switchMode('prayer')}
+        >
+          🙏 Prayer
+        </button>
+      </div>
+
+      {/* ── JOURNAL MODE ── */}
+      {mode === 'journal' && (
+        <>
+          <div className={styles.promptStrip} role="group" aria-label="Journal prompts">
+            {prompts.map((p, i) => (
+              <button
+                key={p.label}
+                className={[styles.promptChip, activePrompt === i ? styles.promptChipActive : ''].join(' ')}
+                onClick={() => { setActivePrompt(i); textareaRef.current?.focus() }}
+              >
+                {p.label}
+              </button>
             ))}
           </div>
-        </div>
-      </section>
 
-      {/* ── Problem ── */}
-      <section className={styles.problem}>
-        <div className={styles.inner}>
-          <span className={styles.eyebrow}>Why Soulwe exists</span>
-          <h2 className={styles.sectionHeading}>
-            Mental health care in East Africa<br />has a gap.
-          </h2>
-          <div className={styles.problemGrid}>
-            <div className={styles.problemCard}>
-              <span className={styles.problemNum}>90%</span>
-              <p className={styles.problemText}>
-                of people who need mental health support in sub-Saharan Africa never receive it.
-              </p>
-            </div>
-            <div className={styles.problemCard}>
-              <span className={styles.problemNum}>&lt;100</span>
-              <p className={styles.problemText}>
-                psychiatrists serve Kenya's 55 million people. The wait is months. The cost is thousands.
-              </p>
-            </div>
-            <div className={styles.problemCard}>
-              <span className={styles.problemNum}>0</span>
-              <p className={styles.problemText}>
-                mental health apps designed specifically around African culture, language, and stigma.
-              </p>
-            </div>
-          </div>
-          <p className={styles.problemClose}>
-            Soulwe is not trying to replace psychiatry.<br />
-            It is trying to close the gap between <strong>nothing</strong> and <strong>something.</strong>
-          </p>
-        </div>
-      </section>
-
-      {/* ── Circles ── */}
-      <section className={styles.circlesSection} id="circles">
-        <div className={styles.inner}>
-          <span className={styles.eyebrowLight}>Community circles</span>
-          <h2 className={styles.sectionHeadingLight}>
-            You are not the only one<br />carrying this.
-          </h2>
-          <p className={styles.sectionSubLight}>
-            Anonymous peer support groups built around real African struggles.
-            No names. No profiles. Just honest conversation.
-          </p>
-          <div className={styles.circlesPills}>
-            {circles.map(c => (
-              <span key={c.name} className={styles.circleBadge}>
-                {c.icon} {c.name}
+          <div className={styles.writeBox}>
+            <p className={styles.writeDate}>{today}</p>
+            <textarea
+              ref={textareaRef}
+              className={styles.textarea}
+              value={content}
+              onChange={e => setContent(e.target.value)}
+              placeholder={prompts[activePrompt].placeholder}
+              aria-label="Journal entry"
+              rows={6}
+            />
+            <div className={styles.writeFooter}>
+              <span className={styles.wordCount}>
+                {wordCount} {wordCount === 1 ? 'word' : 'words'}
               </span>
-            ))}
-          </div>
-          <button className={styles.circlesBtn} onClick={() => navigate('/circle')}>
-            Join a circle anonymously →
-          </button>
-        </div>
-      </section>
-
-      {/* ── Testimonials ── */}
-      <section className={styles.testimonials}>
-        <div className={styles.inner}>
-          <span className={styles.eyebrow}>From the community</span>
-          <h2 className={styles.sectionHeading}>Real words from real people.</h2>
-          <div className={styles.testimonialsGrid}>
-            {testimonials.map(t => (
-              <div key={t.name} className={styles.testimonialCard}>
-                <p className={styles.testimonialText}>"{t.text}"</p>
-                <div className={styles.testimonialAuthor}>
-                  <span className={styles.testimonialName}>{t.name}</span>
-                  <span className={styles.testimonialLocation}>{t.location}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Therapists ── */}
-      <section className={styles.therapists} id="therapists">
-        <div className={styles.therapistsInner}>
-          <div className={styles.therapistsLeft}>
-            <span className={styles.eyebrow}>Professional support</span>
-            <h2 className={styles.sectionHeading}>
-              Therapists who speak<br />
-              your language —<br />
-              <em>literally.</em>
-            </h2>
-            <p className={styles.therapistsDesc}>
-              Every therapist on Soulwe is Kenyan, qualified, and chosen because
-              they understand what it means to be you. Sessions in Swahili, Dholuo,
-              Kikuyu, and English. Starting from KES 500. First sessions often free.
-            </p>
-            <button className={styles.therapistsBtn} onClick={() => navigate('/therapist')}>
-              Find your therapist →
-            </button>
-          </div>
-          <div className={styles.therapistsRight}>
-            {[
-              { initials:'AK', name:'Dr. Amina Korir',  lang:'Swahili · English',  spec:'Grief, Trauma',     price:'KES 800' },
-              { initials:'JO', name:'Joel Odhiambo',    lang:'Dholuo · Swahili',   spec:'Anxiety, Youth',    price:'KES 500' },
-              { initials:'WW', name:'Wanjiku Waweru',   lang:'Kikuyu · Swahili',   spec:'Depression, Women', price:'KES 500' },
-            ].map((t, i) => (
-              <div key={t.name} className={styles.therapistMiniCard} style={{ '--delay': `${i * 0.1}s` } as React.CSSProperties}>
-                <div className={styles.therapistMiniAvatar}>{t.initials}</div>
-                <div className={styles.therapistMiniInfo}>
-                  <p className={styles.therapistMiniName}>{t.name}</p>
-                  <p className={styles.therapistMiniLang}>{t.lang}</p>
-                  <p className={styles.therapistMiniSpec}>{t.spec}</p>
-                </div>
-                <span className={styles.therapistMiniPrice}>{t.price}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Final CTA ── */}
-      <section className={styles.finalCta}>
-        <div className={styles.finalCtaInner}>
-          <div className={styles.finalCtaMark}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
-              <path d="M12 21C12 21 4 13.5 4 8.5a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5-8 12.5-8 12.5z"/>
-            </svg>
-          </div>
-          <h2 className={styles.finalCtaHeading}>
-            Your healing is allowed<br />to begin today.
-          </h2>
-          <p className={styles.finalCtaSub}>
-            No sign-up required. Walk in anonymously.<br />
-            Stay as long as you need.
-          </p>
-          <button className={styles.finalCtaBtn} onClick={() => navigate('/home')}>
-            Enter Soulwe — it's free
-          </button>
-          <p className={styles.finalCtaVerse}>
-            "The Lord is close to the brokenhearted and saves those who are crushed in spirit." — Psalm 34:18
-          </p>
-        </div>
-      </section>
-
-      {/* ── Footer ── */}
-      <footer className={styles.footer}>
-        <div className={styles.footerInner}>
-          <div className={styles.footerBrand}>
-            <div className={styles.navMark}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-                <path d="M12 21C12 21 4 13.5 4 8.5a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5-8 12.5-8 12.5z"/>
-              </svg>
             </div>
-            <span className={styles.footerName}>Soulwe</span>
           </div>
-          <p className={styles.footerTagline}>
-            A home for your soul. Built in East Africa, for East Africa.
+
+          <div>
+            <p className={styles.sectionLabel}>How are you feeling?</p>
+            <div className={styles.tagRow} role="group" aria-label="Mood tags">
+              {moodTags.map(tag => (
+                <button
+                  key={tag}
+                  className={[styles.tag, selectedTags.includes(tag) ? styles.tagActive : ''].join(' ')}
+                  onClick={() => toggleTag(tag)}
+                  aria-pressed={selectedTags.includes(tag)}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── PRAYER MODE ── */}
+      {mode === 'prayer' && (
+        <div className={styles.prayerMode}>
+          <p className={styles.prayerIntro}>
+            "Do not be anxious about anything, but in every situation, by prayer and petition,
+            with thanksgiving, present your requests to God." — Philippians 4:6
           </p>
-          <p className={styles.footerCrisis}>
-            If you are in crisis — <strong>Befrienders Kenya: 0800 723 253</strong> (free, 24/7)
-          </p>
-          <p className={styles.footerCopy}>© 2026 Soulwe. Made with care in Kisumu, Kenya.</p>
+
+          <div className={styles.prayerSection}>
+            <label className={styles.prayerLabel} htmlFor="gratitude">
+              🌿 Gratitude
+              <span className={styles.prayerPrompt}>What am I thankful for today?</span>
+            </label>
+            <textarea
+              id="gratitude"
+              className={styles.prayerTextarea}
+              value={gratitude}
+              onChange={e => setGratitude(e.target.value)}
+              placeholder="Lord, I am grateful for..."
+              rows={3}
+            />
+          </div>
+
+          <div className={styles.prayerSection}>
+            <label className={styles.prayerLabel} htmlFor="petition">
+              🕊️ Petition
+              <span className={styles.prayerPrompt}>What am I bringing before God?</span>
+            </label>
+            <textarea
+              id="petition"
+              className={styles.prayerTextarea}
+              value={petition}
+              onChange={e => setPetition(e.target.value)}
+              placeholder="Lord, I ask you for..."
+              rows={3}
+            />
+          </div>
+
+          <div className={styles.prayerSection}>
+            <label className={styles.prayerLabel} htmlFor="listening">
+              👂 Listening
+              <span className={styles.prayerPrompt}>What do I feel He is saying to me?</span>
+            </label>
+            <textarea
+              id="listening"
+              className={styles.prayerTextarea}
+              value={listening}
+              onChange={e => setListening(e.target.value)}
+              placeholder="I feel God is saying..."
+              rows={3}
+            />
+          </div>
+
+          {/* Closing blessing */}
+          <div className={styles.blessingCard}>
+            <p className={styles.blessingEyebrow}>A word for you today</p>
+            <blockquote className={styles.blessingText}>{blessing.text}</blockquote>
+            <p className={styles.blessingRef}>{blessing.ref}</p>
+          </div>
         </div>
-      </footer>
+      )}
+
+      {/* Save button — both modes */}
+      <button
+        className={[styles.saveBtn, loading ? styles.saveBtnLoading : ''].join(' ')}
+        onClick={handleSave}
+        disabled={loading}
+        aria-label="Save and get AI reflection"
+      >
+        {loading
+          ? <><span className={styles.spinner} aria-hidden="true" /> Reflecting...</>
+          : mode === 'prayer' ? '🙏 Save prayer' : 'Save & reflect with AI'
+        }
+      </button>
+
+      {/* AI reflection — both modes */}
+      {reflection && (
+        <div className={styles.reflection} role="region" aria-live="polite">
+          <p className={styles.reflectionEyebrow}>
+            {mode === 'prayer' ? 'A word from your companion' : 'Your Soulwe companion'}
+          </p>
+          <p className={styles.reflectionText}>{reflection}</p>
+        </div>
+      )}
+
+      {/* Past entries */}
+      <div>
+        <p className={styles.sectionLabel}>Past entries</p>
+        <div className={styles.entryList}>
+          {pastEntries.map(entry => (
+            <div key={entry.day} className={styles.entryItem}>
+              <div className={styles.entryDate} aria-hidden="true">
+                <span className={styles.entryDay}>{entry.day}</span>
+                <span className={styles.entryMonth}>{entry.month}</span>
+              </div>
+              <div className={styles.entryBody}>
+                <div className={styles.entryMeta}>
+                  <span className={styles.entryModeTag}>
+                    {entry.mode === 'prayer' ? '🙏 Prayer' : '✍️ Journal'}
+                  </span>
+                </div>
+                <p className={styles.entryPreview}>{entry.preview}</p>
+                <div className={styles.entryTags}>
+                  {entry.tags.map(t => <span key={t} className={styles.entryTag}>{t}</span>)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
     </div>
   )
