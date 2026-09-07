@@ -1,8 +1,4 @@
-/* ─────────────────────────────────────────────
-   AppShell — responsive layout
-   Mobile:  bottom tab bar  (< 768px)
-   Desktop: LEFT sidebar    (≥ 768px)
-───────────────────────────────────────────── */
+
 
 .shell {
   display: flex;
@@ -11,9 +7,6 @@
   background: var(--bg);
 }
 
-/* ════════════════════════════════════════
-   MOBILE — bottom tab bar
-════════════════════════════════════════ */
 
 .topnav {
   display: flex;
@@ -28,12 +21,6 @@
   z-index: 20;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
 }
 
 .brandMark {
@@ -174,9 +161,6 @@
   opacity: 0.7;
 }
 
-/* ════════════════════════════════════════
-   DESKTOP — LEFT sidebar (≥ 768px)
-════════════════════════════════════════ */
 @media (min-width: 768px) {
 
   .shell {
@@ -209,18 +193,51 @@
   }
 
   .tabbar::before {
-    content: 'Soulwe';
-    display: block;
+  display: none;
+}
+
+.sidebarBrand {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .sidebarBrand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-6) var(--space-5) var(--space-4);
+    border-bottom: 1px solid var(--border-soft);
+    margin-bottom: var(--space-3);
+    text-decoration: none;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: opacity var(--duration-fast) var(--ease);
+  }
+
+  .sidebarBrand:hover { opacity: 0.75; }
+
+  .sidebarBrand .brandMark {
+    width: 28px;
+    height: 28px;
+  }
+
+  .sidebarBrand .brandName {
     font-family: var(--font-display);
     font-size: var(--text-xl);
     color: var(--ink);
     letter-spacing: -0.02em;
-    padding: var(--space-6) var(--space-5) var(--space-2);
-    border-bottom: 1px solid var(--border-soft);
-    margin-bottom: var(--space-3);
-    flex-shrink: 0;
+  }
+}
+
+@media (min-width: 1280px) {
+  .sidebarBrand {
+    padding: var(--space-8) var(--space-6) var(--space-4);
   }
 
+  .sidebarBrand .brandName {
+    font-size: var(--text-2xl);
+  }
+}
   .content {
     flex: 1;
     order: 2;
@@ -299,9 +316,6 @@
   }
 }
 
-/* ════════════════════════════════════════
-   WIDE DESKTOP (≥ 1280px)
-════════════════════════════════════════ */
 @media (min-width: 1280px) {
 
   :root {
@@ -320,5 +334,54 @@
 
   .tabbar::after {
     padding: var(--space-5) var(--space-6);
+  }
+}
+/* ── Clickable brand link ── */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity var(--duration-fast) var(--ease);
+}
+
+.brand:hover {
+  opacity: 0.75;
+}
+
+/* ── Breadcrumbs ── */
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--bg-mid);
+  border-bottom: 1px solid var(--border-soft);
+  font-size: var(--text-xs);
+}
+
+.breadcrumbHome {
+  color: var(--sun-deep);
+  font-weight: 500;
+  text-decoration: none;
+  transition: color var(--duration-fast) var(--ease);
+}
+
+.breadcrumbHome:hover { color: var(--sun); }
+
+.breadcrumbSep {
+  color: var(--subtle);
+}
+
+.breadcrumbCurrent {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* ── Desktop breadcrumbs ── */
+@media (min-width: 768px) {
+  .breadcrumbs {
+    padding: var(--space-2) var(--space-6);
   }
 }
