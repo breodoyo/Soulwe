@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useLocation } from 'react-router-dom'
+import { Outlet, NavLink, useLocation, Link } from 'react-router-dom'
 import styles from './AppShell.module.css'
 
 const HomeIcon = () => (
@@ -39,40 +39,80 @@ const BreatheIcon = () => (
 )
 
 const tabs = [
-  { to: '/home',      label: 'Home',      swahili: 'Mwanzo',  Icon: HomeIcon      },
-  { to: '/journal',   label: 'Journal',   swahili: 'Shajara',   Icon: JournalIcon   },
-  { to: '/circle',    label: 'Circle',    swahili: 'Kikundi',   Icon: CircleIcon    },
+  { to: '/home',      label: 'Home',      swahili: 'Nyumba',  Icon: HomeIcon      },
+  { to: '/journal',   label: 'Journal',   swahili: 'Diary',   Icon: JournalIcon   },
+  { to: '/circle',    label: 'Circle',    swahili: 'Duara',   Icon: CircleIcon    },
   { to: '/therapist', label: 'Therapist', swahili: 'Mshauri', Icon: TherapistIcon },
-  { to: '/breathe',   label: 'Breathe',   swahili: 'Pumzi', Icon: BreatheIcon   },
+  { to: '/breathe',   label: 'Breathe',   swahili: 'Pumzika', Icon: BreatheIcon   },
 ]
+
+const breadcrumbLabels: Record<string, string> = {
+  '/home':      'Home',
+  '/journal':   'Journal',
+  '/circle':    'Circle',
+  '/therapist': 'Therapist',
+  '/breathe':   'Breathe',
+}
+
+function Breadcrumbs() {
+  const location = useLocation()
+  const label = breadcrumbLabels[location.pathname]
+  if (!label || location.pathname === '/home') return null
+
+  return (
+    <nav className={styles.breadcrumbs} aria-label="Breadcrumb">
+      <Link to="/home" className={styles.breadcrumbHome}>
+        Home
+      </Link>
+      <span className={styles.breadcrumbSep} aria-hidden="true">/</span>
+      <span className={styles.breadcrumbCurrent} aria-current="page">
+        {label}
+      </span>
+    </nav>
+  )
+}
 
 export default function AppShell() {
   return (
     <div className={styles.shell}>
 
-      {/* Top nav */}
+      {/* Top nav — mobile only */}
       <header className={styles.topnav} role="banner">
-        <div className={styles.brand}>
+        <Link to="/" className={styles.brand} aria-label="Go to Soulwe home page">
           <div className={styles.brandMark} aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
               <path d="M12 21C12 21 4 13.5 4 8.5a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5-8 12.5-8 12.5z" />
             </svg>
           </div>
           <span className={styles.brandName}>Soulwe</span>
-        </div>
+        </Link>
         <span className={styles.anonBadge} aria-label="You are browsing anonymously">
           <span className={styles.anonDot} aria-hidden="true" />
           Anonymous
         </span>
       </header>
 
+      {/* Breadcrumbs */}
+      <Breadcrumbs />
+
       {/* Page content */}
       <main className={styles.content} id="main-content">
         <Outlet />
       </main>
 
-      {/* Bottom tab bar */}
+      {/* Tab bar — mobile bottom / desktop left sidebar */}
       <nav className={styles.tabbar} aria-label="Main navigation">
+
+        {/* Desktop sidebar brand — real link, not CSS pseudo-element */}
+        <Link to="/" className={styles.sidebarBrand} aria-label="Go to Soulwe landing page">
+          <div className={styles.brandMark} aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+              <path d="M12 21C12 21 4 13.5 4 8.5a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5-8 12.5-8 12.5z" />
+            </svg>
+          </div>
+          <span className={styles.brandName}>Soulwe</span>
+        </Link>
+
         {tabs.map(({ to, label, swahili, Icon }) => (
           <NavLink
             key={to}
@@ -89,6 +129,7 @@ export default function AppShell() {
             <span className={styles.tabSwahili}>{swahili}</span>
           </NavLink>
         ))}
+
       </nav>
 
     </div>
