@@ -110,7 +110,7 @@ Soulwe does not try to replace therapists or mental health professionals. It pro
 
 | Layer          | Technology                  | Purpose             |
 | -------------- | --------------------------- | ------------------- |
-| Backend        | Go + Chi                    | REST API            |
+| Backend        | Go + Gin                    | REST API            |
 | Database       | PostgreSQL                  | Data storage        |
 | Authentication | JWT                         | User authentication |
 | Frontend       | React + TypeScript + Vite   | Web application     |

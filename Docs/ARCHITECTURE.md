@@ -17,7 +17,7 @@ This document explains how Soulwe is structured and why each decision was made. 
                         │       (Render)      │
                         │                     │
                         │  ┌───────────────┐  │
-                        │  │  Chi Router   │  │
+                        │  │  Gin Router   │  │
                         │  └──────┬────────┘  │
                         │         │           │
                         │  ┌──────▼────────┐  │
@@ -180,7 +180,7 @@ Anthropic's data policies are disclosed to users through Soulwe's privacy notice
 ## Technology choices
 
 * **Go** — Backend language; chosen for its simplicity, performance, concurrency, and straightforward deployment.
-* **Chi** — HTTP router; lightweight, idiomatic Go, and built on `net/http`.
+* **Gin** — HTTP router; fast, middleware-oriented, and widely used in Go web services.
 * **PostgreSQL** — Primary database; provides reliable relational storage and strong querying capabilities.
 * **React** — Frontend framework for the web application and mobile-first PWA.
 * **Claude API** — Provides AI-powered journal reflections.
