@@ -1,8 +1,11 @@
 package config
 
 import (
+	"fmt"
 	"log"
+	"net/url"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -38,6 +41,25 @@ func Load() *Config {
 		JournalKey:       getEnv("JOURNAL_ENCRYPTION_KEY", ""),
 		AnthropicKey:     getEnv("ANTHROPIC_API_KEY", ""),
 	}
+}
+
+// Validate checks that required configuration values are present and valid.
+func (c *Config) Validate() error {
+	if c.DatabaseURL == "" {
+		return fmt.Errorf("DATABASE_URL is required but not set; add it to your .env or environment")
+	}
+
+	parsed, err := url.Parse(c.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("DATABASE_URL is not a valid URL: %w", err)
+	}
+
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "postgres" && scheme != "postgresql" {
+		return fmt.Errorf("DATABASE_URL must use postgres:// or postgresql:// scheme, got %s://", scheme)
+	}
+
+	return nil
 }
 
 // getEnv retrieves the value of the environment variable named by key,

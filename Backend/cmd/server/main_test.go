@@ -18,7 +18,9 @@ func TestHealthEndpoints(t *testing.T) {
 		FrontendURL: "http://localhost:5173",
 	}
 
-	router := setupRouter(cfg)
+	// The pool is only required for the /readyz endpoint, which is not exercised
+	// by these unit tests, so it is not needed here.
+	router := setupRouter(cfg, nil)
 
 	t.Run("Root /health returns 200 OK", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, "/health", nil)

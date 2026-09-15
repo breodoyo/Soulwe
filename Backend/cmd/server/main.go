@@ -10,14 +10,16 @@ import (
 	"syscall"
 	"time"
 
+	"Backend/db"
 	"Backend/internal/config"
 	"Backend/internal/middleware"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // setupRouter initializes the Gin engine, global middleware, and foundational routes.
-func setupRouter(cfg *config.Config) *gin.Engine {
+func setupRouter(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 	// Set Gin mode (debug or release)
 	gin.SetMode(cfg.GinMode)
 
@@ -29,13 +31,32 @@ func setupRouter(cfg *config.Config) *gin.Engine {
 	r.Use(middleware.Recovery())
 	r.Use(middleware.CORS(cfg.FrontendURL))
 
-	// Base Health Check endpoint
+	// Base Health Check endpoint (liveness — no database dependency)
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
 			"service": "soulwe-api",
 			"env":     cfg.Env,
 			"time":    time.Now().UTC().Format(time.RFC3339),
+		})
+	})
+
+	// Database-aware readiness endpoint
+	r.GET("/readyz", func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+
+		if err := pool.Ping(ctx); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "not ready",
+				"db":     "disconnected",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"status": "ok",
+			"db":     "connected",
 		})
 	})
 
@@ -58,13 +79,25 @@ func setupRouter(cfg *config.Config) *gin.Engine {
 }
 
 func main() {
-	// 1. Load application configuration
+	// 1. Load application configuration and validate required values
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("Configuration error: %v", err)
+	}
 
-	// 2. Setup router and middleware
-	router := setupRouter(cfg)
+	// 2. Open the database connection pool (migrations are NOT run at startup)
+	ctx := context.Background()
+	pool, err := db.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("Database connection failed: %v", err)
+	}
+	defer pool.Close()
+	log.Println("🌿 Database connection pool established")
 
-	// 3. Configure HTTP server
+	// 3. Setup router and middleware
+	router := setupRouter(cfg, pool)
+
+	// 4. Configure HTTP server
 	serverAddr := ":" + cfg.Port
 	srv := &http.Server{
 		Addr:           serverAddr,
@@ -74,7 +107,7 @@ func main() {
 		MaxHeaderBytes: 1 << 20, // 1 MB
 	}
 
-	// 4. Start HTTP server in a separate goroutine
+	// 5. Start HTTP server in a separate goroutine
 	go func() {
 		log.Printf("🌿 Soulwe API server listening on %s [%s mode]", serverAddr, cfg.Env)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -82,7 +115,7 @@ func main() {
 		}
 	}()
 
-	// 5. Graceful shutdown listening on OS interrupt signals
+	// 6. Graceful shutdown listening on OS interrupt signals
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
@@ -91,10 +124,10 @@ func main() {
 	log.Printf("Received signal '%v'. Initiating graceful shutdown...", sig)
 
 	// Allow up to 5 seconds for in-flight requests to finish
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
