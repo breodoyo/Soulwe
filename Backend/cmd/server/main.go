@@ -13,13 +13,14 @@ import (
 	"Backend/db"
 	"Backend/internal/config"
 	"Backend/internal/middleware"
+	"Backend/internal/user"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // setupRouter initializes the Gin engine, global middleware, and foundational routes.
-func setupRouter(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
+func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler) *gin.Engine {
 	// Set Gin mode (debug or release)
 	gin.SetMode(cfg.GinMode)
 
@@ -70,7 +71,15 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 			})
 		})
 
-		// Domain route groups (/auth, /users, /dashboard, /moods, /affirmations,
+		// Authentication routes. Guarded so unit tests can pass a nil handler.
+		if authHandler != nil {
+			auth := v1.Group("/auth")
+			{
+				auth.POST("/register", authHandler.Register)
+			}
+		}
+
+		// Domain route groups (/users, /dashboard, /moods, /affirmations,
 		// /journal, /circles, /therapists, /breathing) will be registered here
 		// in subsequent phases as their Handler -> Service -> Repository layers are implemented.
 	}
@@ -94,10 +103,15 @@ func main() {
 	defer pool.Close()
 	log.Println("🌿 Database connection pool established")
 
-	// 3. Setup router and middleware
-	router := setupRouter(cfg, pool)
+	// 3. Compose the users auth stack (Handler → Service → Repository)
+	userRepo := user.NewPostgresRepository(pool)
+	userService := user.NewService(userRepo)
+	userHandler := user.NewHandler(userService)
 
-	// 4. Configure HTTP server
+	// 4. Setup router and middleware
+	router := setupRouter(cfg, pool, userHandler)
+
+	// 5. Configure HTTP server
 	serverAddr := ":" + cfg.Port
 	srv := &http.Server{
 		Addr:           serverAddr,
@@ -107,7 +121,7 @@ func main() {
 		MaxHeaderBytes: 1 << 20, // 1 MB
 	}
 
-	// 5. Start HTTP server in a separate goroutine
+	// 6. Start HTTP server in a separate goroutine
 	go func() {
 		log.Printf("🌿 Soulwe API server listening on %s [%s mode]", serverAddr, cfg.Env)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -115,7 +129,7 @@ func main() {
 		}
 	}()
 
-	// 6. Graceful shutdown listening on OS interrupt signals
+	// 7. Graceful shutdown listening on OS interrupt signals
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
