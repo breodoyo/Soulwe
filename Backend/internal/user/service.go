@@ -8,8 +8,14 @@ import (
 	"strings"
 )
 
+// TokenManager issues signed JWT access tokens for authenticated users.
+// It is satisfied by *auth.Manager; the interface keeps the JWT package out
+// of the users domain so the layers stay decoupled.
+type TokenManager interface {
+	SignAccessToken(userID string) (string, error)
+}
+
 // Service is the authentication business-logic boundary for registered users.
-// It is the foundation the future login step will build on.
 type Service interface {
 	// Register hashes the password, creates the user, and returns the
 	// persisted user (never including the password hash).
@@ -22,15 +28,27 @@ type Service interface {
 	// It returns ErrBadCredentials when the email is unknown or the
 	// password does not match, avoiding user enumeration.
 	VerifyPassword(ctx context.Context, email, password string) (*User, error)
+
+	// Login verifies the credentials and returns the authenticated user
+	// together with a freshly signed JWT access token.
+	Login(ctx context.Context, email, password string) (*LoginResult, error)
+}
+
+// LoginResult is the successful outcome of a login: the authenticated user
+// and the access token they must send on subsequent requests.
+type LoginResult struct {
+	User        *User
+	AccessToken string
 }
 
 type service struct {
-	users Repository
+	users  Repository
+	tokens TokenManager
 }
 
 // NewService wires the authentication service to a user repository.
-func NewService(users Repository) *service {
-	return &service{users: users}
+func NewService(users Repository, tokens TokenManager) *service {
+	return &service{users: users, tokens: tokens}
 }
 
 func (s *service) Register(ctx context.Context, email, password string) (*User, error) {
@@ -78,6 +96,23 @@ func (s *service) VerifyPassword(ctx context.Context, email, password string) (*
 		return nil, ErrBadCredentials
 	}
 	return u, nil
+}
+
+// Login reuses VerifyPassword for credential checks, so the anti-enumeration
+// behaviour is identical: unknown emails and wrong passwords both surface as
+// ErrBadCredentials. Only after a successful check is an access token signed.
+func (s *service) Login(ctx context.Context, email, password string) (*LoginResult, error) {
+	u, err := s.VerifyPassword(ctx, email, password)
+	if err != nil {
+		return nil, err
+	}
+
+	accessToken, err := s.tokens.SignAccessToken(u.ID)
+	if err != nil {
+		return nil, fmt.Errorf("user login: sign access token: %w", err)
+	}
+
+	return &LoginResult{User: u, AccessToken: accessToken}, nil
 }
 
 // normalizeEmail trims surrounding whitespace and lowercases the address so

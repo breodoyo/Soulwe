@@ -59,6 +59,10 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("DATABASE_URL must use postgres:// or postgresql:// scheme, got %s://", scheme)
 	}
 
+	if c.JWTSecret == "" {
+		return fmt.Errorf("JWT_SECRET is required but not set; add it to your .env or environment")
+	}
+
 	return nil
 }
 

@@ -12,10 +12,12 @@ import (
 )
 
 // fakeService embeds the Service interface so the handler tests only need to
-// stub Register; the remaining methods fall back to their zero-value result.
+// stub the methods under test; the remaining methods fall back to their
+// zero-value result.
 type fakeService struct {
 	Service
 	registerFunc func(ctx context.Context, email, password string) (*User, error)
+	loginFunc    func(ctx context.Context, email, password string) (*LoginResult, error)
 }
 
 func (f *fakeService) Register(ctx context.Context, email, password string) (*User, error) {
@@ -23,6 +25,13 @@ func (f *fakeService) Register(ctx context.Context, email, password string) (*Us
 		return nil, errors.New("registerFunc not configured")
 	}
 	return f.registerFunc(ctx, email, password)
+}
+
+func (f *fakeService) Login(ctx context.Context, email, password string) (*LoginResult, error) {
+	if f.loginFunc == nil {
+		return nil, errors.New("loginFunc not configured")
+	}
+	return f.loginFunc(ctx, email, password)
 }
 
 func TestHandlerRegisterRoute(t *testing.T) {
@@ -134,6 +143,110 @@ func performRegister(t *testing.T, svc Service, body string) *httptest.ResponseR
 	router.POST("/api/v1/auth/register", handler.Register)
 
 	req, err := http.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("failed to build request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestHandlerLoginRoute(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	successUser := &User{
+		ID:           "11111111-1111-1111-1111-111111111111",
+		Email:        "bree@example.com",
+		LanguagePref: "en",
+		IsVerified:   false,
+	}
+
+	t.Run("returns 200 with the access token and user on success", func(t *testing.T) {
+		svc := &fakeService{
+			loginFunc: func(_ context.Context, _ string, _ string) (*LoginResult, error) {
+				return &LoginResult{User: successUser, AccessToken: "test-access-token"}, nil
+			},
+		}
+		rec := performLogin(t, svc, `{"email":"bree@example.com","password":"a-strong-password"}`)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		body := rec.Body.Bytes()
+		if !bytes.Contains(body, []byte(`"access_token":"test-access-token"`)) {
+			t.Errorf("response missing access token: %s", body)
+		}
+		if !bytes.Contains(body, []byte(`"token_type":"Bearer"`)) {
+			t.Errorf("response missing token type: %s", body)
+		}
+		if !bytes.Contains(body, []byte(`"expires_in":900`)) {
+			t.Errorf("response missing expires_in: %s", body)
+		}
+		if !bytes.Contains(body, []byte(`"email":"bree@example.com"`)) {
+			t.Errorf("response missing user email: %s", body)
+		}
+		if bytes.Contains(body, []byte("password_hash")) || bytes.Contains(body, []byte(`"password`)) {
+			t.Errorf("password or its hash leaked in the response: %s", body)
+		}
+	})
+
+	t.Run("returns 400 for malformed JSON", func(t *testing.T) {
+		svc := &fakeService{}
+		rec := performLogin(t, svc, `{"email":`)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+		assertErrorCode(t, rec, "INVALID_INPUT")
+	})
+
+	t.Run("returns 401 without exposing which field failed", func(t *testing.T) {
+		svc := &fakeService{
+			loginFunc: func(context.Context, string, string) (*LoginResult, error) {
+				return nil, ErrBadCredentials
+			},
+		}
+		rec := performLogin(t, svc, `{"email":"nobody@example.com","password":"a-strong-password"}`)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", rec.Code)
+		}
+		if !bytes.Contains(rec.Body.Bytes(), []byte(`"code":"UNAUTHORIZED"`)) {
+			t.Errorf("expected UNAUTHORIZED code in %s", rec.Body.String())
+		}
+		if bytes.Contains(rec.Body.Bytes(), []byte(`"field"`)) {
+			t.Errorf("response must not reveal which field was wrong: %s", rec.Body.String())
+		}
+	})
+
+	t.Run("returns 500 without leaking internals on service failure", func(t *testing.T) {
+		svc := &fakeService{
+			loginFunc: func(context.Context, string, string) (*LoginResult, error) {
+				return nil, errors.New("signing key service unavailable")
+			},
+		}
+		rec := performLogin(t, svc, `{"email":"bree@example.com","password":"a-strong-password"}`)
+
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("expected 500, got %d", rec.Code)
+		}
+		if bytes.Contains(rec.Body.Bytes(), []byte("signing key service unavailable")) {
+			t.Errorf("internal error detail leaked to the client: %s", rec.Body.String())
+		}
+		assertErrorCode(t, rec, "INTERNAL_SERVER_ERROR")
+	})
+}
+
+func performLogin(t *testing.T, svc Service, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	handler := NewHandler(svc)
+
+	router := gin.New()
+	router.POST("/api/v1/auth/login", handler.Login)
+
+	req, err := http.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(body))
 	if err != nil {
 		t.Fatalf("failed to build request: %v", err)
 	}

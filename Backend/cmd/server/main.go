@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"Backend/db"
+	"Backend/internal/auth"
 	"Backend/internal/config"
 	"Backend/internal/middleware"
 	"Backend/internal/user"
@@ -76,6 +77,7 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 			auth := v1.Group("/auth")
 			{
 				auth.POST("/register", authHandler.Register)
+				auth.POST("/login", authHandler.Login)
 			}
 		}
 
@@ -103,9 +105,14 @@ func main() {
 	defer pool.Close()
 	log.Println("🌿 Database connection pool established")
 
-	// 3. Compose the users auth stack (Handler → Service → Repository)
+	// 3. Compose the users auth stack (Handler → Service → Repository), with
+	// a JWT manager that signs access tokens using the validated JWT_SECRET.
+	tokenManager, err := auth.NewManager(cfg.JWTSecret)
+	if err != nil {
+		log.Fatalf("JWT signing secret error: %v", err)
+	}
 	userRepo := user.NewPostgresRepository(pool)
-	userService := user.NewService(userRepo)
+	userService := user.NewService(userRepo, tokenManager)
 	userHandler := user.NewHandler(userService)
 
 	// 4. Setup router and middleware

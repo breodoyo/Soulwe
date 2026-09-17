@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 
+	"Backend/internal/auth"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -23,6 +25,33 @@ func NewHandler(svc Service) *Handler {
 type registerRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+// Login handles POST /api/v1/auth/login.
+func (h *Handler) Login(c *gin.Context) {
+	var req registerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_INPUT",
+			"Request body must include a valid JSON email and password", "")
+		return
+	}
+
+	result, err := h.svc.Login(c.Request.Context(), strings.TrimSpace(req.Email), req.Password)
+	switch {
+	case errors.Is(err, ErrBadCredentials):
+		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "invalid email or password", "")
+	case err != nil:
+		slog.Error("user login failed", slog.String("error", err.Error()))
+		respondError(c, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR",
+			"An unexpected server error occurred", "")
+	default:
+		c.JSON(http.StatusOK, gin.H{
+			"access_token": result.AccessToken,
+			"token_type":   "Bearer",
+			"expires_in":   int(auth.AccessTokenTTL.Seconds()),
+			"user":         result.User,
+		})
+	}
 }
 
 // Register handles POST /api/v1/auth/register.

@@ -5,6 +5,10 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"Backend/internal/auth"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // fakeRepository is an in-memory Repository used to unit-test the service
@@ -47,8 +51,18 @@ func (f *fakeRepository) FindByID(_ context.Context, id string) (*User, error) {
 	return u, nil
 }
 
+// newTestTokenManager returns a real JWT manager bound to a fixed test-only
+// secret, so the service tests exercise actual token signing.
+func newTestTokenManager() *auth.Manager {
+	m, err := auth.NewManager("unit-test-secret-that-is-not-shared-anywhere")
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
+
 func TestServiceRegisterCreatesUser(t *testing.T) {
-	svc := NewService(newFakeRepository())
+	svc := NewService(newFakeRepository(), newTestTokenManager())
 
 	u, err := svc.Register(context.Background(), "  Bree@Example.com ", "a-strong-password")
 	if err != nil {
@@ -72,7 +86,7 @@ func TestServiceRegisterCreatesUser(t *testing.T) {
 }
 
 func TestServiceRegisterDuplicateEmail(t *testing.T) {
-	svc := NewService(newFakeRepository())
+	svc := NewService(newFakeRepository(), newTestTokenManager())
 
 	if _, err := svc.Register(context.Background(), "bree@example.com", "a-strong-password"); err != nil {
 		t.Fatalf("first Register returned error: %v", err)
@@ -84,7 +98,7 @@ func TestServiceRegisterDuplicateEmail(t *testing.T) {
 }
 
 func TestServiceRegisterRejectsInvalidEmail(t *testing.T) {
-	svc := NewService(newFakeRepository())
+	svc := NewService(newFakeRepository(), newTestTokenManager())
 
 	cases := []string{
 		"",
@@ -102,7 +116,7 @@ func TestServiceRegisterRejectsInvalidEmail(t *testing.T) {
 }
 
 func TestServiceRegisterRejectsInvalidPassword(t *testing.T) {
-	svc := NewService(newFakeRepository())
+	svc := NewService(newFakeRepository(), newTestTokenManager())
 
 	cases := []string{
 		"",            // empty
@@ -125,7 +139,7 @@ func TestServiceRegisterRejectsInvalidPassword(t *testing.T) {
 }
 
 func TestServiceVerifyPassword(t *testing.T) {
-	svc := NewService(newFakeRepository())
+	svc := NewService(newFakeRepository(), newTestTokenManager())
 	_, err := svc.Register(context.Background(), "bree@example.com", "a-strong-password")
 	if err != nil {
 		t.Fatalf("Register returned error: %v", err)
@@ -157,7 +171,7 @@ func TestServiceVerifyPassword(t *testing.T) {
 }
 
 func TestServiceFindByEmail(t *testing.T) {
-	svc := NewService(newFakeRepository())
+	svc := NewService(newFakeRepository(), newTestTokenManager())
 	if _, err := svc.Register(context.Background(), "bree@example.com", "a-strong-password"); err != nil {
 		t.Fatalf("Register returned error: %v", err)
 	}
@@ -174,4 +188,65 @@ func TestServiceFindByEmail(t *testing.T) {
 	if !errors.Is(err, ErrUserNotFound) {
 		t.Fatalf("expected ErrUserNotFound, got %v", err)
 	}
+}
+
+func parseSubject(t *testing.T, tokenString string) string {
+	t.Helper()
+	claims := &jwt.RegisteredClaims{}
+	parsed, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
+		return []byte("unit-test-secret-that-is-not-shared-anywhere"), nil
+	})
+	if err != nil {
+		t.Fatalf("failed to parse access token: %v", err)
+	}
+	if !parsed.Valid {
+		t.Fatal("expected a valid access token")
+	}
+	if claims.ExpiresAt == nil || claims.IssuedAt == nil {
+		t.Fatal("expected issued-at and expires-at claims")
+	}
+	if diff := claims.ExpiresAt.Sub(claims.IssuedAt.Time); diff != auth.AccessTokenTTL {
+		t.Errorf("expected token lifetime %v, got %v", auth.AccessTokenTTL, diff)
+	}
+	if claims.Issuer != auth.Issuer {
+		t.Errorf("expected issuer %q, got %q", auth.Issuer, claims.Issuer)
+	}
+	return claims.Subject
+}
+
+func TestServiceLogin(t *testing.T) {
+	svc := NewService(newFakeRepository(), newTestTokenManager())
+	if _, err := svc.Register(context.Background(), "bree@example.com", "a-strong-password"); err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+
+	t.Run("valid credentials return the user and an access token", func(t *testing.T) {
+		result, err := svc.Login(context.Background(), " BREE@example.com ", "a-strong-password")
+		if err != nil {
+			t.Fatalf("Login returned error: %v", err)
+		}
+		if result.User.Email != "bree@example.com" {
+			t.Errorf("expected normalized email, got %q", result.User.Email)
+		}
+		if result.AccessToken == "" {
+			t.Fatal("expected a non-empty access token")
+		}
+		if sub := parseSubject(t, result.AccessToken); sub != result.User.ID {
+			t.Errorf("expected token subject %q, got %q", result.User.ID, sub)
+		}
+	})
+
+	t.Run("wrong password returns ErrBadCredentials", func(t *testing.T) {
+		_, err := svc.Login(context.Background(), "bree@example.com", "not-the-password")
+		if !errors.Is(err, ErrBadCredentials) {
+			t.Fatalf("expected ErrBadCredentials, got %v", err)
+		}
+	})
+
+	t.Run("unknown email returns ErrBadCredentials, not enumeration", func(t *testing.T) {
+		_, err := svc.Login(context.Background(), "nobody@example.com", "a-strong-password")
+		if !errors.Is(err, ErrBadCredentials) {
+			t.Fatalf("expected ErrBadCredentials, got %v", err)
+		}
+	})
 }
