@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"Backend/internal/auth"
+	"Backend/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -25,6 +26,18 @@ func NewHandler(svc Service) *Handler {
 type registerRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+// Me handles GET /api/v1/auth/me. The auth middleware has already validated
+// the Bearer token and stored the user ID in the request context, so this
+// handler only echoes it back — a minimal demonstration that protection works.
+func (h *Handler) Me(c *gin.Context) {
+	userID, ok := middleware.UserIDFromContext(c)
+	if !ok {
+		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"user_id": userID})
 }
 
 // Login handles POST /api/v1/auth/login.

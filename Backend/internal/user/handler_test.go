@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"Backend/internal/middleware"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -272,4 +274,54 @@ func assertErrorField(t *testing.T, rec *httptest.ResponseRecorder, wantCode, wa
 	if !bytes.Contains(rec.Body.Bytes(), []byte(`"field":"`+wantField+`"`)) {
 		t.Errorf("expected field %q in %s", wantField, rec.Body.String())
 	}
+}
+
+func TestHandlerMeRoute(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("returns the authenticated user id", func(t *testing.T) {
+		handler := NewHandler(nil)
+		router := gin.New()
+		// Simulate what the auth middleware does: store the user id in context.
+		router.Use(func(c *gin.Context) {
+			c.Set(middleware.UserIDKey, "11111111-1111-1111-1111-111111111111")
+			c.Next()
+		})
+		router.GET("/api/v1/auth/me", handler.Me)
+
+		req, err := http.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+		if err != nil {
+			t.Fatalf("failed to build request: %v", err)
+		}
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		if !bytes.Contains(rec.Body.Bytes(), []byte(`"user_id":"11111111-1111-1111-1111-111111111111"`)) {
+			t.Errorf("expected user id in response, got %s", rec.Body.String())
+		}
+		if bytes.Contains(rec.Body.Bytes(), []byte("password_hash")) {
+			t.Errorf("response must never include a password hash: %s", rec.Body.String())
+		}
+	})
+
+	t.Run("returns 401 when the context has no user id", func(t *testing.T) {
+		handler := NewHandler(nil)
+		router := gin.New()
+		router.GET("/api/v1/auth/me", handler.Me)
+
+		req, err := http.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+		if err != nil {
+			t.Fatalf("failed to build request: %v", err)
+		}
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+		}
+		assertErrorCode(t, rec, "UNAUTHORIZED")
+	})
 }

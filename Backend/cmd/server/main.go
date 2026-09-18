@@ -21,7 +21,7 @@ import (
 )
 
 // setupRouter initializes the Gin engine, global middleware, and foundational routes.
-func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler) *gin.Engine {
+func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler, tokenManager *auth.Manager) *gin.Engine {
 	// Set Gin mode (debug or release)
 	gin.SetMode(cfg.GinMode)
 
@@ -78,6 +78,12 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 			{
 				auth.POST("/register", authHandler.Register)
 				auth.POST("/login", authHandler.Login)
+
+				// /me is the only protected route in this phase. It requires a
+				// valid Bearer access token; /register and /login stay public.
+				if tokenManager != nil {
+					auth.GET("/me", middleware.AuthRequired(tokenManager), authHandler.Me)
+				}
 			}
 		}
 
@@ -115,8 +121,9 @@ func main() {
 	userService := user.NewService(userRepo, tokenManager)
 	userHandler := user.NewHandler(userService)
 
-	// 4. Setup router and middleware
-	router := setupRouter(cfg, pool, userHandler)
+	// 4. Setup router and middleware; the same token manager validates the
+	// Bearer tokens on the protected routes.
+	router := setupRouter(cfg, pool, userHandler, tokenManager)
 
 	// 5. Configure HTTP server
 	serverAddr := ":" + cfg.Port
