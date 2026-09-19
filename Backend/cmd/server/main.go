@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"Backend/db"
+	"Backend/internal/anon"
 	"Backend/internal/auth"
 	"Backend/internal/config"
 	"Backend/internal/middleware"
@@ -21,7 +22,7 @@ import (
 )
 
 // setupRouter initializes the Gin engine, global middleware, and foundational routes.
-func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler, tokenManager *auth.Manager) *gin.Engine {
+func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler, tokenManager *auth.Manager, anonHandler *anon.Handler, anonService anon.Service) *gin.Engine {
 	// Set Gin mode (debug or release)
 	gin.SetMode(cfg.GinMode)
 
@@ -87,6 +88,19 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 			}
 		}
 
+		// Anonymous session routes. Guarded so unit tests can pass nil values.
+		if anonHandler != nil && anonService != nil {
+			anonGroup := v1.Group("/auth")
+			{
+				// Creating a session is public: it mints the anonymous token.
+				anonGroup.POST("/anonymous", anonHandler.Create)
+
+				// The /anonymous/me endpoint requires a valid anonymous Bearer
+				// token (distinct from registered-user JWTs).
+				anonGroup.GET("/anonymous/me", middleware.AnonymousAuthRequired(anonService), anonHandler.Me)
+			}
+		}
+
 		// Domain route groups (/users, /dashboard, /moods, /affirmations,
 		// /journal, /circles, /therapists, /breathing) will be registered here
 		// in subsequent phases as their Handler -> Service -> Repository layers are implemented.
@@ -121,11 +135,18 @@ func main() {
 	userService := user.NewService(userRepo, tokenManager)
 	userHandler := user.NewHandler(userService)
 
-	// 4. Setup router and middleware; the same token manager validates the
-	// Bearer tokens on the protected routes.
-	router := setupRouter(cfg, pool, userHandler, tokenManager)
+	// 4. Compose the anonymous session stack. Session tokens are opaque and
+	// only their SHA-256 hashes are stored; the same service marks last_seen_at
+	// on every authenticated anonymous request.
+	anonRepo := anon.NewPostgresRepository(pool)
+	anonService := anon.NewService(anonRepo)
+	anonHandler := anon.NewHandler(anonService)
 
-	// 5. Configure HTTP server
+	// 5. Setup router and middleware; the same token manager validates the
+	// Bearer tokens on the protected routes.
+	router := setupRouter(cfg, pool, userHandler, tokenManager, anonHandler, anonService)
+
+	// 6. Configure HTTP server
 	serverAddr := ":" + cfg.Port
 	srv := &http.Server{
 		Addr:           serverAddr,
@@ -135,7 +156,7 @@ func main() {
 		MaxHeaderBytes: 1 << 20, // 1 MB
 	}
 
-	// 6. Start HTTP server in a separate goroutine
+	// 7. Start HTTP server in a separate goroutine
 	go func() {
 		log.Printf("🌿 Soulwe API server listening on %s [%s mode]", serverAddr, cfg.Env)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -143,7 +164,7 @@ func main() {
 		}
 	}()
 
-	// 7. Graceful shutdown listening on OS interrupt signals
+	// 8. Graceful shutdown listening on OS interrupt signals
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 

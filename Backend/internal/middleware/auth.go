@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"net/http"
 	"strings"
 
 	"Backend/internal/auth"
@@ -23,12 +22,7 @@ func AuthRequired(tokenManager *auth.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, ok := parseBearerToken(c, tokenManager)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": gin.H{
-					"code":    "UNAUTHORIZED",
-					"message": "authentication required",
-				},
-			})
+			abortUnauthorized(c)
 			return
 		}
 
@@ -37,11 +31,11 @@ func AuthRequired(tokenManager *auth.Manager) gin.HandlerFunc {
 	}
 }
 
-// parseBearerToken extracts the token from the Authorization header, requires
-// the Bearer scheme, and validates it against the token manager. The boolean
-// reports success; failures are deliberately indistinguishable. It never logs
-// the header or the token.
-func parseBearerToken(c *gin.Context, tokenManager *auth.Manager) (string, bool) {
+// bearerToken extracts the raw credentials from the Authorization header and
+// requires the Bearer scheme with a non-empty token. The boolean reports
+// success; failures are deliberately indistinguishable. It never logs the
+// header or the token. Callers interpret the raw token (JWT vs anonymous).
+func bearerToken(c *gin.Context) (string, bool) {
 	header := c.GetHeader("Authorization")
 	if header == "" {
 		return "", false
@@ -52,6 +46,19 @@ func parseBearerToken(c *gin.Context, tokenManager *auth.Manager) (string, bool)
 
 	token := strings.TrimSpace(strings.TrimPrefix(header, bearerPrefix))
 	if token == "" {
+		return "", false
+	}
+
+	return token, true
+}
+
+// parseBearerToken extracts the token from the Authorization header, requires
+// the Bearer scheme, and validates it against the token manager. The boolean
+// reports success; failures are deliberately indistinguishable. It never logs
+// the header or the token.
+func parseBearerToken(c *gin.Context, tokenManager *auth.Manager) (string, bool) {
+	token, ok := bearerToken(c)
+	if !ok {
 		return "", false
 	}
 

@@ -94,13 +94,20 @@ Get a new access token using a refresh token.
 Get a token for anonymous access (circles, breathe, limited journal).
 No body required.
 
-**Response `200`:**
+Optional `X-Device-ID` header (a UUID) makes the call idempotent per device:
+re-registering with the same device UUID keeps the same `anonymous_id` and
+rotates the token.
+
+**Response `201`:**
 ```json
 {
-  "access_token": "eyJ...",
-  "anon_name": "Anon Willow"
+  "anonymous_token": "V2rH...",
+  "anonymous_id": "uuid"
 }
 ```
+The raw `anonymous_token` is shown exactly once — only its SHA-256 hash is
+stored. Send it later as `Authorization: Bearer <anonymous_token>` to access
+anonymous-protected endpoints (e.g. `GET /auth/anonymous/me`).
 
 ---
 

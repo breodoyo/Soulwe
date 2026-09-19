@@ -69,18 +69,35 @@ and the anonymous names shown in circles.
 CREATE TABLE anon_identities (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
-    device_uuid TEXT,                      -- for unregistered users
+    device_uuid TEXT,                      -- optional, for idempotency per device
+    token_hash  TEXT,                      -- SHA-256 of the anonymous session token
     anon_name   TEXT NOT NULL UNIQUE,      -- e.g. "Anon Baobab"
     created_at  TIMESTAMPTZ DEFAULT NOW(),
+    last_seen_at TIMESTAMPTZ DEFAULT NOW(),
 
-    CONSTRAINT one_identity CHECK (
-        (user_id IS NULL) != (device_uuid IS NULL)  -- exactly one must be set
+    CONSTRAINT anon_identity_binding CHECK (
+        user_id IS NOT NULL OR token_hash IS NOT NULL
+        OR device_uuid IS NOT NULL  -- every identity belongs to a user, a session, or a phase-2 device
     )
 );
+
+CREATE UNIQUE INDEX idx_anon_identities_token_hash
+    ON anon_identities (token_hash)
+    WHERE token_hash IS NOT NULL;
+
+CREATE UNIQUE INDEX idx_anon_identities_device_uuid
+    ON anon_identities (device_uuid)
+    WHERE device_uuid IS NOT NULL;
 ```
 
 The `anon_name` is generated server-side from a curated list of East African
 nature words (Baobab, Acacia, Savanna, Kilimanjaro, Serengeti, etc.).
+
+When a user registers, their `anon_identities` row may be linked via `user_id`;
+for anonymous sessions the identity is bound to the `token_hash` instead (only
+the SHA-256 hash is ever stored — the raw token is shown to the client once and
+never persisted). Device UUIDs are optional metadata so a returning device gets
+the same `anonymous_id` with a rotated token.
 
 ---
 
@@ -262,6 +279,7 @@ Migrations live in `backend/db/migrations/` and are numbered sequentially:
 008_create_therapists.sql
 009_create_breathing_sessions.sql
 010_seed_circles.sql
+011_add_anon_session_identity.sql
 ```
 
 We run them with `golang-migrate`. Each file contains both an `up` migration

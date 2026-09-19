@@ -24,7 +24,7 @@ func TestHealthEndpoints(t *testing.T) {
 	// The pool is only required for the /readyz endpoint, and the auth handler
 	// is only used for /api/v1/auth/* routes. Neither is exercised by these
 	// unit tests, so both are omitted here.
-	router := setupRouter(cfg, nil, nil, nil)
+	router := setupRouter(cfg, nil, nil, nil, nil, nil)
 
 	t.Run("Root /health returns 200 OK", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, "/health", nil)
@@ -123,7 +123,7 @@ func TestAuthMeEndpoint(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, nil, user.NewHandler(nil), tokenManager)
+	}, nil, user.NewHandler(nil), tokenManager, nil, nil)
 
 	t.Run("without a token returns 401", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
