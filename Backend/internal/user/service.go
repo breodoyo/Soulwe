@@ -32,11 +32,25 @@ type Service interface {
 	// Login verifies the credentials and returns the authenticated user
 	// together with a freshly signed JWT access token.
 	Login(ctx context.Context, email, password string) (*LoginResult, error)
+
+	// Promote upgrades an anonymous identity to a registered account: it
+	// validates the credentials, persists the user and the identity link
+	// atomically, and returns the persisted user with a freshly signed JWT.
+	// It returns ErrIdentityAlreadyPromoted when the identity is already
+	// linked and ErrEmailTaken when the email is already registered.
+	Promote(ctx context.Context, identityID, email, password string, displayName *string) (*PromotionResult, error)
 }
 
 // LoginResult is the successful outcome of a login: the authenticated user
 // and the access token they must send on subsequent requests.
 type LoginResult struct {
+	User        *User
+	AccessToken string
+}
+
+// PromotionResult is the successful outcome of promoting an anonymous
+// identity: the newly created registered user and the access token.
+type PromotionResult struct {
 	User        *User
 	AccessToken string
 }
@@ -113,6 +127,52 @@ func (s *service) Login(ctx context.Context, email, password string) (*LoginResu
 	}
 
 	return &LoginResult{User: u, AccessToken: accessToken}, nil
+}
+
+// Promote turns an authenticated anonymous identity into a registered account.
+// The service owns the business rules (email/password validation, optional
+// display_name normalization, password hashing) and only issues a JWT after
+// the repository confirms the user and the identity link were persisted
+// atomically. It never deletes or mutates the anonymous identity beyond the
+// user_id link performed by the repository.
+func (s *service) Promote(ctx context.Context, identityID, email, password string, displayName *string) (*PromotionResult, error) {
+	email = normalizeEmail(email)
+	if !validEmail(email) {
+		return nil, ErrInvalidEmail
+	}
+	if !validPassword(password) {
+		return nil, ErrInvalidPassword
+	}
+
+	var name *string
+	if displayName != nil {
+		if trimmed := strings.TrimSpace(*displayName); trimmed != "" {
+			name = &trimmed
+		}
+	}
+
+	hash, err := hashPassword(password)
+	if err != nil {
+		return nil, fmt.Errorf("user promote: hash password: %w", err)
+	}
+
+	u, err := s.users.Promote(ctx, identityID, email, hash, name, "en")
+	if errors.Is(err, ErrEmailTaken) {
+		return nil, ErrEmailTaken
+	}
+	if errors.Is(err, ErrIdentityAlreadyPromoted) {
+		return nil, ErrIdentityAlreadyPromoted
+	}
+	if err != nil {
+		return nil, fmt.Errorf("user promote: %w", err)
+	}
+
+	accessToken, err := s.tokens.SignAccessToken(u.ID)
+	if err != nil {
+		return nil, fmt.Errorf("user promote: sign access token: %w", err)
+	}
+
+	return &PromotionResult{User: u, AccessToken: accessToken}, nil
 }
 
 // normalizeEmail trims surrounding whitespace and lowercases the address so

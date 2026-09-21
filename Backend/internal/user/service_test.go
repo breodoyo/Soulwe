@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -12,17 +13,26 @@ import (
 )
 
 // fakeRepository is an in-memory Repository used to unit-test the service
-// without a real PostgreSQL connection.
+// without a real PostgreSQL connection. identities maps an anonymous identity
+// ID to its linked user ID (nil means the identity is not yet promoted).
 type fakeRepository struct {
-	users map[string]*User
-	byID  map[string]*User
+	users      map[string]*User
+	byID       map[string]*User
+	identities map[string]*string
+	promoteErr error // injectable failure for the Promote path
 }
 
 func newFakeRepository() *fakeRepository {
 	return &fakeRepository{
-		users: map[string]*User{},
-		byID:  map[string]*User{},
+		users:      map[string]*User{},
+		byID:       map[string]*User{},
+		identities: map[string]*string{},
 	}
+}
+
+// seedIdentity registers an unlinked anonymous identity so Promote can find it.
+func seedIdentity(repo *fakeRepository, identityID string) {
+	repo.identities[identityID] = nil
 }
 
 func (f *fakeRepository) Create(_ context.Context, u *User) error {
@@ -49,6 +59,45 @@ func (f *fakeRepository) FindByID(_ context.Context, id string) (*User, error) {
 		return nil, ErrUserNotFound
 	}
 	return u, nil
+}
+
+func (f *fakeRepository) Promote(_ context.Context, identityID, email, passwordHash string, displayName *string, languagePref string) (*User, error) {
+	if f.promoteErr != nil {
+		return nil, f.promoteErr
+	}
+	linked, ok := f.identities[identityID]
+	if !ok || linked != nil {
+		return nil, ErrIdentityAlreadyPromoted
+	}
+	if _, exists := f.users[email]; exists {
+		return nil, ErrEmailTaken
+	}
+	nextID := len(f.byID) + 1
+	u := &User{
+		ID:           fmt.Sprintf("00000000-0000-0000-0000-%012d", nextID),
+		Email:        email,
+		PasswordHash: passwordHash,
+		DisplayName:  displayName,
+		LanguagePref: languagePref,
+		IsVerified:   false,
+	}
+	f.users[email] = u
+	f.byID[u.ID] = u
+	userID := u.ID
+	f.identities[identityID] = &userID
+	return u, nil
+}
+
+// failingTokenManager always fails to sign, for the JWT-signing error path.
+type failingTokenManager struct{}
+
+func (failingTokenManager) SignAccessToken(string) (string, error) {
+	return "", errors.New("signing service unavailable")
+}
+
+// raiseIdentity is a tiny helper to set an identity's linked user ID directly.
+func raiseIdentity(repo *fakeRepository, identityID, userID string) {
+	repo.identities[identityID] = &userID
 }
 
 // newTestTokenManager returns a real JWT manager bound to a fixed test-only
@@ -247,6 +296,129 @@ func TestServiceLogin(t *testing.T) {
 		_, err := svc.Login(context.Background(), "nobody@example.com", "a-strong-password")
 		if !errors.Is(err, ErrBadCredentials) {
 			t.Fatalf("expected ErrBadCredentials, got %v", err)
+		}
+	})
+}
+
+func TestServicePromote(t *testing.T) {
+	t.Run("successful promotion returns the user and a signed access token", func(t *testing.T) {
+		repo := newFakeRepository()
+		seedIdentity(repo, "22222222-2222-2222-2222-222222222222")
+		svc := NewService(repo, newTestTokenManager())
+
+		displayName := "Bree"
+		result, err := svc.Promote(context.Background(),
+			"22222222-2222-2222-2222-222222222222", " Bree@Example.com ", "a-strong-password", &displayName)
+		if err != nil {
+			t.Fatalf("Promote returned error: %v", err)
+		}
+		if result.User.Email != "bree@example.com" {
+			t.Errorf("email should be normalized, got %q", result.User.Email)
+		}
+		if result.User.PasswordHash == "" || result.User.PasswordHash == "a-strong-password" {
+			t.Error("expected the bcrypt hash to be stored, never the plaintext")
+		}
+		if result.User.ID == "" {
+			t.Error("expected the repository to populate the user ID")
+		}
+		if result.User.DisplayName == nil || *result.User.DisplayName != "Bree" {
+			t.Errorf("expected display_name to be persisted, got %v", result.User.DisplayName)
+		}
+		if result.AccessToken == "" {
+			t.Fatal("expected a non-empty access token")
+		}
+		if sub := parseSubject(t, result.AccessToken); sub != result.User.ID {
+			t.Errorf("expected token subject %q, got %q", result.User.ID, sub)
+		}
+		// The anonymous identity must now be linked to the new user.
+		if linked := repo.identities["22222222-2222-2222-2222-222222222222"]; linked == nil || *linked != result.User.ID {
+			t.Errorf("expected the anonymous identity to be linked to the new user")
+		}
+	})
+
+	t.Run("normalizes a whitespace-only display name to null", func(t *testing.T) {
+		repo := newFakeRepository()
+		seedIdentity(repo, "ident-1")
+		svc := NewService(repo, newTestTokenManager())
+
+		blank := "   "
+		result, err := svc.Promote(context.Background(), "ident-1", "bree@example.com", "a-strong-password", &blank)
+		if err != nil {
+			t.Fatalf("Promote returned error: %v", err)
+		}
+		if result.User.DisplayName != nil {
+			t.Errorf("expected a blank display name to be stored as null, got %q", *result.User.DisplayName)
+		}
+	})
+
+	t.Run("already promoted identity returns ErrIdentityAlreadyPromoted", func(t *testing.T) {
+		repo := newFakeRepository()
+		seedIdentity(repo, "ident-1")
+		raiseIdentity(repo, "ident-1", "some-user-id")
+		svc := NewService(repo, newTestTokenManager())
+
+		_, err := svc.Promote(context.Background(), "ident-1", "bree@example.com", "a-strong-password", nil)
+		if !errors.Is(err, ErrIdentityAlreadyPromoted) {
+			t.Fatalf("expected ErrIdentityAlreadyPromoted, got %v", err)
+		}
+		if len(repo.users) != 0 {
+			t.Errorf("no user must be created for an already-promoted identity, got %d users", len(repo.users))
+		}
+	})
+
+	t.Run("duplicate email returns ErrEmailTaken and does not link the identity", func(t *testing.T) {
+		repo := newFakeRepository()
+		seedIdentity(repo, "ident-1")
+		svc := NewService(repo, newTestTokenManager())
+
+		if _, err := svc.Register(context.Background(), "bree@example.com", "a-strong-password"); err != nil {
+			t.Fatalf("Register returned error: %v", err)
+		}
+		_, err := svc.Promote(context.Background(), "ident-1", "bree@example.com", "another-strong-pw", nil)
+		if !errors.Is(err, ErrEmailTaken) {
+			t.Fatalf("expected ErrEmailTaken, got %v", err)
+		}
+		if repo.identities["ident-1"] != nil {
+			t.Error("the anonymous identity must stay unlinked when the email is taken")
+		}
+	})
+
+	t.Run("invalid email returns ErrInvalidEmail", func(t *testing.T) {
+		svc := NewService(newFakeRepository(), newTestTokenManager())
+		_, err := svc.Promote(context.Background(), "ident-1", "not-an-email", "a-strong-password", nil)
+		if !errors.Is(err, ErrInvalidEmail) {
+			t.Fatalf("expected ErrInvalidEmail, got %v", err)
+		}
+	})
+
+	t.Run("invalid password returns ErrInvalidPassword", func(t *testing.T) {
+		svc := NewService(newFakeRepository(), newTestTokenManager())
+		_, err := svc.Promote(context.Background(), "ident-1", "bree@example.com", "short", nil)
+		if !errors.Is(err, ErrInvalidPassword) {
+			t.Fatalf("expected ErrInvalidPassword, got %v", err)
+		}
+	})
+
+	t.Run("repository failure is wrapped", func(t *testing.T) {
+		repo := newFakeRepository()
+		seedIdentity(repo, "ident-1")
+		repo.promoteErr = errors.New("connection lost mid-transaction")
+		svc := NewService(repo, newTestTokenManager())
+
+		_, err := svc.Promote(context.Background(), "ident-1", "bree@example.com", "a-strong-password", nil)
+		if err == nil || errors.Is(err, ErrEmailTaken) || errors.Is(err, ErrIdentityAlreadyPromoted) {
+			t.Fatalf("expected a wrapped repository error, got %v", err)
+		}
+	})
+
+	t.Run("JWT signing failure is wrapped", func(t *testing.T) {
+		repo := newFakeRepository()
+		seedIdentity(repo, "ident-1")
+		svc := NewService(repo, failingTokenManager{})
+
+		_, err := svc.Promote(context.Background(), "ident-1", "bree@example.com", "a-strong-password", nil)
+		if err == nil || errors.Is(err, ErrEmailTaken) || errors.Is(err, ErrIdentityAlreadyPromoted) {
+			t.Fatalf("expected a wrapped signing error, got %v", err)
 		}
 	})
 }

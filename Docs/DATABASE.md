@@ -99,6 +99,18 @@ the SHA-256 hash is ever stored — the raw token is shown to the client once an
 never persisted). Device UUIDs are optional metadata so a returning device gets
 the same `anonymous_id` with a rotated token.
 
+**Anonymous → registered promotion** (`POST /auth/anonymous/promote`):
+An anonymous session's identity can be promoted to a registered account by
+setting `user_id` on its existing `anon_identities` row. The row itself is
+preserved (its ID, `anon_name`, `token_hash`, and timestamps stay intact) so
+circle history tied to the anonymous identity survives the promotion. Creating
+the user and linking the identity happens in one transaction; the identity row
+is locked (`SELECT ... FOR UPDATE`) so two concurrent promotions of the same
+identity cannot both succeed. The `user_id` unique index additionally
+guarantees an identity can be linked to at most one account, and the email
+uniqueness constraint keeps promotion from creating a second account for an
+already-registered (or soft-deleted) email.
+
 ---
 
 ### journal_entries

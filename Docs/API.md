@@ -111,6 +111,54 @@ anonymous-protected endpoints (e.g. `GET /auth/anonymous/me`).
 
 ---
 
+#### `POST /auth/anonymous/promote`
+Upgrade an anonymous session into a registered account. The authenticated
+anonymous identity is preserved and linked to the new account (its ID and
+existing identity data remain intact) — it is not deleted.
+
+Requires an anonymous bearer token (`Authorization: Bearer <anonymous_token>`),
+not a registered-user JWT.
+
+**Request:**
+```json
+{
+  "email": "bree@example.com",
+  "password": "minimum-12-chars",
+  "display_name": "Bree"
+}
+```
+
+`display_name` is optional; an empty or whitespace-only value is stored as
+`null`.
+
+**Response `201`:** same shape as login
+```json
+{
+  "access_token": "eyJ...",
+  "token_type": "Bearer",
+  "expires_in": 900,
+  "user": {
+    "id": "uuid",
+    "email": "bree@example.com",
+    "display_name": "Bree",
+    "language_pref": "en",
+    "is_verified": false,
+    "created_at": "2026-08-19T10:00:00Z"
+  }
+}
+```
+
+The user creation and the anonymous-identity link happen in one database
+transaction, so promotion is atomic and can only succeed once per anonymous
+identity. The returned `access_token` is a normal 15-minute registered JWT.
+
+**Errors:**
+- `400` — missing fields, password too short, invalid email
+- `401` — missing or invalid anonymous token
+- `409` — email already registered, or this anonymous identity was already promoted
+
+---
+
 ### Journal
 
 All journal endpoints require a registered user token (not anonymous).

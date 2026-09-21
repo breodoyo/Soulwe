@@ -28,6 +28,14 @@ type registerRequest struct {
 	Password string `json:"password"`
 }
 
+// promoteRequest is the body of POST /api/v1/auth/anonymous/promote. The
+// anonymous identity comes from the request's bearer token, not the body.
+type promoteRequest struct {
+	Email       string  `json:"email"`
+	Password    string  `json:"password"`
+	DisplayName *string `json:"display_name"`
+}
+
 // Me handles GET /api/v1/auth/me. The auth middleware has already validated
 // the Bearer token and stored the user ID in the request context, so this
 // handler only echoes it back — a minimal demonstration that protection works.
@@ -93,6 +101,51 @@ func (h *Handler) Register(c *gin.Context) {
 			"An unexpected server error occurred", "")
 	default:
 		c.JSON(http.StatusCreated, gin.H{"user": u})
+	}
+}
+
+// Promote handles POST /api/v1/auth/anonymous/promote. The anonymous auth
+// middleware has already validated the Bearer token and stored the identity ID
+// in the request context, so the handler only reads it from there — it never
+// sees or logs the raw anonymous token.
+func (h *Handler) Promote(c *gin.Context) {
+	identityID, ok := middleware.AnonIdentityIDFromContext(c)
+	if !ok {
+		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
+		return
+	}
+
+	var req promoteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_INPUT",
+			"Request body must include a valid JSON email and password", "")
+		return
+	}
+
+	req.Email = strings.TrimSpace(req.Email)
+
+	result, err := h.svc.Promote(c.Request.Context(), identityID, req.Email, req.Password, req.DisplayName)
+	switch {
+	case errors.Is(err, ErrInvalidEmail):
+		respondError(c, http.StatusBadRequest, "INVALID_INPUT", "provide a valid email address", "email")
+	case errors.Is(err, ErrInvalidPassword):
+		respondError(c, http.StatusBadRequest, "INVALID_INPUT",
+			"password must be between 12 and 72 characters", "password")
+	case errors.Is(err, ErrEmailTaken):
+		respondError(c, http.StatusConflict, "CONFLICT", "an account with this email already exists", "email")
+	case errors.Is(err, ErrIdentityAlreadyPromoted):
+		respondError(c, http.StatusConflict, "CONFLICT", "anonymous identity already promoted", "")
+	case err != nil:
+		slog.Error("user promote failed", slog.String("error", err.Error()))
+		respondError(c, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR",
+			"An unexpected server error occurred", "")
+	default:
+		c.JSON(http.StatusCreated, gin.H{
+			"access_token": result.AccessToken,
+			"token_type":   "Bearer",
+			"expires_in":   int(auth.AccessTokenTTL.Seconds()),
+			"user":         result.User,
+		})
 	}
 }
 

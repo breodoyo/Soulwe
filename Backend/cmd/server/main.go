@@ -98,6 +98,14 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 				// The /anonymous/me endpoint requires a valid anonymous Bearer
 				// token (distinct from registered-user JWTs).
 				anonGroup.GET("/anonymous/me", middleware.AnonymousAuthRequired(anonService), anonHandler.Me)
+
+				// Promoting an anonymous identity to a registered account also
+				// authenticates with the anonymous middleware so the identity is
+				// recovered from the token; the user handler does the promote.
+				if authHandler != nil {
+					anonGroup.POST("/anonymous/promote",
+						middleware.AnonymousAuthRequired(anonService), authHandler.Promote)
+				}
 			}
 		}
 

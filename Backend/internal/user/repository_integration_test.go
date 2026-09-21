@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
+	"Backend/internal/anon"
 	"Backend/internal/auth"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -195,6 +197,218 @@ func TestServiceLoginIntegration(t *testing.T) {
 		_, err := svc.Login(ctx, "missing-"+email, password)
 		if !errors.Is(err, ErrBadCredentials) {
 			t.Fatalf("expected ErrBadCredentials, got %v", err)
+		}
+	})
+}
+
+// TestPromoteIntegration exercises the anonymous -> registered promotion
+// against a real PostgreSQL. It starts from a token-bound anonymous identity
+// (no user_id) and verifies the promotion is atomic, idempotence once linked,
+// safe under duplicate emails, and race-free under concurrent attempts.
+func TestPromoteIntegration(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL not set; skipping integration test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("failed to create pool: %v", err)
+	}
+	defer pool.Close()
+
+	repo := NewPostgresRepository(pool)
+	identities := anon.NewPostgresRepository(pool)
+
+	const passwordHash = "$2a$12$abcdefghijklmnopqrstuv" // arbitrary bcrypt-shaped value
+
+	email := fmt.Sprintf("promote-%d@soulwe.local", time.Now().UnixNano())
+
+	// A fresh token-bound anonymous identity, unlinked to any user.
+	identity := &anon.AnonIdentity{
+		AnonName:  fmt.Sprintf("Anon Promote %d", time.Now().UnixNano()%1_000_000_000_000),
+		TokenHash: anon.HashToken("promote-integration-token"),
+	}
+	if err := identities.Create(ctx, identity); err != nil {
+		t.Fatalf("failed to create anonymous identity: %v", err)
+	}
+
+	originalCreatedAt := identity.CreatedAt
+
+	// Track every row created so cleanup is deterministic even when a subtest
+	// fails early. Deleting the promoted user cascades its linked identity.
+	var createdEmails []string
+	var createdIdentities []string
+	createdEmails = append(createdEmails, email)
+	createdIdentities = append(createdIdentities, identity.ID)
+	defer func() {
+		for _, id := range createdIdentities {
+			if _, err := pool.Exec(context.Background(),
+				"DELETE FROM anon_identities WHERE id = $1", id); err != nil {
+				t.Errorf("cleanup failed to DELETE test identity %s: %v", id, err)
+			}
+		}
+		for _, e := range createdEmails {
+			if _, err := pool.Exec(context.Background(),
+				"DELETE FROM users WHERE email = $1", e); err != nil {
+				t.Errorf("cleanup failed to DELETE test user %s: %v", e, err)
+			}
+		}
+	}()
+
+	var promotedUserID string
+
+	t.Run("Promote creates the user, links the identity, and preserves identity data", func(t *testing.T) {
+		u, err := repo.Promote(ctx, identity.ID, email, passwordHash, nil, "en")
+		if err != nil {
+			t.Fatalf("Promote returned error: %v", err)
+		}
+		promotedUserID = u.ID
+		if len(u.ID) != 36 {
+			t.Errorf("expected a UUID user id, got %q", u.ID)
+		}
+		if u.Email != email {
+			t.Errorf("email mismatch: got %q, want %q", u.Email, email)
+		}
+		if u.PasswordHash != passwordHash {
+			t.Error("password_hash mismatch")
+		}
+		if u.IsVerified {
+			t.Error("expected is_verified to default to false")
+		}
+
+		// The anonymous identity must still exist, still carry its own data,
+		// and now point at the promoted user (user_id populated).
+		var linkedUserID *string
+		var storedCreatedAt time.Time
+		var storedName string
+		if err := pool.QueryRow(ctx,
+			"SELECT user_id, created_at, anon_name FROM anon_identities WHERE id = $1",
+			identity.ID,
+		).Scan(&linkedUserID, &storedCreatedAt, &storedName); err != nil {
+			t.Fatalf("failed to read the promoted identity: %v", err)
+		}
+		if linkedUserID == nil || *linkedUserID != promotedUserID {
+			t.Errorf("expected user_id %q on the identity, got %v", promotedUserID, linkedUserID)
+		}
+		if storedName != identity.AnonName {
+			t.Errorf("anon_name must survive promotion: got %q, want %q", storedName, identity.AnonName)
+		}
+		if !storedCreatedAt.Equal(originalCreatedAt) {
+			t.Errorf("created_at must survive promotion: got %v, want %v", storedCreatedAt, originalCreatedAt)
+		}
+	})
+
+	t.Run("an already promoted identity returns ErrIdentityAlreadyPromoted", func(t *testing.T) {
+		otherEmail := fmt.Sprintf("promote-already-%d@soulwe.local", time.Now().UnixNano())
+		createdEmails = append(createdEmails, otherEmail)
+
+		_, err := repo.Promote(ctx, identity.ID, otherEmail, passwordHash, nil, "en")
+		if !errors.Is(err, ErrIdentityAlreadyPromoted) {
+			t.Fatalf("expected ErrIdentityAlreadyPromoted, got %v", err)
+		}
+
+		// No second user may be created for the rejected attempt.
+		var count int
+		if err := pool.QueryRow(ctx,
+			"SELECT COUNT(*) FROM users WHERE email = $1", otherEmail).Scan(&count); err != nil {
+			t.Fatalf("failed to count users: %v", err)
+		}
+		if count != 0 {
+			t.Errorf("a user was created for an already-promoted identity: %d row(s)", count)
+		}
+	})
+
+	t.Run("duplicate email returns ErrEmailTaken and leaves the identity unlinked", func(t *testing.T) {
+		second := &anon.AnonIdentity{
+			AnonName:  fmt.Sprintf("Anon Dup %d", time.Now().UnixNano()%1_000_000_000_000),
+			TokenHash: anon.HashToken("promote-duplicate-email-token"),
+		}
+		if err := identities.Create(ctx, second); err != nil {
+			t.Fatalf("failed to create second identity: %v", err)
+		}
+		createdIdentities = append(createdIdentities, second.ID)
+
+		_, err := repo.Promote(ctx, second.ID, email, passwordHash, nil, "en")
+		if !errors.Is(err, ErrEmailTaken) {
+			t.Fatalf("expected ErrEmailTaken, got %v", err)
+		}
+
+		// The loser identity must remain unlinked (no partial state).
+		var linkedUserID *string
+		if err := pool.QueryRow(ctx,
+			"SELECT user_id FROM anon_identities WHERE id = $1", second.ID).Scan(&linkedUserID); err != nil {
+			t.Fatalf("failed to read identity: %v", err)
+		}
+		if linkedUserID != nil {
+			t.Errorf("identity must stay unlinked after a duplicate-email rejection, got user_id %q", *linkedUserID)
+		}
+	})
+
+	t.Run("concurrent promotions of the same identity have exactly one winner", func(t *testing.T) {
+		raceIdentity := &anon.AnonIdentity{
+			AnonName:  fmt.Sprintf("Anon Race %d", time.Now().UnixNano()%1_000_000_000_000),
+			TokenHash: anon.HashToken("promote-race-token"),
+		}
+		if err := identities.Create(ctx, raceIdentity); err != nil {
+			t.Fatalf("failed to create race identity: %v", err)
+		}
+		createdIdentities = append(createdIdentities, raceIdentity.ID)
+
+		const workers = 4
+		emails := make([]string, workers)
+		results := make([]error, workers)
+		for i := 0; i < workers; i++ {
+			emails[i] = fmt.Sprintf("promote-race-%d-%d@soulwe.local", i, time.Now().UnixNano())
+			createdEmails = append(createdEmails, emails[i])
+		}
+
+		var wg sync.WaitGroup
+		for i := 0; i < workers; i++ {
+			i := i
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, results[i] = repo.Promote(ctx, raceIdentity.ID, emails[i], passwordHash, nil, "en")
+			}()
+		}
+		wg.Wait()
+
+		var winners int
+		for i, err := range results {
+			switch {
+			case err == nil:
+				winners++
+			case errors.Is(err, ErrIdentityAlreadyPromoted):
+			default:
+				t.Errorf("worker %d: unexpected error: %v", i, err)
+			}
+		}
+		if winners != 1 {
+			t.Errorf("expected exactly one winning promote, got %d", winners)
+		}
+
+		// Exactly one user may exist across all the race emails.
+		var created int
+		if err := pool.QueryRow(ctx,
+			"SELECT COUNT(*) FROM users WHERE email = ANY($1)", emails).Scan(&created); err != nil {
+			t.Fatalf("failed to count race users: %v", err)
+		}
+		if created != 1 {
+			t.Errorf("expected exactly 1 user created under contention, got %d", created)
+		}
+
+		// The identity is linked to exactly the winning user.
+		var linkedUserID *string
+		if err := pool.QueryRow(ctx,
+			"SELECT user_id FROM anon_identities WHERE id = $1", raceIdentity.ID).Scan(&linkedUserID); err != nil {
+			t.Fatalf("failed to read race identity link: %v", err)
+		}
+		if linkedUserID == nil {
+			t.Error("expected the race identity to end up linked to a user")
 		}
 	})
 }

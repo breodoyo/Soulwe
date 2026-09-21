@@ -23,6 +23,9 @@ var (
 	ErrInvalidPassword = errors.New("invalid password")
 	ErrUserNotFound    = errors.New("user not found")
 	ErrBadCredentials  = errors.New("invalid email or password")
+	// ErrIdentityAlreadyPromoted reports that an anonymous identity has already
+	// been linked to a registered account (anon_identities.user_id is set).
+	ErrIdentityAlreadyPromoted = errors.New("anonymous identity already promoted")
 )
 
 // User mirrors the `users` table from db/migrations/001_create_users.up.sql.
