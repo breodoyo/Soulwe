@@ -412,3 +412,93 @@ func TestPromoteIntegration(t *testing.T) {
 		}
 	})
 }
+
+// TestUpdateProfileIntegration exercises the profile update repository method
+// against a real PostgreSQL: partial-field updates, clearing the display name,
+// persistence on reload, and hard exclusion of soft-deleted accounts.
+func TestUpdateProfileIntegration(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL not set; skipping integration test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("failed to create pool: %v", err)
+	}
+	defer pool.Close()
+
+	repo := NewPostgresRepository(pool)
+
+	email := fmt.Sprintf("profile-%d@soulwe.local", time.Now().UnixNano())
+	const passwordHash = "$2a$12$abcdefghijklmnopqrstuv" // arbitrary bcrypt-shaped value
+	u := &User{Email: email, PasswordHash: passwordHash, LanguagePref: "en"}
+	if err := repo.Create(ctx, u); err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	defer pool.Exec(ctx, "DELETE FROM users WHERE id = $1", u.ID)
+
+	t.Run("UpdateProfile sets both optional fields", func(t *testing.T) {
+		displayName := "  Bree  "
+		languagePref := "SW"
+		// The repository stores values verbatim; trimming/normalising is the
+		// service's job. Passing raw values tests only persistence.
+		updated, err := repo.UpdateProfile(ctx, u.ID, &displayName, &languagePref)
+		if err != nil {
+			t.Fatalf("UpdateProfile returned error: %v", err)
+		}
+		if updated.DisplayName == nil || *updated.DisplayName != "  Bree  " {
+			t.Errorf("expected the stored display name verbatim, got %+v", updated.DisplayName)
+		}
+		if updated.LanguagePref != "SW" {
+			t.Errorf("expected the stored language_pref verbatim, got %q", updated.LanguagePref)
+		}
+		if updated.UpdatedAt.Before(u.UpdatedAt) {
+			t.Error("expected updated_at to move forward")
+		}
+	})
+
+	t.Run("clearing the display name stores NULL", func(t *testing.T) {
+		empty := ""
+		updated, err := repo.UpdateProfile(ctx, u.ID, &empty, nil)
+		if err != nil {
+			t.Fatalf("UpdateProfile returned error: %v", err)
+		}
+		if updated.DisplayName != nil {
+			t.Errorf("expected display_name NULL, got %q", *updated.DisplayName)
+		}
+		if updated.LanguagePref != "SW" {
+			t.Errorf("omitted language_pref must be untouched, got %q", updated.LanguagePref)
+		}
+	})
+
+	t.Run("the persisted values survive a reload", func(t *testing.T) {
+		languagePref := "luo"
+		if _, err := repo.UpdateProfile(ctx, u.ID, nil, &languagePref); err != nil {
+			t.Fatalf("UpdateProfile returned error: %v", err)
+		}
+		reloaded, err := repo.FindByID(ctx, u.ID)
+		if err != nil {
+			t.Fatalf("FindByID returned error: %v", err)
+		}
+		if reloaded.LanguagePref != "luo" {
+			t.Errorf("expected language_pref 'luo' after reload, got %q", reloaded.LanguagePref)
+		}
+		if reloaded.DisplayName != nil {
+			t.Errorf("expected display_name to stay NULL, got %q", *reloaded.DisplayName)
+		}
+	})
+
+	t.Run("soft-deleted accounts are not updatable", func(t *testing.T) {
+		if _, err := pool.Exec(ctx, "UPDATE users SET deleted_at = NOW() WHERE id = $1", u.ID); err != nil {
+			t.Fatalf("failed to soft-delete the test user: %v", err)
+		}
+		displayName := "Ghost"
+		if _, err := repo.UpdateProfile(ctx, u.ID, &displayName, nil); !errors.Is(err, ErrUserNotFound) {
+			t.Fatalf("expected ErrUserNotFound for a soft-deleted user, got %v", err)
+		}
+	})
+}

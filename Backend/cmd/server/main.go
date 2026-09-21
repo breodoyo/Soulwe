@@ -14,7 +14,9 @@ import (
 	"Backend/internal/anon"
 	"Backend/internal/auth"
 	"Backend/internal/config"
+	"Backend/internal/dashboard"
 	"Backend/internal/middleware"
+	"Backend/internal/mood"
 	"Backend/internal/user"
 
 	"github.com/gin-gonic/gin"
@@ -22,7 +24,7 @@ import (
 )
 
 // setupRouter initializes the Gin engine, global middleware, and foundational routes.
-func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler, tokenManager *auth.Manager, anonHandler *anon.Handler, anonService anon.Service) *gin.Engine {
+func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler, tokenManager *auth.Manager, anonHandler *anon.Handler, anonService anon.Service, moodHandler *mood.Handler, dashboardHandler *dashboard.Handler) *gin.Engine {
 	// Set Gin mode (debug or release)
 	gin.SetMode(cfg.GinMode)
 
@@ -109,9 +111,32 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 			}
 		}
 
-		// Domain route groups (/users, /dashboard, /moods, /affirmations,
-		// /journal, /circles, /therapists, /breathing) will be registered here
-		// in subsequent phases as their Handler -> Service -> Repository layers are implemented.
+		// Phase 4 wellness routes. All require a registered-user JWT; the
+		// identical profile/mood/dashboard routes reject anonymous tokens.
+		if tokenManager != nil && authHandler != nil {
+			users := v1.Group("/users")
+			{
+				users.GET("/me", middleware.AuthRequired(tokenManager), authHandler.GetProfile)
+				users.PATCH("/me", middleware.AuthRequired(tokenManager), authHandler.UpdateProfile)
+			}
+		}
+		if tokenManager != nil && moodHandler != nil {
+			moods := v1.Group("/moods")
+			{
+				moods.POST("", middleware.AuthRequired(tokenManager), moodHandler.Create)
+				moods.GET("", middleware.AuthRequired(tokenManager), moodHandler.List)
+			}
+		}
+		if tokenManager != nil && dashboardHandler != nil {
+			dashboard := v1.Group("/dashboard")
+			{
+				dashboard.GET("", middleware.AuthRequired(tokenManager), dashboardHandler.Get)
+			}
+		}
+
+		// Domain route groups (/journal, /circles, /therapists, /breathing)
+		// will be registered here in subsequent phases as their Handler ->
+		// Service -> Repository layers are implemented.
 	}
 
 	return r
@@ -150,9 +175,18 @@ func main() {
 	anonService := anon.NewService(anonRepo)
 	anonHandler := anon.NewHandler(anonService)
 
+	// 4b. Compose the Phase 4 wellness stacks: mood check-ins and the
+	// dashboard, which reuses the existing user and mood services.
+	moodRepo := mood.NewPostgresRepository(pool)
+	moodService := mood.NewService(moodRepo)
+	moodHandler := mood.NewHandler(moodService)
+
+	dashboardService := dashboard.NewService(userService, moodService)
+	dashboardHandler := dashboard.NewHandler(dashboardService)
+
 	// 5. Setup router and middleware; the same token manager validates the
 	// Bearer tokens on the protected routes.
-	router := setupRouter(cfg, pool, userHandler, tokenManager, anonHandler, anonService)
+	router := setupRouter(cfg, pool, userHandler, tokenManager, anonHandler, anonService, moodHandler, dashboardHandler)
 
 	// 6. Configure HTTP server
 	serverAddr := ":" + cfg.Port

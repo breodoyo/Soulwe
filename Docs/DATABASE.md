@@ -57,6 +57,12 @@ Mental health data has special sensitivity. If a user deletes their account,
 we keep a soft-delete record for 30 days before hard deletion, in case they
 want to recover. The data is inaccessible to queries during this window.
 
+**Profile updates (`PATCH /users/me`):** only `display_name` and
+`language_pref` are editable. `display_name` is trimmed and capped at 100
+characters; an empty value is stored as `null`. `language_pref` is lowercased
+and must be one of `en`, `sw`, `luo`, `kik`. `password_hash` is never returned
+to API clients.
+
 ---
 
 ### anon_identities
@@ -155,6 +161,16 @@ CREATE TABLE mood_logs (
     logged_at   TIMESTAMPTZ DEFAULT NOW()
 );
 ```
+
+Mood check-ins are always queried per user, newest first (list, latest, and
+count), so `mood_logs` needs an index that mirrors the journal approach:
+
+```sql
+CREATE INDEX idx_mood_logs_user_logged
+    ON mood_logs(user_id, logged_at DESC);
+```
+
+Added in migration `012_add_mood_logs_user_index`.
 
 ---
 
@@ -292,6 +308,7 @@ Migrations live in `backend/db/migrations/` and are numbered sequentially:
 009_create_breathing_sessions.sql
 010_seed_circles.sql
 011_add_anon_session_identity.sql
+012_add_mood_logs_user_index.sql
 ```
 
 We run them with `golang-migrate`. Each file contains both an `up` migration

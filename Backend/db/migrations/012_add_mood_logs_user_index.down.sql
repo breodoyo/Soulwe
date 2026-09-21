@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_mood_logs_user_logged;

@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"Backend/internal/middleware"
@@ -18,9 +20,11 @@ import (
 // zero-value result.
 type fakeService struct {
 	Service
-	registerFunc func(ctx context.Context, email, password string) (*User, error)
-	loginFunc    func(ctx context.Context, email, password string) (*LoginResult, error)
-	promoteFunc  func(ctx context.Context, identityID, email, password string, displayName *string) (*PromotionResult, error)
+	registerFunc      func(ctx context.Context, email, password string) (*User, error)
+	loginFunc         func(ctx context.Context, email, password string) (*LoginResult, error)
+	promoteFunc       func(ctx context.Context, identityID, email, password string, displayName *string) (*PromotionResult, error)
+	getProfileFunc    func(ctx context.Context, userID string) (*User, error)
+	updateProfileFunc func(ctx context.Context, userID string, displayName, languagePref *string) (*User, error)
 }
 
 func (f *fakeService) Register(ctx context.Context, email, password string) (*User, error) {
@@ -42,6 +46,20 @@ func (f *fakeService) Promote(ctx context.Context, identityID, email, password s
 		return nil, errors.New("promoteFunc not configured")
 	}
 	return f.promoteFunc(ctx, identityID, email, password, displayName)
+}
+
+func (f *fakeService) GetProfile(ctx context.Context, userID string) (*User, error) {
+	if f.getProfileFunc == nil {
+		return nil, errors.New("getProfileFunc not configured")
+	}
+	return f.getProfileFunc(ctx, userID)
+}
+
+func (f *fakeService) UpdateProfile(ctx context.Context, userID string, displayName, languagePref *string) (*User, error) {
+	if f.updateProfileFunc == nil {
+		return nil, errors.New("updateProfileFunc not configured")
+	}
+	return f.updateProfileFunc(ctx, userID, displayName, languagePref)
 }
 
 func TestHandlerRegisterRoute(t *testing.T) {
@@ -538,3 +556,266 @@ func TestHandlerPromoteRoute(t *testing.T) {
 }
 
 func stringPtr(s string) *string { return &s }
+
+// profileUser is the safe profile the fake service returns for the profile
+// handler tests, with a password hash populated to assert it is never leaked.
+var profileUser = &User{
+	ID:           "11111111-1111-1111-1111-111111111111",
+	Email:        "bree@example.com",
+	DisplayName:  stringPtr("Bree"),
+	LanguagePref: "en",
+	IsVerified:   false,
+	PasswordHash: "$2a$12$abcdefghijklmnopqrstuv",
+}
+
+// performWithUserID builds a router that simulates the AuthRequired middleware
+// by stamping UserIDKey into the Gin context, then serves the request.
+func performWithUserID(t *testing.T, method, path, body, userID string, handler func(c *gin.Context)) *httptest.ResponseRecorder {
+	t.Helper()
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		if userID != "" {
+			c.Set(middleware.UserIDKey, userID)
+		}
+		c.Next()
+	})
+	router.Handle(method, path, handler)
+
+	var reader io.Reader
+	if body == "" {
+		reader = bytes.NewReader(nil)
+	} else {
+		reader = bytes.NewBufferString(body)
+	}
+	req, err := http.NewRequest(method, path, reader)
+	if err != nil {
+		t.Fatalf("failed to build request: %v", err)
+	}
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestHandlerGetProfileRoute(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("returns 200 with the safe user profile", func(t *testing.T) {
+		svc := &fakeService{
+			getProfileFunc: func(_ context.Context, userID string) (*User, error) {
+				if userID != "11111111-1111-1111-1111-111111111111" {
+					t.Errorf("expected the authenticated user ID, got %q", userID)
+				}
+				return profileUser, nil
+			},
+		}
+		rec := performWithUserID(t, http.MethodGet, "/api/v1/users/me", "",
+			"11111111-1111-1111-1111-111111111111", NewHandler(svc).GetProfile)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		body := rec.Body.Bytes()
+		if !bytes.Contains(body, []byte(`"email":"bree@example.com"`)) {
+			t.Errorf("response missing email: %s", body)
+		}
+		if bytes.Contains(body, []byte("password_hash")) || bytes.Contains(body, []byte(`"password`)) {
+			t.Errorf("password or its hash leaked in the response: %s", body)
+		}
+	})
+
+	t.Run("returns the id, display_name, and language in the profile", func(t *testing.T) {
+		svc := &fakeService{
+			getProfileFunc: func(context.Context, string) (*User, error) { return profileUser, nil },
+		}
+		rec := performWithUserID(t, http.MethodGet, "/api/v1/users/me", "",
+			"11111111-1111-1111-1111-111111111111", NewHandler(svc).GetProfile)
+
+		body := rec.Body.String()
+		for _, want := range []string{`"id":"11111111-1111-1111-1111-111111111111"`, `"display_name":"Bree"`, `"language_pref":"en"`} {
+			if !bytes.Contains([]byte(body), []byte(want)) {
+				t.Errorf("response missing %s: %s", want, body)
+			}
+		}
+	})
+
+	t.Run("returns 401 when the user id is missing from context", func(t *testing.T) {
+		rec := performWithUserID(t, http.MethodGet, "/api/v1/users/me", "",
+			"", NewHandler(&fakeService{}).GetProfile)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+		}
+		assertErrorCode(t, rec, "UNAUTHORIZED")
+	})
+
+	t.Run("returns 404 when the authenticated user no longer exists", func(t *testing.T) {
+		svc := &fakeService{
+			getProfileFunc: func(context.Context, string) (*User, error) { return nil, ErrUserNotFound },
+		}
+		rec := performWithUserID(t, http.MethodGet, "/api/v1/users/me", "",
+			"11111111-1111-1111-1111-111111111111", NewHandler(svc).GetProfile)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
+		}
+		assertErrorCode(t, rec, "NOT_FOUND")
+	})
+
+	t.Run("returns 500 without leaking internals on service failure", func(t *testing.T) {
+		svc := &fakeService{
+			getProfileFunc: func(context.Context, string) (*User, error) {
+				return nil, errors.New("database connection lost")
+			},
+		}
+		rec := performWithUserID(t, http.MethodGet, "/api/v1/users/me", "",
+			"11111111-1111-1111-1111-111111111111", NewHandler(svc).GetProfile)
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("expected 500, got %d", rec.Code)
+		}
+		if bytes.Contains(rec.Body.Bytes(), []byte("database connection lost")) {
+			t.Errorf("internal error detail leaked to the client: %s", rec.Body.String())
+		}
+		assertErrorCode(t, rec, "INTERNAL_SERVER_ERROR")
+	})
+}
+
+func TestHandlerUpdateProfileRoute(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("returns 200 with the updated user on success", func(t *testing.T) {
+		svc := &fakeService{
+			updateProfileFunc: func(_ context.Context, userID string, displayName, languagePref *string) (*User, error) {
+				if userID != "11111111-1111-1111-1111-111111111111" {
+					t.Errorf("expected the authenticated user ID, got %q", userID)
+				}
+				if displayName == nil || *displayName != "Bree" {
+					t.Errorf("expected display_name 'Bree', got %v", displayName)
+				}
+				if languagePref == nil || *languagePref != "sw" {
+					t.Errorf("expected language_pref 'sw', got %v", languagePref)
+				}
+				updated := *profileUser
+				updated.DisplayName = displayName
+				updated.LanguagePref = "sw"
+				return &updated, nil
+			},
+		}
+		rec := performWithUserID(t, http.MethodPatch, "/api/v1/users/me",
+			`{"display_name":"Bree","language_pref":"sw"}`,
+			"11111111-1111-1111-1111-111111111111", NewHandler(svc).UpdateProfile)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		body := rec.Body.String()
+		if !bytes.Contains([]byte(body), []byte(`"language_pref":"sw"`)) {
+			t.Errorf("response missing updated language_pref: %s", body)
+		}
+		if bytes.Contains([]byte(body), []byte("password_hash")) || bytes.Contains([]byte(body), []byte(`"password`)) {
+			t.Errorf("password or its hash leaked in the response: %s", body)
+		}
+	})
+
+	t.Run("returns 400 for malformed JSON", func(t *testing.T) {
+		rec := performWithUserID(t, http.MethodPatch, "/api/v1/users/me", `{"display_name":`,
+			"11111111-1111-1111-1111-111111111111", NewHandler(&fakeService{}).UpdateProfile)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+		assertErrorCode(t, rec, "INVALID_INPUT")
+	})
+
+	t.Run("returns 400 for an unsupported language with the field set", func(t *testing.T) {
+		svc := &fakeService{
+			updateProfileFunc: func(context.Context, string, *string, *string) (*User, error) {
+				return nil, ErrInvalidLanguagePref
+			},
+		}
+		rec := performWithUserID(t, http.MethodPatch, "/api/v1/users/me", `{"language_pref":"xx"}`,
+			"11111111-1111-1111-1111-111111111111", NewHandler(svc).UpdateProfile)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rec.Code)
+		}
+		assertErrorField(t, rec, "INVALID_INPUT", "language_pref")
+	})
+
+	t.Run("returns 400 for an oversized display name with the field set", func(t *testing.T) {
+		svc := &fakeService{
+			updateProfileFunc: func(context.Context, string, *string, *string) (*User, error) {
+				return nil, ErrInvalidDisplayName
+			},
+		}
+		rec := performWithUserID(t, http.MethodPatch, "/api/v1/users/me",
+			`{"display_name":"`+strings.Repeat("a", 101)+`"}`,
+			"11111111-1111-1111-1111-111111111111", NewHandler(svc).UpdateProfile)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rec.Code)
+		}
+		assertErrorField(t, rec, "INVALID_INPUT", "display_name")
+	})
+
+	t.Run("forbidden fields are ignored and never reach the service", func(t *testing.T) {
+		var gotName, gotLang *string
+		svc := &fakeService{
+			updateProfileFunc: func(_ context.Context, userID string, displayName, languagePref *string) (*User, error) {
+				if userID != "11111111-1111-1111-1111-111111111111" {
+					t.Errorf("user id must come from the JWT context, got %q", userID)
+				}
+				gotName, gotLang = displayName, languagePref
+				return profileUser, nil
+			},
+		}
+		rec := performWithUserID(t, http.MethodPatch, "/api/v1/users/me",
+			`{"email":"hacker@example.com","password":"changed","is_verified":true,"id":"99999999-9999-9999-9999-999999999999","display_name":"Bree"}`,
+			"11111111-1111-1111-1111-111111111111", NewHandler(svc).UpdateProfile)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		if gotName == nil || *gotName != "Bree" {
+			t.Errorf("only display_name should have been forwarded, got %v", gotName)
+		}
+		if gotLang != nil {
+			t.Errorf("language_pref was not sent and must stay nil, got %v", gotLang)
+		}
+	})
+
+	t.Run("returns 401 when the user id is missing from context", func(t *testing.T) {
+		rec := performWithUserID(t, http.MethodPatch, "/api/v1/users/me", `{"display_name":"Bree"}`,
+			"", NewHandler(&fakeService{}).UpdateProfile)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+		}
+		assertErrorCode(t, rec, "UNAUTHORIZED")
+	})
+
+	t.Run("returns 404 when the authenticated user no longer exists", func(t *testing.T) {
+		svc := &fakeService{
+			updateProfileFunc: func(context.Context, string, *string, *string) (*User, error) {
+				return nil, ErrUserNotFound
+			},
+		}
+		rec := performWithUserID(t, http.MethodPatch, "/api/v1/users/me", `{"display_name":"Bree"}`,
+			"11111111-1111-1111-1111-111111111111", NewHandler(svc).UpdateProfile)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("returns 500 without leaking internals on service failure", func(t *testing.T) {
+		svc := &fakeService{
+			updateProfileFunc: func(context.Context, string, *string, *string) (*User, error) {
+				return nil, errors.New("database transaction failed")
+			},
+		}
+		rec := performWithUserID(t, http.MethodPatch, "/api/v1/users/me", `{"display_name":"Bree"}`,
+			"11111111-1111-1111-1111-111111111111", NewHandler(svc).UpdateProfile)
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("expected 500, got %d", rec.Code)
+		}
+		if bytes.Contains(rec.Body.Bytes(), []byte("database transaction failed")) {
+			t.Errorf("internal error detail leaked to the client: %s", rec.Body.String())
+		}
+	})
+}

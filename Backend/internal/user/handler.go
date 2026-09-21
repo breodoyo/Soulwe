@@ -36,6 +36,15 @@ type promoteRequest struct {
 	DisplayName *string `json:"display_name"`
 }
 
+// updateProfileRequest is the body of PATCH /api/v1/users/me. Both fields are
+// optional pointers so an omitted field leaves the stored value untouched.
+// Password, email, and other account attributes are intentionally not part of
+// this request and are ignored even if a client sends them.
+type updateProfileRequest struct {
+	DisplayName  *string `json:"display_name"`
+	LanguagePref *string `json:"language_pref"`
+}
+
 // Me handles GET /api/v1/auth/me. The auth middleware has already validated
 // the Bearer token and stored the user ID in the request context, so this
 // handler only echoes it back — a minimal demonstration that protection works.
@@ -146,6 +155,66 @@ func (h *Handler) Promote(c *gin.Context) {
 			"expires_in":   int(auth.AccessTokenTTL.Seconds()),
 			"user":         result.User,
 		})
+	}
+}
+
+// GetProfile handles GET /api/v1/users/me. The registered-JWT middleware has
+// already stored the authenticated user ID in the context; the handler never
+// accepts a user ID from the request, so a user can only ever read their own
+// profile.
+func (h *Handler) GetProfile(c *gin.Context) {
+	userID, ok := middleware.UserIDFromContext(c)
+	if !ok {
+		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
+		return
+	}
+
+	u, err := h.svc.GetProfile(c.Request.Context(), userID)
+	switch {
+	case errors.Is(err, ErrUserNotFound):
+		respondError(c, http.StatusNotFound, "NOT_FOUND", "user not found", "")
+	case err != nil:
+		slog.Error("user get profile failed", slog.String("error", err.Error()))
+		respondError(c, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR",
+			"An unexpected server error occurred", "")
+	default:
+		c.JSON(http.StatusOK, gin.H{"user": u})
+	}
+}
+
+// UpdateProfile handles PATCH /api/v1/users/me. Only the supported profile
+// fields (display_name, language_pref) are read from the body; id, email,
+// password, is_verified, and created_at are never accepted from the client.
+func (h *Handler) UpdateProfile(c *gin.Context) {
+	userID, ok := middleware.UserIDFromContext(c)
+	if !ok {
+		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
+		return
+	}
+
+	var req updateProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_INPUT",
+			"Request body must be a valid JSON object", "")
+		return
+	}
+
+	u, err := h.svc.UpdateProfile(c.Request.Context(), userID, req.DisplayName, req.LanguagePref)
+	switch {
+	case errors.Is(err, ErrUserNotFound):
+		respondError(c, http.StatusNotFound, "NOT_FOUND", "user not found", "")
+	case errors.Is(err, ErrInvalidDisplayName):
+		respondError(c, http.StatusBadRequest, "INVALID_INPUT",
+			"display name must be at most 100 characters", "display_name")
+	case errors.Is(err, ErrInvalidLanguagePref):
+		respondError(c, http.StatusBadRequest, "INVALID_INPUT",
+			"language_pref must be one of: en, sw, luo, kik", "language_pref")
+	case err != nil:
+		slog.Error("user update profile failed", slog.String("error", err.Error()))
+		respondError(c, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR",
+			"An unexpected server error occurred", "")
+	default:
+		c.JSON(http.StatusOK, gin.H{"user": u})
 	}
 }
 

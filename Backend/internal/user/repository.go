@@ -21,6 +21,11 @@ type Repository interface {
 	// anonymous identity to it in a single transaction. See the concrete
 	// implementation for the conflict semantics.
 	Promote(ctx context.Context, identityID, email, passwordHash string, displayName *string, languagePref string) (*User, error)
+	// UpdateProfile updates a user's profile fields in one statement and
+	// returns the refreshed user, or ErrUserNotFound when the id does not
+	// belong to a non-deleted user. A nil field means "leave unchanged";
+	// displayName pointing at "" means "clear the stored display name".
+	UpdateProfile(ctx context.Context, userID string, displayName, languagePref *string) (*User, error)
 }
 
 // PostgresRepository implements Repository on top of the shared pgx pool.
@@ -45,6 +50,20 @@ const (
 
 	findUserByEmailSQL = "SELECT " + userColumns + ` FROM users WHERE email = $1 AND deleted_at IS NULL`
 	findUserByIDSQL    = "SELECT " + userColumns + ` FROM users WHERE id = $1 AND deleted_at IS NULL`
+
+	// updateProfileSQL sets a column only when the caller asked for it
+	// ($2/$4 booleans). NULLIF turns an explicit "" display_name into NULL so
+	// clearing the name and leaving it untouched are distinguishable:
+	//   displayName = nil               → column untouched
+	//   displayName = &""               → column set to NULL
+	//   displayName = &"Bree"           → column set to "Bree"
+	updateProfileSQL = `
+		UPDATE users SET
+			display_name = CASE WHEN $2::boolean THEN NULLIF($3, '')::text ELSE display_name END,
+			language_pref = CASE WHEN $4::boolean THEN $5::text ELSE language_pref END,
+			updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL
+		RETURNING ` + userColumns
 )
 
 // Create inserts a new user and fills in the database-generated fields
@@ -161,4 +180,37 @@ func (r *PostgresRepository) Promote(ctx context.Context, identityID, email, pas
 		return nil, fmt.Errorf("user promote: commit transaction: %w", err)
 	}
 	return u, nil
+}
+
+// UpdateProfile persists profile changes in one statement. Only the fields the
+// caller explicitly passes are written, so a PATCH that omits a field can never
+// clobber another client's concurrent update to that field. Returns the
+// refreshed user or ErrUserNotFound.
+func (r *PostgresRepository) UpdateProfile(ctx context.Context, userID string, displayName, languagePref *string) (*User, error) {
+	u := &User{}
+	err := r.pool.QueryRow(ctx, updateProfileSQL,
+		userID,
+		displayName != nil, nullableString(displayName),
+		languagePref != nil, nullableString(languagePref),
+	).Scan(
+		&u.ID, &u.Email, &u.PasswordHash, &u.DisplayName,
+		&u.LanguagePref, &u.IsVerified, &u.CreatedAt, &u.UpdatedAt, &u.DeletedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrUserNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("user update profile: %w", err)
+	}
+	return u, nil
+}
+
+// nullableString returns the value behind p, or "" when p is nil, for the
+// positional parameters of updateProfileSQL (the boolean guards already encode
+// whether the field is being set).
+func nullableString(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }

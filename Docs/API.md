@@ -20,6 +20,15 @@ Access tokens expire in 15 minutes. Use the refresh endpoint to get a new one.
 Anonymous users get a short-lived token that grants access to circles and
 basic features without registration.
 
+Protected endpoints are picky about token type:
+
+- **Registered-user endpoints** (`/auth/me`, `/users/me`, `/moods`,
+  `/dashboard`) require a registered-user **JWT** and reject anonymous tokens
+  with `401`.
+- **Anonymous endpoints** (`/auth/anonymous/me`, `/auth/anonymous/promote`)
+  require the opaque anonymous token and reject registered-user JWTs with
+  `401`.
+
 ---
 
 ## Endpoints
@@ -159,6 +168,159 @@ identity. The returned `access_token` is a normal 15-minute registered JWT.
 
 ---
 
+### Profile
+
+Registered-user profile endpoints. The identity always comes from the bearer
+JWT — a user can only ever read or update their **own** profile, and the
+response never includes `password_hash` or account flags.
+
+#### `GET /users/me`
+Read the authenticated user's profile.
+
+**Response `200`:**
+```json
+{
+  "user": {
+    "id": "uuid",
+    "email": "bree@example.com",
+    "display_name": "Bree",
+    "language_pref": "sw",
+    "is_verified": false,
+    "created_at": "2026-08-19T10:00:00Z",
+    "updated_at": "2026-08-19T10:00:00Z",
+    "deleted_at": null
+  }
+}
+```
+
+**Errors:**
+- `401` — missing or invalid JWT
+- `404` — account no longer exists (e.g. deleted)
+
+---
+
+#### `PATCH /users/me`
+Update select profile fields. Only `display_name` and `language_pref` are
+accepted; `id`, `email`, `password`, `is_verified`, and timestamps sent in the
+body are ignored.
+
+**Request:**
+```json
+{
+  "display_name": "Bree",
+  "language_pref": "sw"
+}
+```
+
+Both fields are optional — an omitted field is left untouched. Send
+`"display_name": ""` (or whitespace-only) to clear it to `null`.
+`language_pref` must be one of `en`, `sw`, `luo`, `kik`.
+
+**Response `200`:** the updated profile, same shape as `GET /users/me`.
+
+**Errors:**
+- `400` — malformed JSON, `language_pref` not in the supported set, or
+  `display_name` longer than 100 characters (with the offending `field`)
+- `401` — missing or invalid JWT
+- `404` — account no longer exists
+
+---
+
+### Mood (check-ins)
+
+Mood check-ins are separate from journal entries — a registered user can log
+their mood without writing anything. All mood endpoints are scoped to the
+authenticated user.
+
+#### `POST /moods`
+Log a mood for the authenticated user.
+
+**Request:**
+```json
+{
+  "mood": "At peace"
+}
+```
+
+Valid mood values (exact, case-sensitive): `Heavy`, `Okay`, `Better`,
+`At peace`, `Grateful`.
+
+**Response `201`:**
+```json
+{
+  "id": "uuid",
+  "mood": "At peace",
+  "logged_at": "2026-08-19T10:00:00Z"
+}
+```
+
+**Errors:**
+- `400` — malformed JSON, or `mood` not in the valid set (field `mood`)
+- `401` — missing or invalid JWT
+
+---
+
+#### `GET /moods`
+List the authenticated user's mood check-ins, newest first.
+
+**Query params:**
+- `limit` — default 20, max 50
+
+**Response `200`:**
+```json
+{
+  "moods": [
+    { "id": "uuid", "mood": "At peace", "logged_at": "2026-08-19T10:00:00Z" }
+  ]
+}
+```
+
+Returns `{"moods": []}` when the user has no check-ins.
+
+**Errors:**
+- `400` — `limit` is not a positive integer (field `limit`)
+- `401` — missing or invalid JWT
+
+---
+
+### Dashboard
+
+#### `GET /dashboard`
+The authenticated user's wellness snapshot: profile plus their mood summary.
+`latest_mood` is `null`, `recent_moods` `[]`, and `mood_checkins_count` `0`
+when the user has no check-ins yet.
+
+**Response `200`:**
+```json
+{
+  "user": {
+    "id": "uuid",
+    "email": "bree@example.com",
+    "display_name": "Bree",
+    "language_pref": "sw",
+    "is_verified": false,
+    "created_at": "2026-08-19T10:00:00Z",
+    "updated_at": "2026-08-19T10:00:00Z",
+    "deleted_at": null
+  },
+  "latest_mood": {
+    "id": "uuid",
+    "mood": "At peace",
+    "logged_at": "2026-08-19T10:00:00Z"
+  },
+  "recent_moods": [
+    { "id": "uuid", "mood": "At peace", "logged_at": "2026-08-19T10:00:00Z" }
+  ],
+  "mood_checkins_count": 3
+}
+```
+
+**Errors:**
+- `401` — missing or invalid JWT
+- `404` — account no longer exists
+
+---
+
 ### Journal
 
 All journal endpoints require a registered user token (not anonymous).
@@ -247,29 +409,6 @@ Get a single entry including the decrypted content.
 Permanently delete an entry. This is immediate and irreversible.
 
 **Response `204`:** no body
-
----
-
-### Mood
-
-#### `POST /mood`
-Log a mood without writing a journal entry.
-
-**Request:**
-```json
-{
-  "mood": "At peace"
-}
-```
-
-**Response `201`:**
-```json
-{
-  "id": "uuid",
-  "mood": "At peace",
-  "logged_at": "2026-08-19T10:00:00Z"
-}
-```
 
 ---
 

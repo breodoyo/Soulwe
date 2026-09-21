@@ -1,17 +1,22 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"Backend/internal/anon"
 	"Backend/internal/auth"
 	"Backend/internal/config"
+	"Backend/internal/dashboard"
 	"Backend/internal/middleware"
+	"Backend/internal/mood"
 	"Backend/internal/user"
 
 	"github.com/gin-gonic/gin"
@@ -27,7 +32,7 @@ func TestHealthEndpoints(t *testing.T) {
 	// The pool is only required for the /readyz endpoint, and the auth handler
 	// is only used for /api/v1/auth/* routes. Neither is exercised by these
 	// unit tests, so both are omitted here.
-	router := setupRouter(cfg, nil, nil, nil, nil, nil)
+	router := setupRouter(cfg, nil, nil, nil, nil, nil, nil, nil)
 
 	t.Run("Root /health returns 200 OK", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, "/health", nil)
@@ -126,7 +131,7 @@ func TestAuthMeEndpoint(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, nil, user.NewHandler(nil), tokenManager, nil, nil)
+	}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil)
 
 	t.Run("without a token returns 401", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
@@ -227,7 +232,7 @@ func TestAnonymousPromoteEndpoint(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, nil, user.NewHandler(nil), tokenManager, anonH, anonSvc)
+	}, nil, user.NewHandler(nil), tokenManager, anonH, anonSvc, nil, nil)
 
 	t.Run("promote without a token returns 401", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/anonymous/promote", nil)
@@ -285,7 +290,7 @@ func TestAnonymousPromoteEndpoint(t *testing.T) {
 			Env:         "test",
 			GinMode:     "test",
 			FrontendURL: "http://localhost:5173",
-		}, nil, user.NewHandler(nil), tokenManager, nil, nil)
+		}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil)
 
 		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/anonymous/promote", nil)
 		w := httptest.NewRecorder()
@@ -293,6 +298,267 @@ func TestAnonymousPromoteEndpoint(t *testing.T) {
 
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("expected 404 when the anonymous stack is absent, got %d", w.Code)
+		}
+	})
+}
+
+// stubUserService implements user.Service by embedding the interface and
+// overriding only the Phase 4 profile methods, so registered-JWT requests can
+// be exercised end to end through the router without a database.
+type stubUserService struct {
+	user.Service
+	profile *user.User
+	err     error
+}
+
+func (s *stubUserService) GetProfile(context.Context, string) (*user.User, error) {
+	return s.profile, s.err
+}
+
+func (s *stubUserService) UpdateProfile(context.Context, string, *string, *string) (*user.User, error) {
+	return s.profile, s.err
+}
+
+// stubMoodService implements mood.Service by embedding the interface and
+// overriding only the methods the Phase 4 router tests exercise.
+type stubMoodService struct {
+	mood.Service
+	createLog *mood.MoodLog
+	listLogs  []mood.MoodLog
+	err       error
+}
+
+func (s *stubMoodService) Create(context.Context, string, string) (*mood.MoodLog, error) {
+	return s.createLog, s.err
+}
+
+func (s *stubMoodService) List(context.Context, string, int) ([]mood.MoodLog, error) {
+	return s.listLogs, s.err
+}
+
+// stubDashboardService implements dashboard.Service by embedding the interface
+// and overriding Get with a canned snapshot.
+type stubDashboardService struct {
+	dashboard.Service
+	getFunc func(ctx context.Context, userID string) (*dashboard.Dashboard, error)
+}
+
+func (s *stubDashboardService) Get(ctx context.Context, userID string) (*dashboard.Dashboard, error) {
+	return s.getFunc(ctx, userID)
+}
+
+// TestPhase4WellnessRoutes verifies the Phase 4 wiring: the profile, mood, and
+// dashboard routes exist behind the registered-user AuthRequired middleware,
+// reject missing and anonymous-format tokens, accept a valid registered JWT,
+// and are absent when the stacks are not wired.
+func TestPhase4WellnessRoutes(t *testing.T) {
+	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
+	if err != nil {
+		t.Fatalf("auth.NewManager returned error: %v", err)
+	}
+
+	const (
+		registeredID = "11111111-1111-1111-1111-111111111111"
+		rawAnonToken = "raw-anonymous-token-phase-4"
+	)
+	displayName := "Bree"
+	profile := &user.User{
+		ID:           registeredID,
+		Email:        "bree@example.com",
+		PasswordHash: "must-never-leak",
+		DisplayName:  &displayName,
+		LanguagePref: "sw",
+		IsVerified:   true,
+	}
+	createdLog := &mood.MoodLog{
+		ID:       "22222222-2222-2222-2222-222222222222",
+		Mood:     "Better",
+		LoggedAt: time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC),
+	}
+
+	userSvc := &stubUserService{profile: profile}
+	moodSvc := &stubMoodService{
+		createLog: createdLog,
+		listLogs:  []mood.MoodLog{*createdLog},
+	}
+	dashSvc := &stubDashboardService{
+		getFunc: func(_ context.Context, userID string) (*dashboard.Dashboard, error) {
+			return &dashboard.Dashboard{
+				User:              profile,
+				LatestMood:        createdLog,
+				RecentMoods:       []mood.MoodLog{*createdLog},
+				MoodCheckinsCount: 1,
+			}, nil
+		},
+	}
+
+	router := setupRouter(&config.Config{
+		Env:         "test",
+		GinMode:     "test",
+		FrontendURL: "http://localhost:5173",
+	}, nil,
+		user.NewHandler(userSvc), tokenManager, nil, nil,
+		mood.NewHandler(moodSvc), dashboard.NewHandler(dashSvc))
+
+	jwt, err := tokenManager.SignAccessToken(registeredID)
+	if err != nil {
+		t.Fatalf("SignAccessToken returned error: %v", err)
+	}
+
+	registerCases := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{"profile read", http.MethodGet, "/api/v1/users/me", ""},
+		{"profile update", http.MethodPatch, "/api/v1/users/me", `{"display_name":"Bree"}`},
+		{"mood create", http.MethodPost, "/api/v1/moods", `{"mood":"Better"}`},
+		{"mood list", http.MethodGet, "/api/v1/moods", ""},
+		{"dashboard", http.MethodGet, "/api/v1/dashboard", ""},
+	}
+
+	t.Run("routes reject missing tokens", func(t *testing.T) {
+		for _, tc := range registerCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != http.StatusUnauthorized {
+				t.Errorf("%s %s: expected 401 without a token, got %d: %s", tc.method, tc.path, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("routes reject anonymous-format tokens", func(t *testing.T) {
+		for _, tc := range registerCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer "+rawAnonToken)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != http.StatusUnauthorized {
+				t.Errorf("%s %s: expected 401 for an anonymous token, got %d: %s", tc.method, tc.path, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("registered JWT reaches the profile read route", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, "/api/v1/users/me", nil)
+		req.Header.Set("Authorization", "Bearer "+jwt)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if bytes.Contains(w.Body.Bytes(), []byte("password_hash")) || bytes.Contains(w.Body.Bytes(), []byte("must-never-leak")) {
+			t.Errorf("password hash leaked in the profile response: %s", w.Body.String())
+		}
+		if !bytes.Contains(w.Body.Bytes(), []byte(`"email":"bree@example.com"`)) {
+			t.Errorf("unexpected profile body: %s", w.Body.String())
+		}
+	})
+
+	t.Run("registered JWT can update the profile", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodPatch, "/api/v1/users/me", strings.NewReader(`{"display_name":"Bree"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+jwt)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if !bytes.Contains(w.Body.Bytes(), []byte(`"display_name":"Bree"`)) {
+			t.Errorf("expected the updated display name in the response: %s", w.Body.String())
+		}
+	})
+
+	t.Run("registered JWT creates a mood check-in", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/moods", strings.NewReader(`{"mood":"Better"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+jwt)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+		if !bytes.Contains(w.Body.Bytes(), []byte(`"mood":"Better"`)) {
+			t.Errorf("unexpected check-in body: %s", w.Body.String())
+		}
+	})
+
+	t.Run("registered JWT lists mood check-ins", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, "/api/v1/moods", nil)
+		req.Header.Set("Authorization", "Bearer "+jwt)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if !bytes.Contains(w.Body.Bytes(), []byte(`"moods":[`)) {
+			t.Errorf("expected a moods array in the response: %s", w.Body.String())
+		}
+	})
+
+	t.Run("registered JWT reaches the dashboard", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, "/api/v1/dashboard", nil)
+		req.Header.Set("Authorization", "Bearer "+jwt)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		for _, key := range []string{`"user"`, `"latest_mood"`, `"recent_moods"`, `"mood_checkins_count":1`} {
+			if !bytes.Contains(w.Body.Bytes(), []byte(key)) {
+				t.Errorf("dashboard response missing %s: %s", key, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("routes are not registered without handlers or a token manager", func(t *testing.T) {
+		sparseRouter := setupRouter(&config.Config{
+			Env:         "test",
+			GinMode:     "test",
+			FrontendURL: "http://localhost:5173",
+		}, nil, nil, nil, nil, nil, nil, nil)
+
+		for _, tc := range registerCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			w := httptest.NewRecorder()
+			sparseRouter.ServeHTTP(w, req)
+			if w.Code != http.StatusNotFound {
+				t.Errorf("%s %s: expected 404 without handlers, got %d", tc.method, tc.path, w.Code)
+			}
+		}
+	})
+
+	t.Run("mood and dashboard routes are guarded independently", func(t *testing.T) {
+		partial := setupRouter(&config.Config{
+			Env:         "test",
+			GinMode:     "test",
+			FrontendURL: "http://localhost:5173",
+		}, nil, user.NewHandler(userSvc), tokenManager, nil, nil, nil, nil)
+
+		for _, tc := range []struct{ method, path string }{
+			{http.MethodGet, "/api/v1/moods"},
+			{http.MethodGet, "/api/v1/dashboard"},
+		} {
+			req, _ := http.NewRequest(tc.method, tc.path, nil)
+			w := httptest.NewRecorder()
+			partial.ServeHTTP(w, req)
+			if w.Code != http.StatusNotFound {
+				t.Errorf("%s %s: expected 404 without mood/dashboard handlers, got %d", tc.method, tc.path, w.Code)
+			}
+		}
+
+		req, _ := http.NewRequest(http.MethodGet, "/api/v1/users/me", nil)
+		w := httptest.NewRecorder()
+		partial.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("profile route should remain registered and protected (401 without token), got %d", w.Code)
 		}
 	})
 }

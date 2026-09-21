@@ -39,6 +39,17 @@ type Service interface {
 	// It returns ErrIdentityAlreadyPromoted when the identity is already
 	// linked and ErrEmailTaken when the email is already registered.
 	Promote(ctx context.Context, identityID, email, password string, displayName *string) (*PromotionResult, error)
+
+	// GetProfile returns the authenticated user's public profile, or
+	// ErrUserNotFound when the id does not belong to a non-deleted user.
+	GetProfile(ctx context.Context, userID string) (*User, error)
+
+	// UpdateProfile applies validated profile changes and returns the updated
+	// user. displayName nil means "leave unchanged"; a non-nil pointer sets the
+	// name ("" clears it to NULL). languagePref nil means "leave unchanged";
+	// a non-nil pointer sets the language code. It returns ErrUserNotFound or a
+	// validation sentinel when the service rejects the new values.
+	UpdateProfile(ctx context.Context, userID string, displayName, languagePref *string) (*User, error)
 }
 
 // LoginResult is the successful outcome of a login: the authenticated user
@@ -173,6 +184,51 @@ func (s *service) Promote(ctx context.Context, identityID, email, password strin
 	}
 
 	return &PromotionResult{User: u, AccessToken: accessToken}, nil
+}
+
+// GetProfile returns the authenticated user's profile. The user ID always
+// comes from the verified JWT context, never from client input.
+func (s *service) GetProfile(ctx context.Context, userID string) (*User, error) {
+	u, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+// UpdateProfile validates and applies profile changes. Field pointers mirror
+// the PATCH request: nil fields are untouched, an explicitly provided display
+// name is trimmed (blank names clear the stored value), and an explicitly
+// provided language code must be one of the supported set.
+func (s *service) UpdateProfile(ctx context.Context, userID string, displayName, languagePref *string) (*User, error) {
+	var name *string
+	if displayName != nil {
+		trimmed := strings.TrimSpace(*displayName)
+		if trimmed == "" {
+			empty := ""
+			name = &empty // explicit clear → repository stores NULL
+		} else {
+			if len(trimmed) > MaxDisplayNameLength {
+				return nil, ErrInvalidDisplayName
+			}
+			name = &trimmed
+		}
+	}
+
+	var lang *string
+	if languagePref != nil {
+		code := strings.ToLower(strings.TrimSpace(*languagePref))
+		if !validLanguagePrefs[code] {
+			return nil, ErrInvalidLanguagePref
+		}
+		lang = &code
+	}
+
+	u, err := s.users.UpdateProfile(ctx, userID, name, lang)
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
 }
 
 // normalizeEmail trims surrounding whitespace and lowercases the address so

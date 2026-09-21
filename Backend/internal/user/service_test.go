@@ -20,6 +20,8 @@ type fakeRepository struct {
 	byID       map[string]*User
 	identities map[string]*string
 	promoteErr error // injectable failure for the Promote path
+	updateErr  error // injectable failure for the UpdateProfile path
+	findByErr  error // injectable failure for the FindByID path
 }
 
 func newFakeRepository() *fakeRepository {
@@ -54,6 +56,9 @@ func (f *fakeRepository) FindByEmail(_ context.Context, email string) (*User, er
 }
 
 func (f *fakeRepository) FindByID(_ context.Context, id string) (*User, error) {
+	if f.findByErr != nil {
+		return nil, f.findByErr
+	}
 	u, ok := f.byID[id]
 	if !ok {
 		return nil, ErrUserNotFound
@@ -93,6 +98,29 @@ type failingTokenManager struct{}
 
 func (failingTokenManager) SignAccessToken(string) (string, error) {
 	return "", errors.New("signing service unavailable")
+}
+
+func (f *fakeRepository) UpdateProfile(_ context.Context, userID string, displayName, languagePref *string) (*User, error) {
+	if f.updateErr != nil {
+		return nil, f.updateErr
+	}
+	u, ok := f.byID[userID]
+	if !ok {
+		return nil, ErrUserNotFound
+	}
+	if displayName != nil {
+		if *displayName == "" {
+			u.DisplayName = nil
+		} else {
+			name := *displayName
+			u.DisplayName = &name
+		}
+	}
+	if languagePref != nil {
+		lang := *languagePref
+		u.LanguagePref = lang
+	}
+	return u, nil
 }
 
 // raiseIdentity is a tiny helper to set an identity's linked user ID directly.
@@ -419,6 +447,163 @@ func TestServicePromote(t *testing.T) {
 		_, err := svc.Promote(context.Background(), "ident-1", "bree@example.com", "a-strong-password", nil)
 		if err == nil || errors.Is(err, ErrEmailTaken) || errors.Is(err, ErrIdentityAlreadyPromoted) {
 			t.Fatalf("expected a wrapped signing error, got %v", err)
+		}
+	})
+}
+
+// seedUser registers a user directly in the fake repository so profile tests
+// can query it without going through Register (which hashes passwords).
+func seedUser(repo *fakeRepository, u *User) {
+	repo.users[u.Email] = u
+	repo.byID[u.ID] = u
+}
+
+func TestServiceGetProfile(t *testing.T) {
+	t.Run("returns the user for the authenticated ID", func(t *testing.T) {
+		repo := newFakeRepository()
+		existing := &User{
+			ID:           "11111111-1111-1111-1111-111111111111",
+			Email:        "bree@example.com",
+			DisplayName:  stringPtr("Bree"),
+			LanguagePref: "en",
+		}
+		seedUser(repo, existing)
+
+		svc := NewService(repo, newTestTokenManager())
+		u, err := svc.GetProfile(context.Background(), "11111111-1111-1111-1111-111111111111")
+		if err != nil {
+			t.Fatalf("GetProfile returned error: %v", err)
+		}
+		if u.Email != "bree@example.com" {
+			t.Errorf("expected bree@example.com, got %q", u.Email)
+		}
+		if u.ID != "11111111-1111-1111-1111-111111111111" {
+			t.Errorf("unexpected user id: %q", u.ID)
+		}
+	})
+
+	t.Run("unknown user returns ErrUserNotFound", func(t *testing.T) {
+		svc := NewService(newFakeRepository(), newTestTokenManager())
+		_, err := svc.GetProfile(context.Background(), "11111111-1111-1111-1111-111111111112")
+		if !errors.Is(err, ErrUserNotFound) {
+			t.Fatalf("expected ErrUserNotFound, got %v", err)
+		}
+	})
+
+	t.Run("repository failure propagates", func(t *testing.T) {
+		repo := newFakeRepository()
+		repo.findByErr = errors.New("connection lost")
+		svc := NewService(repo, newTestTokenManager())
+
+		_, err := svc.GetProfile(context.Background(), "11111111-1111-1111-1111-111111111111")
+		if err == nil {
+			t.Fatal("expected a wrapped repository error")
+		}
+		if errors.Is(err, ErrUserNotFound) {
+			t.Fatalf("expected a non-sentinel repository error, got %v", err)
+		}
+	})
+}
+
+func TestServiceUpdateProfile(t *testing.T) {
+	const userID = "11111111-1111-1111-1111-111111111111"
+
+	newUser := func() *User {
+		return &User{
+			ID:           userID,
+			Email:        "bree@example.com",
+			DisplayName:  stringPtr("Bree"),
+			LanguagePref: "en",
+		}
+	}
+
+	t.Run("updates display_name and language_pref together", func(t *testing.T) {
+		repo := newFakeRepository()
+		seedUser(repo, newUser())
+		svc := NewService(repo, newTestTokenManager())
+
+		u, err := svc.UpdateProfile(context.Background(), userID, stringPtr("  Nyota  "), stringPtr("SW"))
+		if err != nil {
+			t.Fatalf("UpdateProfile returned error: %v", err)
+		}
+		if u.DisplayName == nil || *u.DisplayName != "Nyota" {
+			t.Errorf("expected trimmed display_name 'Nyota', got %v", u.DisplayName)
+		}
+		if u.LanguagePref != "sw" {
+			t.Errorf("expected language_pref 'sw' (lowercased), got %q", u.LanguagePref)
+		}
+	})
+
+	t.Run("blank display_name clears the stored name", func(t *testing.T) {
+		repo := newFakeRepository()
+		seedUser(repo, newUser())
+		svc := NewService(repo, newTestTokenManager())
+
+		u, err := svc.UpdateProfile(context.Background(), userID, stringPtr("   "), nil)
+		if err != nil {
+			t.Fatalf("UpdateProfile returned error: %v", err)
+		}
+		if u.DisplayName != nil {
+			t.Errorf("expected display_name to be cleared, got %q", *u.DisplayName)
+		}
+	})
+
+	t.Run("omitted fields are left unchanged", func(t *testing.T) {
+		repo := newFakeRepository()
+		seedUser(repo, newUser())
+		svc := NewService(repo, newTestTokenManager())
+
+		u, err := svc.UpdateProfile(context.Background(), userID, nil, nil)
+		if err != nil {
+			t.Fatalf("UpdateProfile returned error: %v", err)
+		}
+		if u.DisplayName == nil || *u.DisplayName != "Bree" {
+			t.Errorf("display_name must stay 'Bree', got %v", u.DisplayName)
+		}
+		if u.LanguagePref != "en" {
+			t.Errorf("language_pref must stay 'en', got %q", u.LanguagePref)
+		}
+	})
+
+	t.Run("invalid language_pref returns ErrInvalidLanguagePref", func(t *testing.T) {
+		repo := newFakeRepository()
+		seedUser(repo, newUser())
+		svc := NewService(repo, newTestTokenManager())
+
+		_, err := svc.UpdateProfile(context.Background(), userID, nil, stringPtr("xx"))
+		if !errors.Is(err, ErrInvalidLanguagePref) {
+			t.Fatalf("expected ErrInvalidLanguagePref, got %v", err)
+		}
+	})
+
+	t.Run("oversized display_name returns ErrInvalidDisplayName", func(t *testing.T) {
+		repo := newFakeRepository()
+		seedUser(repo, newUser())
+		svc := NewService(repo, newTestTokenManager())
+
+		_, err := svc.UpdateProfile(context.Background(), userID, stringPtr(strings.Repeat("a", MaxDisplayNameLength+1)), nil)
+		if !errors.Is(err, ErrInvalidDisplayName) {
+			t.Fatalf("expected ErrInvalidDisplayName, got %v", err)
+		}
+	})
+
+	t.Run("unknown user returns ErrUserNotFound", func(t *testing.T) {
+		svc := NewService(newFakeRepository(), newTestTokenManager())
+		_, err := svc.UpdateProfile(context.Background(), "missing", stringPtr("Bree"), nil)
+		if !errors.Is(err, ErrUserNotFound) {
+			t.Fatalf("expected ErrUserNotFound, got %v", err)
+		}
+	})
+
+	t.Run("repository failure propagates", func(t *testing.T) {
+		repo := newFakeRepository()
+		seedUser(repo, newUser())
+		repo.updateErr = errors.New("connection lost")
+		svc := NewService(repo, newTestTokenManager())
+
+		_, err := svc.UpdateProfile(context.Background(), userID, stringPtr("Bree"), nil)
+		if err == nil || errors.Is(err, ErrUserNotFound) || errors.Is(err, ErrInvalidDisplayName) || errors.Is(err, ErrInvalidLanguagePref) {
+			t.Fatalf("expected a wrapped repository error, got %v", err)
 		}
 	})
 }
