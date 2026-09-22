@@ -15,6 +15,7 @@ import (
 	"Backend/internal/auth"
 	"Backend/internal/config"
 	"Backend/internal/dashboard"
+	"Backend/internal/journal"
 	"Backend/internal/middleware"
 	"Backend/internal/mood"
 	"Backend/internal/user"
@@ -32,7 +33,7 @@ func TestHealthEndpoints(t *testing.T) {
 	// The pool is only required for the /readyz endpoint, and the auth handler
 	// is only used for /api/v1/auth/* routes. Neither is exercised by these
 	// unit tests, so both are omitted here.
-	router := setupRouter(cfg, nil, nil, nil, nil, nil, nil, nil)
+	router := setupRouter(cfg, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	t.Run("Root /health returns 200 OK", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, "/health", nil)
@@ -131,7 +132,7 @@ func TestAuthMeEndpoint(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil)
+	}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil, nil)
 
 	t.Run("without a token returns 401", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
@@ -232,7 +233,7 @@ func TestAnonymousPromoteEndpoint(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, nil, user.NewHandler(nil), tokenManager, anonH, anonSvc, nil, nil)
+	}, nil, user.NewHandler(nil), tokenManager, anonH, anonSvc, nil, nil, nil)
 
 	t.Run("promote without a token returns 401", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/anonymous/promote", nil)
@@ -290,7 +291,7 @@ func TestAnonymousPromoteEndpoint(t *testing.T) {
 			Env:         "test",
 			GinMode:     "test",
 			FrontendURL: "http://localhost:5173",
-		}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil)
+		}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil, nil)
 
 		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/anonymous/promote", nil)
 		w := httptest.NewRecorder()
@@ -347,6 +348,162 @@ func (s *stubDashboardService) Get(ctx context.Context, userID string) (*dashboa
 	return s.getFunc(ctx, userID)
 }
 
+// stubJournalService implements journal.Service by embedding the interface and
+// overriding every method with canned values, so the Phase 5 router wiring can
+// be exercised end to end without a database.
+type stubJournalService struct {
+	journal.Service
+	entry *journal.JournalEntry
+	list  []journal.JournalEntry
+	err   error
+}
+
+func (s *stubJournalService) Create(context.Context, string, string, []string, *string) (*journal.JournalEntry, error) {
+	return s.entry, s.err
+}
+
+func (s *stubJournalService) List(context.Context, string, int, *time.Time) ([]journal.JournalEntry, error) {
+	return s.list, s.err
+}
+
+func (s *stubJournalService) Get(context.Context, string, string) (*journal.JournalEntry, error) {
+	return s.entry, s.err
+}
+
+func (s *stubJournalService) Update(context.Context, string, string, journal.Update) (*journal.JournalEntry, error) {
+	return s.entry, s.err
+}
+
+func (s *stubJournalService) Delete(context.Context, string, string) error {
+	return s.err
+}
+
+func (s *stubJournalService) Reflect(context.Context, string, string) (*journal.JournalEntry, error) {
+	return s.entry, s.err
+}
+
+// TestPhase5JournalRoutes verifies the Phase 5 wiring: every journal route
+// exists behind the registered-user AuthRequired middleware, rejects missing
+// and anonymous tokens, accepts a valid registered JWT, and is absent when the
+// journal stack is not wired.
+func TestPhase5JournalRoutes(t *testing.T) {
+	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
+	if err != nil {
+		t.Fatalf("auth.NewManager returned error: %v", err)
+	}
+
+	const registeredID = "11111111-1111-1111-1111-111111111111"
+	const entryID = "22222222-2222-2222-2222-222222222222"
+	prompt := "My day"
+	jrnlEntry := &journal.JournalEntry{
+		ID:           entryID,
+		MoodTags:     []string{"Tired"},
+		PromptUsed:   &prompt,
+		AIReflection: nil,
+		WordCount:    3,
+		CreatedAt:    time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC),
+	}
+	journalSvc := &stubJournalService{entry: jrnlEntry, list: []journal.JournalEntry{*jrnlEntry}}
+
+	router := setupRouter(&config.Config{
+		Env:         "test",
+		GinMode:     "test",
+		FrontendURL: "http://localhost:5173",
+	}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil, journal.NewHandler(journalSvc))
+
+	journalCases := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+		want   int
+	}{
+		{"create", http.MethodPost, "/api/v1/journal", `{"content":"Today was hard."}`, http.StatusCreated},
+		{"list", http.MethodGet, "/api/v1/journal", "", http.StatusOK},
+		{"get", http.MethodGet, "/api/v1/journal/" + entryID, "", http.StatusOK},
+		{"update", http.MethodPatch, "/api/v1/journal/" + entryID, `{"content":"New words."}`, http.StatusOK},
+		{"delete", http.MethodDelete, "/api/v1/journal/" + entryID, "", http.StatusNoContent},
+		{"reflect", http.MethodPost, "/api/v1/journal/" + entryID + "/reflect", "", http.StatusOK},
+	}
+
+	jwt, err := tokenManager.SignAccessToken(registeredID)
+	if err != nil {
+		t.Fatalf("SignAccessToken returned error: %v", err)
+	}
+	const rawAnonToken = "raw-anonymous-token-phase-5"
+
+	t.Run("routes reject missing tokens", func(t *testing.T) {
+		for _, tc := range journalCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != http.StatusUnauthorized {
+				t.Errorf("%s: expected 401 without a token, got %d: %s", tc.name, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("routes reject anonymous-format tokens", func(t *testing.T) {
+		for _, tc := range journalCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer "+rawAnonToken)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != http.StatusUnauthorized {
+				t.Errorf("%s: expected 401 for an anonymous token, got %d: %s", tc.name, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("registered JWT reaches every journal route", func(t *testing.T) {
+		for _, tc := range journalCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			if tc.body != "" {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			req.Header.Set("Authorization", "Bearer "+jwt)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != tc.want {
+				t.Errorf("%s: expected %d, got %d: %s", tc.name, tc.want, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("journal responses keep content and ownership off the wire", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, "/api/v1/journal/"+entryID, nil)
+		req.Header.Set("Authorization", "Bearer "+jwt)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		body := w.Body.String()
+		for _, leak := range []string{"content_enc", "content_iv", "user_id"} {
+			if bytes.Contains(w.Body.Bytes(), []byte(leak)) {
+				t.Errorf("response must never include %s: %s", leak, body)
+			}
+		}
+	})
+
+	t.Run("routes are not registered without the journal stack", func(t *testing.T) {
+		sparseRouter := setupRouter(&config.Config{
+			Env:         "test",
+			GinMode:     "test",
+			FrontendURL: "http://localhost:5173",
+		}, nil, nil, nil, nil, nil, nil, nil, nil)
+
+		for _, tc := range journalCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			w := httptest.NewRecorder()
+			sparseRouter.ServeHTTP(w, req)
+			if w.Code != http.StatusNotFound {
+				t.Errorf("%s: expected 404 without the journal stack, got %d", tc.name, w.Code)
+			}
+		}
+	})
+}
+
 // TestPhase4WellnessRoutes verifies the Phase 4 wiring: the profile, mood, and
 // dashboard routes exist behind the registered-user AuthRequired middleware,
 // reject missing and anonymous-format tokens, accept a valid registered JWT,
@@ -398,7 +555,7 @@ func TestPhase4WellnessRoutes(t *testing.T) {
 		FrontendURL: "http://localhost:5173",
 	}, nil,
 		user.NewHandler(userSvc), tokenManager, nil, nil,
-		mood.NewHandler(moodSvc), dashboard.NewHandler(dashSvc))
+		mood.NewHandler(moodSvc), dashboard.NewHandler(dashSvc), nil)
 
 	jwt, err := tokenManager.SignAccessToken(registeredID)
 	if err != nil {
@@ -523,7 +680,7 @@ func TestPhase4WellnessRoutes(t *testing.T) {
 			Env:         "test",
 			GinMode:     "test",
 			FrontendURL: "http://localhost:5173",
-		}, nil, nil, nil, nil, nil, nil, nil)
+		}, nil, nil, nil, nil, nil, nil, nil, nil)
 
 		for _, tc := range registerCases {
 			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
@@ -540,7 +697,7 @@ func TestPhase4WellnessRoutes(t *testing.T) {
 			Env:         "test",
 			GinMode:     "test",
 			FrontendURL: "http://localhost:5173",
-		}, nil, user.NewHandler(userSvc), tokenManager, nil, nil, nil, nil)
+		}, nil, user.NewHandler(userSvc), tokenManager, nil, nil, nil, nil, nil)
 
 		for _, tc := range []struct{ method, path string }{
 			{http.MethodGet, "/api/v1/moods"},

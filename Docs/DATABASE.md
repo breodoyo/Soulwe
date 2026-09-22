@@ -140,6 +140,24 @@ The AI reflection is Claude's output, not the user's private thoughts. We may
 display aggregate (anonymised) insights from reflections in the future to
 improve prompts. The user's own words stay encrypted.
 
+**Encryption contract (implemented in Phase 5):**
+- A single server-side AES-256-GCM key comes from `JOURNAL_ENCRYPTION_KEY`
+  (32 bytes) — it is never stored in the database or committed to code.
+- Each entry mints a fresh random 12-byte IV stored in `content_iv`; the
+  ciphertext lives in `content_enc`. Encrypting the same text twice never
+  produces the same ciphertext.
+- The ciphertext is bound to its owner: decryption authenticates against the
+  entry's `user_id` (as additional authenticated data), so one user's
+  encrypted row cannot be decrypted or swapped under another user's identity.
+- Decryption happens only in the service layer, and only to return an entry to
+  its owner. Journal plaintext and ciphertext never appear in API responses
+  (list payloads exclude `content` entirely), logs, or errors.
+
+**Journal types:**
+The schema has no journal-type column; the product defines a single regular
+journal entry. No "prayer journal" (or other) type is modelled, and the API
+does not accept a type field.
+
 **Index for performance:**
 ```sql
 CREATE INDEX idx_journal_entries_user_created

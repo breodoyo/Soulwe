@@ -11,10 +11,13 @@ import (
 	"time"
 
 	"Backend/db"
+	"Backend/internal/ai"
 	"Backend/internal/anon"
 	"Backend/internal/auth"
+	"Backend/internal/cipher"
 	"Backend/internal/config"
 	"Backend/internal/dashboard"
+	"Backend/internal/journal"
 	"Backend/internal/middleware"
 	"Backend/internal/mood"
 	"Backend/internal/user"
@@ -24,7 +27,7 @@ import (
 )
 
 // setupRouter initializes the Gin engine, global middleware, and foundational routes.
-func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler, tokenManager *auth.Manager, anonHandler *anon.Handler, anonService anon.Service, moodHandler *mood.Handler, dashboardHandler *dashboard.Handler) *gin.Engine {
+func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler, tokenManager *auth.Manager, anonHandler *anon.Handler, anonService anon.Service, moodHandler *mood.Handler, dashboardHandler *dashboard.Handler, journalHandler *journal.Handler) *gin.Engine {
 	// Set Gin mode (debug or release)
 	gin.SetMode(cfg.GinMode)
 
@@ -133,10 +136,20 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 				dashboard.GET("", middleware.AuthRequired(tokenManager), dashboardHandler.Get)
 			}
 		}
-
-		// Domain route groups (/journal, /circles, /therapists, /breathing)
-		// will be registered here in subsequent phases as their Handler ->
-		// Service -> Repository layers are implemented.
+		if tokenManager != nil && journalHandler != nil {
+			// All journal routes require a registered-user JWT; anonymous
+			// tokens are rejected by AuthRequired. Ownership never comes from
+			// the request: each handler derives the user from the context.
+			journalGroup := v1.Group("/journal")
+			{
+				journalGroup.POST("", middleware.AuthRequired(tokenManager), journalHandler.Create)
+				journalGroup.GET("", middleware.AuthRequired(tokenManager), journalHandler.List)
+				journalGroup.GET("/:id", middleware.AuthRequired(tokenManager), journalHandler.Get)
+				journalGroup.PATCH("/:id", middleware.AuthRequired(tokenManager), journalHandler.Update)
+				journalGroup.DELETE("/:id", middleware.AuthRequired(tokenManager), journalHandler.Delete)
+				journalGroup.POST("/:id/reflect", middleware.AuthRequired(tokenManager), journalHandler.Reflect)
+			}
+		}
 	}
 
 	return r
@@ -184,9 +197,24 @@ func main() {
 	dashboardService := dashboard.NewService(userService, moodService)
 	dashboardHandler := dashboard.NewHandler(dashboardService)
 
+	// 4c. Compose the Phase 5 journal stack. Journal content is encrypted with
+	// AES-256-GCM before it ever reaches the repository, using the server-side
+	// JOURNAL_ENCRYPTION_KEY. A failing or missing ANTHROPIC_API_KEY only
+	// disables AI reflections; the journal itself keeps working.
+	journalCodec, err := cipher.NewAESGCM([]byte(cfg.JournalKey))
+	if err != nil {
+		log.Fatalf("Journal encryption key error: %v", err)
+	}
+	var reflection journal.ReflectionGenerator
+	if cfg.AnthropicKey != "" {
+		reflection = ai.NewClient(cfg.AnthropicKey, ai.DefaultModel)
+	}
+	journalService := journal.NewService(journal.NewPostgresRepository(pool), journalCodec, reflection)
+	journalHandler := journal.NewHandler(journalService)
+
 	// 5. Setup router and middleware; the same token manager validates the
 	// Bearer tokens on the protected routes.
-	router := setupRouter(cfg, pool, userHandler, tokenManager, anonHandler, anonService, moodHandler, dashboardHandler)
+	router := setupRouter(cfg, pool, userHandler, tokenManager, anonHandler, anonService, moodHandler, dashboardHandler, journalHandler)
 
 	// 6. Configure HTTP server
 	serverAddr := ":" + cfg.Port

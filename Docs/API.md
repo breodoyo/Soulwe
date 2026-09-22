@@ -323,14 +323,19 @@ when the user has no check-ins yet.
 
 ### Journal
 
-All journal endpoints require a registered user token (not anonymous).
+All journal endpoints require a registered user token (not anonymous). Anonymous
+tokens are rejected.
+
+Journal text is always encrypted in the database (AES-256-GCM). The server
+decrypts content only to build a response for the entry's own owner; ciphertext
+never reaches the client and ownership is never taken from the request body.
 
 #### `GET /journal`
 List the user's journal entries, newest first.
 
 **Query params:**
 - `limit` — default 20, max 50
-- `before` — cursor (ISO timestamp) for pagination
+- `before` — cursor (ISO timestamp) for pagination, exclusive
 
 **Response `200`:**
 ```json
@@ -350,7 +355,9 @@ List the user's journal entries, newest first.
 ```
 
 Note: `content` (the actual journal text) is NOT returned in the list.
-It's only returned in the single-entry endpoint, decrypted server-side.
+It's only returned in the single-entry endpoints, decrypted server-side.
+`next_cursor` is the creation timestamp of the last entry in a full page; when
+the page is not full (no more entries), it is `null`.
 
 ---
 
@@ -380,8 +387,10 @@ Save a new journal entry.
 }
 ```
 
-The AI reflection is generated server-side. If the Claude API fails, the
-entry is still saved and `ai_reflection` is `null`.
+The AI reflection is generated server-side. If the Claude API fails (or is not
+configured), the entry is still saved and `ai_reflection` is `null`. The
+reflection is stored alongside the entry; use `POST /journal/:id/reflect` to
+request a fresh one on demand.
 
 ---
 
@@ -403,12 +412,62 @@ Get a single entry including the decrypted content.
 }
 ```
 
+**Errors:**
+- `404` — entry not found or belongs to another user
+
+---
+
+#### `PATCH /journal/:id`
+Update an existing entry. All fields are optional; at least one must be
+provided. Passing `"prompt_used": ""` clears the stored prompt.
+
+**Request:**
+```json
+{
+  "content": "Today was hard. Mama called again... and I called her back.",
+  "mood_tags": ["Overwhelmed", "Grateful"],
+  "prompt_used": "Family & pressure"
+}
+```
+
+**Response `200`:** same shape as `GET /journal/:id` (content decrypted
+server-side).
+
+Editing `content` re-encrypts it and clears any stored `ai_reflection` (it is
+now stale); re-request it with `POST /journal/:id/reflect`.
+
 ---
 
 #### `DELETE /journal/:id`
 Permanently delete an entry. This is immediate and irreversible.
 
 **Response `204`:** no body
+
+---
+
+#### `POST /journal/:id/reflect`
+Generate (and store) a fresh AI reflection for an existing entry. The journal
+text is decrypted server-side and only that text is sent to the Claude API;
+credentials, tokens, and keys never leave the server.
+
+**Response `200`:**
+```json
+{
+  "entry": {
+    "id": "uuid",
+    "content": "Today was hard. Mama called again...",
+    "mood_tags": ["Overwhelmed", "Loved"],
+    "word_count": 47,
+    "ai_reflection": "A fresh reflection...",
+    "created_at": "2026-08-19T10:00:00Z"
+  }
+}
+```
+
+**Errors:**
+- `404` — entry not found or belongs to another user
+- `503` — AI reflection is temporarily unavailable (returns a safe message,
+  with no key or configuration details)
 
 ---
 
