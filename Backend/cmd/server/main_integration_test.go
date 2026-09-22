@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -22,6 +23,7 @@ import (
 	"Backend/internal/dashboard"
 	"Backend/internal/journal"
 	"Backend/internal/mood"
+	"Backend/internal/therapists"
 	"Backend/internal/user"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -65,7 +67,7 @@ func TestPhase4EndToEndIntegration(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, pool, userHandler, tokenManager, nil, nil, moodHandler, dashboardHandler, nil, nil)
+	}, pool, userHandler, tokenManager, nil, nil, moodHandler, dashboardHandler, nil, nil, nil)
 
 	createdEmails := []string{}
 	defer func() {
@@ -318,7 +320,7 @@ func TestPhase5JournalEndToEndIntegration(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, pool, userHandler, tokenManager, nil, nil, nil, nil, journalHandler, nil)
+	}, pool, userHandler, tokenManager, nil, nil, nil, nil, journalHandler, nil, nil)
 
 	createdEmails := []string{}
 	defer func() {
@@ -600,7 +602,7 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, pool, nil, nil, anonHandler, anonService, nil, nil, nil, circlesHandler)
+	}, pool, nil, nil, anonHandler, anonService, nil, nil, nil, circlesHandler, nil)
 
 	// Created anonymous identities, cleaned up at the end. Deleting an
 	// anon_identities row cascades its circle_members and circle_messages.
@@ -854,6 +856,380 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		}
 		if anonCount < 1 {
 			t.Errorf("expected the circle's messages to be authored by anonymous identities, got %d", anonCount)
+		}
+	})
+}
+
+// TestPhase6TherapistDiscoveryEndToEndIntegration runs the full Phase 6.2
+// therapist discovery stack (directory, filters, pagination, profile) against
+// a live database through the real router, using a registered-user JWT exactly
+// as the product intends. Anonymous tokens must be rejected on every route.
+func TestPhase6TherapistDiscoveryEndToEndIntegration(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL not set; skipping integration test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("failed to create pool: %v", err)
+	}
+	defer pool.Close()
+
+	tokenManager, err := auth.NewManager("integration-test-secret-not-for-production")
+	if err != nil {
+		t.Fatalf("auth.NewManager returned error: %v", err)
+	}
+
+	userRepo := user.NewPostgresRepository(pool)
+	userService := user.NewService(userRepo, tokenManager)
+	userHandler := user.NewHandler(userService)
+
+	anonService := anon.NewService(anon.NewPostgresRepository(pool))
+	anonHandler := anon.NewHandler(anonService)
+
+	therapistsHandler := therapists.NewHandler(therapists.NewService(therapists.NewPostgresRepository(pool)))
+
+	router := setupRouter(&config.Config{
+		Env:         "test",
+		GinMode:     "test",
+		FrontendURL: "http://localhost:5173",
+	}, pool, userHandler, tokenManager, anonHandler, anonService, nil, nil, nil, nil, therapistsHandler)
+
+	createdEmails := []string{}
+	createdTherapistNames := []string{}
+	defer func() {
+		for _, e := range createdEmails {
+			if _, err := pool.Exec(context.Background(), "DELETE FROM users WHERE email = $1", e); err != nil {
+				t.Errorf("cleanup failed to DELETE test user %s: %v", e, err)
+			}
+		}
+		for _, name := range createdTherapistNames {
+			if _, err := pool.Exec(context.Background(), "DELETE FROM therapists WHERE full_name = $1", name); err != nil {
+				t.Errorf("cleanup failed to DELETE therapist %s: %v", name, err)
+			}
+		}
+	}()
+
+	registerAndLogin := func(t *testing.T, prefix string) (token, email string) {
+		t.Helper()
+		email = fmt.Sprintf("%s-%d@soulwe.local", prefix, time.Now().UnixNano())
+		createdEmails = append(createdEmails, email)
+		const password = "integration-secret-password"
+		body := fmt.Sprintf(`{"email":%q,"password":%q}`, email, password)
+
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("register: expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+
+		loginBody := fmt.Sprintf(`{"email":%q,"password":%q}`, email, password)
+		req, _ = http.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(loginBody))
+		req.Header.Set("Content-Type", "application/json")
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("login: expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var res struct {
+			AccessToken string `json:"access_token"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+			t.Fatalf("login: failed to decode response: %v", err)
+		}
+		return res.AccessToken, email
+	}
+
+	anonToken := func(t *testing.T) string {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/anonymous", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("anonymous: expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+		var res struct {
+			Token string `json:"anonymous_token"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+			t.Fatalf("anonymous: failed to decode response: %v", err)
+		}
+		return res.Token
+	}
+
+	// Seed three therapists with distinct created_at values so newest-first
+	// ordering and the before-cursor pagination are deterministic. Languages
+	// flow through the child table exactly as the product stores them.
+	now := time.Now().UTC().Truncate(time.Second)
+	seed := func(name string, langs, specs []string, active bool, createdAt time.Time) string {
+		t.Helper()
+		var id string
+		if err := pool.QueryRow(ctx, `
+			INSERT INTO therapists (full_name, credentials, years_exp, bio, location,
+				is_online_only, price_kes, free_sessions, specialties, is_active, created_at)
+			VALUES ($1, 'MA, PhD', 8, $2, 'Nairobi', $3, $4, 1, $5, $6, $7)
+			RETURNING id`,
+			name, "Clinical psychologist.", false, 800, specs, active, createdAt).Scan(&id); err != nil {
+			t.Fatalf("failed to seed therapist %s: %v", name, err)
+		}
+		for _, lang := range langs {
+			if _, err := pool.Exec(ctx,
+				`INSERT INTO therapist_languages (therapist_id, language, proficiency) VALUES ($1, $2, 'fluent')`, id, lang); err != nil {
+				t.Fatalf("failed to seed language for %s: %v", name, err)
+			}
+		}
+		createdTherapistNames = append(createdTherapistNames, name)
+		return id
+	}
+
+	aminahID := seed("Dr. Aminah Korir", []string{"English", "Swahili"}, []string{"Grief", "Trauma"}, true, now.Add(-3*time.Hour))
+	seed("Dr. Bora Njoroge", []string{"English", "Kikuyu"}, []string{"Anxiety", "Grief"}, false, now.Add(-2*time.Hour))
+	ciciID := seed("Dr. Cici Mwangi", []string{"Swahili"}, []string{"Trauma"}, true, now.Add(-1*time.Hour))
+
+	do := func(t *testing.T, method, path, token, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req, _ := http.NewRequest(method, path, strings.NewReader(body))
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	registeredJWT, _ := registerAndLogin(t, "therapist-browser")
+	rawAnon := anonToken(t)
+
+	therapistRoutes := []string{"/api/v1/therapists", "/api/v1/therapists/" + ciciID}
+
+	t.Run("both routes reject missing and anonymous tokens", func(t *testing.T) {
+		for _, path := range therapistRoutes {
+			if w := do(t, http.MethodGet, path, "", ""); w.Code != http.StatusUnauthorized {
+				t.Errorf("%s: expected 401 without a token, got %d: %s", path, w.Code, w.Body.String())
+			}
+			if w := do(t, http.MethodGet, path, rawAnon, ""); w.Code != http.StatusUnauthorized {
+				t.Errorf("%s: expected 401 for an anonymous token, got %d: %s", path, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("registered user lists the directory newest-first with public fields", func(t *testing.T) {
+		w := do(t, http.MethodGet, "/api/v1/therapists", registeredJWT, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var res struct {
+			Therapists []struct {
+				ID           string   `json:"id"`
+				DisplayName  string   `json:"display_name"`
+				Bio          *string  `json:"bio"`
+				Languages    []string `json:"languages"`
+				Specialties  []string `json:"specialties"`
+				SessionPrice *int     `json:"session_price"`
+				Currency     string   `json:"currency"`
+				IsActive     bool     `json:"is_active"`
+				IsOnlineOnly bool     `json:"is_online_only"`
+			} `json:"therapists"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+			t.Fatalf("failed to decode list: %v", err)
+		}
+		if len(res.Therapists) != 3 {
+			t.Fatalf("expected 3 therapists, got %d", len(res.Therapists))
+		}
+		if res.Therapists[0].DisplayName != "Dr. Cici Mwangi" {
+			t.Errorf("expected the newest therapist first, got %q", res.Therapists[0].DisplayName)
+		}
+		if res.Therapists[0].Currency != "KES" {
+			t.Errorf("expected the fixed currency KES, got %q", res.Therapists[0].Currency)
+		}
+		if res.Therapists[0].SessionPrice == nil || *res.Therapists[0].SessionPrice != 800 {
+			t.Errorf("expected session_price 800, got %v", res.Therapists[0].SessionPrice)
+		}
+		if len(res.Therapists[0].Languages) != 1 || res.Therapists[0].Languages[0] != "Swahili" {
+			t.Errorf("expected Cici's Swahili language, got %v", res.Therapists[0].Languages)
+		}
+	})
+
+	t.Run("language and specialty filters narrow the directory", func(t *testing.T) {
+		w := do(t, http.MethodGet, "/api/v1/therapists?language=swahili", registeredJWT, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var res struct {
+			Therapists []struct {
+				DisplayName string `json:"display_name"`
+			} `json:"therapists"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+			t.Fatalf("failed to decode list: %v", err)
+		}
+		if len(res.Therapists) != 2 {
+			t.Errorf("expected 2 Swahili-speaking therapists, got %d", len(res.Therapists))
+		}
+
+		w = do(t, http.MethodGet, "/api/v1/therapists?specialty=anxiety", registeredJWT, "")
+		if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+			t.Fatalf("failed to decode list: %v", err)
+		}
+		if len(res.Therapists) != 1 || res.Therapists[0].DisplayName != "Dr. Bora Njoroge" {
+			t.Errorf("expected only Dr. Bora Njoroge for Anxiety, got %+v", res.Therapists)
+		}
+
+		w = do(t, http.MethodGet, "/api/v1/therapists?language=kirundi", registeredJWT, "")
+		if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+			t.Fatalf("failed to decode list: %v", err)
+		}
+		if len(res.Therapists) != 0 {
+			t.Errorf("expected no Kirundi-speaking therapists, got %d", len(res.Therapists))
+		}
+	})
+
+	t.Run("pagination honors limit and the before cursor", func(t *testing.T) {
+		pageOne := do(t, http.MethodGet, "/api/v1/therapists?limit=1", registeredJWT, "")
+		if pageOne.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", pageOne.Code, pageOne.Body.String())
+		}
+		var one struct {
+			Therapists []struct {
+				DisplayName string `json:"display_name"`
+			} `json:"therapists"`
+			NextCursor *string `json:"next_cursor"`
+		}
+		if err := json.Unmarshal(pageOne.Body.Bytes(), &one); err != nil {
+			t.Fatalf("failed to decode page one: %v", err)
+		}
+		if len(one.Therapists) != 1 || one.Therapists[0].DisplayName != "Dr. Cici Mwangi" || one.NextCursor == nil {
+			t.Fatalf("expected Cici with a next_cursor, got %+v (cursor %v)", one.Therapists, one.NextCursor)
+		}
+
+		pageTwo := do(t, http.MethodGet, "/api/v1/therapists?limit=1&before="+url.QueryEscape(*one.NextCursor), registeredJWT, "")
+		if pageTwo.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", pageTwo.Code, pageTwo.Body.String())
+		}
+		var two struct {
+			Therapists []struct {
+				DisplayName string `json:"display_name"`
+			} `json:"therapists"`
+			NextCursor *string `json:"next_cursor"`
+		}
+		if err := json.Unmarshal(pageTwo.Body.Bytes(), &two); err != nil {
+			t.Fatalf("failed to decode page two: %v", err)
+		}
+		if len(two.Therapists) != 1 || two.Therapists[0].DisplayName != "Dr. Bora Njoroge" || two.NextCursor == nil {
+			t.Fatalf("expected Bora on page two with a next_cursor, got %+v (cursor %v)", two.Therapists, two.NextCursor)
+		}
+
+		pageThree := do(t, http.MethodGet, "/api/v1/therapists?limit=1&before="+url.QueryEscape(*two.NextCursor), registeredJWT, "")
+		var three struct {
+			Therapists []struct {
+				DisplayName string `json:"display_name"`
+			} `json:"therapists"`
+			NextCursor *string `json:"next_cursor"`
+		}
+		if err := json.Unmarshal(pageThree.Body.Bytes(), &three); err != nil {
+			t.Fatalf("failed to decode page three: %v", err)
+		}
+		if len(three.Therapists) != 1 || three.Therapists[0].DisplayName != "Dr. Aminah Korir" {
+			t.Fatalf("expected Aminah on the last page, got %+v", three.Therapists)
+		}
+		// The page is full, so per the keyset convention it still carries a
+		// cursor; consuming it must yield an empty page with no further cursor.
+		if three.NextCursor == nil {
+			t.Fatalf("expected a cursor on the full last page, got %+v", three.Therapists)
+		}
+
+		pageFour := do(t, http.MethodGet, "/api/v1/therapists?limit=1&before="+url.QueryEscape(*three.NextCursor), registeredJWT, "")
+		var four struct {
+			Therapists []struct {
+				DisplayName string `json:"display_name"`
+			} `json:"therapists"`
+			NextCursor *string `json:"next_cursor"`
+		}
+		if err := json.Unmarshal(pageFour.Body.Bytes(), &four); err != nil {
+			t.Fatalf("failed to decode page four: %v", err)
+		}
+		if len(four.Therapists) != 0 || four.NextCursor != nil {
+			t.Fatalf("expected an empty terminal page with no cursor, got %+v (cursor %v)", four.Therapists, four.NextCursor)
+		}
+	})
+
+	t.Run("profile returns the public therapist fields", func(t *testing.T) {
+		w := do(t, http.MethodGet, "/api/v1/therapists/"+aminahID, registeredJWT, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var res struct {
+			Therapist struct {
+				ID           string   `json:"id"`
+				DisplayName  string   `json:"display_name"`
+				Bio          *string  `json:"bio"`
+				Languages    []string `json:"languages"`
+				Specialties  []string `json:"specialties"`
+				SessionPrice *int     `json:"session_price"`
+				Currency     string   `json:"currency"`
+				IsActive     bool     `json:"is_active"`
+				IsOnlineOnly bool     `json:"is_online_only"`
+			} `json:"therapist"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+			t.Fatalf("failed to decode profile: %v", err)
+		}
+		th := res.Therapist
+		if th.ID != aminahID || th.DisplayName != "Dr. Aminah Korir" {
+			t.Errorf("expected the seeded profile, got %+v", th)
+		}
+		if !th.IsActive || th.IsOnlineOnly {
+			t.Errorf("expected active and in-person flags, got active=%v online=%v", th.IsActive, th.IsOnlineOnly)
+		}
+		if len(th.Languages) != 2 || len(th.Specialties) != 2 {
+			t.Errorf("expected both languages and specialties aggregated, got %v / %v", th.Languages, th.Specialties)
+		}
+	})
+
+	t.Run("invalid and unknown therapist ids are rejected", func(t *testing.T) {
+		w := do(t, http.MethodGet, "/api/v1/therapists/not-a-uuid", registeredJWT, "")
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for a malformed id, got %d: %s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"field":"id"`) {
+			t.Errorf("expected the id field on the validation error: %s", w.Body.String())
+		}
+
+		w = do(t, http.MethodGet, "/api/v1/therapists/00000000-0000-0000-0000-000000000000", registeredJWT, "")
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404 for an unknown id, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("no sensitive material ever appears in therapist responses", func(t *testing.T) {
+		for _, path := range therapistRoutes {
+			w := do(t, http.MethodGet, path, registeredJWT, "")
+			if w.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d", w.Code)
+			}
+			body := w.Body.String()
+			for _, leak := range []string{"email", "password", "password_hash", "price_kes", "full_name", "credentials", "years_exp", "photo_url", "location", "free_sessions"} {
+				if strings.Contains(body, leak) {
+					t.Errorf("%s: response must never include %q: %s", path, leak, body)
+				}
+			}
+		}
+	})
+
+	t.Run("registered auth flows reject the anonymous token while therapist routes reject it too", func(t *testing.T) {
+		w := do(t, http.MethodGet, "/api/v1/auth/me", rawAnon, "")
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401 for an anonymous token on auth/me, got %d: %s", w.Code, w.Body.String())
 		}
 	})
 }

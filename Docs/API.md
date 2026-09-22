@@ -23,8 +23,8 @@ basic features without registration.
 Protected endpoints are picky about token type:
 
 - **Registered-user endpoints** (`/auth/me`, `/users/me`, `/moods`,
-  `/dashboard`, `/journal`) require a registered-user **JWT** and reject
-  anonymous tokens with `401`.
+  `/dashboard`, `/journal`, `/therapists`) require a registered-user **JWT** and
+  reject anonymous tokens with `401`.
 - **Anonymous endpoints** (`/auth/anonymous/me`, `/auth/anonymous/promote`,
   and all `/circles` routes) require the opaque anonymous token and reject
   registered-user JWTs with `401`.
@@ -599,15 +599,21 @@ Reactions (`react`) and safety flags (`flag`) are planned but not built yet.
 
 ### Therapists
 
+Browse the public therapist directory and view public profiles. Both endpoints
+require a registered-user **JWT** and reject anonymous tokens with `401`.
+Profiles expose only public fields — never emails, credentials, or internal
+storage details.
+
 #### `GET /therapists`
-Search and filter therapist profiles.
+List therapists, newest first.
 
 **Query params:**
-- `language` — e.g. `Swahili`, `Dholuo`
-- `specialty` — e.g. `Grief`, `Trauma`
-- `max_price` — in KES
-- `free_only` — `true` to show only therapists with free sessions
-- `online_only` — `true`
+- `language` — case-insensitive substring against a therapist's languages,
+  e.g. `language=Swahili`
+- `specialty` — case-insensitive substring against a therapist's specialties,
+  e.g. `specialty=Grief`
+- `limit` — page size (default `20`, max `50`)
+- `before` — ISO 8601 cursor returned as `next_cursor` for pagination
 
 **Response `200`:**
 ```json
@@ -615,42 +621,56 @@ Search and filter therapist profiles.
   "therapists": [
     {
       "id": "uuid",
-      "full_name": "Dr. Amina Korir",
-      "credentials": "PhD Clinical Psychology · Kenyatta University",
-      "years_exp": 8,
-      "location": "Nairobi / Online",
-      "price_kes": 800,
-      "free_sessions": 2,
-      "specialties": ["Grief", "Trauma", "Family"],
-      "languages": ["Swahili", "English"],
-      "next_available": "2026-08-19T16:00:00Z"
+      "display_name": "Dr. Amina Korir",
+      "bio": "Clinical psychologist specializing in grief and trauma.",
+      "languages": ["English", "Swahili"],
+      "specialties": ["Grief", "Trauma"],
+      "session_price": 800,
+      "currency": "KES",
+      "is_active": true,
+      "is_online_only": false
     }
-  ]
+  ],
+  "next_cursor": "2026-08-19T16:00:00Z"
 }
 ```
+
+- `session_price` is a plain integer representing the price in `currency`
+  (`KES`; prices are stored internally in shillings, so the currency is fixed).
+- `next_cursor` is non-null whenever the page is full; send it back as
+  `before` to fetch the next page. Consult it to learn when pagination ends.
+- Query parameters are only used when non-empty; `limit` values above `50` are
+  capped to `50`.
+
+**Errors:**
+- `400 INVALID_INPUT` with `field: limit` or `field: before` for malformed
+  pagination parameters.
 
 ---
 
-#### `POST /therapists/:id/book`
-Request a booking. Sends a notification to the therapist.
+#### `GET /therapists/:id`
+View one therapist's public profile.
 
-**Request:**
+**Response `200`:**
 ```json
 {
-  "preferred_time": "2026-08-20T10:00:00Z",
-  "notes": "I have been dealing with grief after losing a parent"
+  "therapist": {
+    "id": "uuid",
+    "display_name": "Dr. Amina Korir",
+    "bio": "Clinical psychologist specializing in grief and trauma.",
+    "languages": ["English", "Swahili"],
+    "specialties": ["Grief", "Trauma"],
+    "session_price": 800,
+    "currency": "KES",
+    "is_active": true,
+    "is_online_only": false
+  }
 }
 ```
 
-**Response `201`:**
-```json
-{
-  "booking_id": "uuid",
-  "status": "pending",
-  "therapist_name": "Dr. Amina Korir",
-  "message": "Dr. Korir will confirm within 24 hours."
-}
-```
+**Errors:**
+- `400 INVALID_INPUT` with `field: id` when the id is not a UUID.
+- `404 NOT_FOUND` when no therapist has that id.
 
 ---
 

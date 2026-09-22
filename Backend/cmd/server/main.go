@@ -21,6 +21,7 @@ import (
 	"Backend/internal/journal"
 	"Backend/internal/middleware"
 	"Backend/internal/mood"
+	"Backend/internal/therapists"
 	"Backend/internal/user"
 
 	"github.com/gin-gonic/gin"
@@ -28,7 +29,7 @@ import (
 )
 
 // setupRouter initializes the Gin engine, global middleware, and foundational routes.
-func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler, tokenManager *auth.Manager, anonHandler *anon.Handler, anonService anon.Service, moodHandler *mood.Handler, dashboardHandler *dashboard.Handler, journalHandler *journal.Handler, circlesHandler *circles.Handler) *gin.Engine {
+func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler, tokenManager *auth.Manager, anonHandler *anon.Handler, anonService anon.Service, moodHandler *mood.Handler, dashboardHandler *dashboard.Handler, journalHandler *journal.Handler, circlesHandler *circles.Handler, therapistsHandler *therapists.Handler) *gin.Engine {
 	// Set Gin mode (debug or release)
 	gin.SetMode(cfg.GinMode)
 
@@ -167,6 +168,18 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 				circlesGroup.POST("/:id/messages", circlesHandler.SendMessage)
 			}
 		}
+		if tokenManager != nil && therapistsHandler != nil {
+			// Phase 6.2 therapist discovery. The directory is public catalog
+			// data, but browsing it is a registered-user feature: every route
+			// requires a valid JWT (AuthRequired). Anonymous tokens are
+			// rejected. Profiles expose only public fields, never personal or
+			// credential material.
+			therapistsGroup := v1.Group("/therapists")
+			{
+				therapistsGroup.GET("", middleware.AuthRequired(tokenManager), therapistsHandler.List)
+				therapistsGroup.GET("/:id", middleware.AuthRequired(tokenManager), therapistsHandler.Get)
+			}
+		}
 	}
 
 	return r
@@ -234,9 +247,14 @@ func main() {
 	// mints tokens authenticates every circle request.
 	circlesHandler := circles.NewHandler(circles.NewService(circles.NewPostgresRepository(pool)))
 
+	// 4e. Compose the Phase 6.2 therapist discovery stack. Browsing is
+	// registered-user only; profiles are public catalog data, so no ownership
+	// or authorization decisions live in the handlers themselves.
+	therapistsHandler := therapists.NewHandler(therapists.NewService(therapists.NewPostgresRepository(pool)))
+
 	// 5. Setup router and middleware; the same token manager validates the
 	// Bearer tokens on the protected routes.
-	router := setupRouter(cfg, pool, userHandler, tokenManager, anonHandler, anonService, moodHandler, dashboardHandler, journalHandler, circlesHandler)
+	router := setupRouter(cfg, pool, userHandler, tokenManager, anonHandler, anonService, moodHandler, dashboardHandler, journalHandler, circlesHandler, therapistsHandler)
 
 	// 6. Configure HTTP server
 	serverAddr := ":" + cfg.Port

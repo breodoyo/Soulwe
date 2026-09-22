@@ -13,11 +13,13 @@ import (
 
 	"Backend/internal/anon"
 	"Backend/internal/auth"
+	"Backend/internal/circles"
 	"Backend/internal/config"
 	"Backend/internal/dashboard"
 	"Backend/internal/journal"
 	"Backend/internal/middleware"
 	"Backend/internal/mood"
+	"Backend/internal/therapists"
 	"Backend/internal/user"
 
 	"github.com/gin-gonic/gin"
@@ -33,7 +35,7 @@ func TestHealthEndpoints(t *testing.T) {
 	// The pool is only required for the /readyz endpoint, and the auth handler
 	// is only used for /api/v1/auth/* routes. Neither is exercised by these
 	// unit tests, so both are omitted here.
-	router := setupRouter(cfg, nil, nil, nil, nil, nil, nil, nil, nil)
+	router := setupRouter(cfg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	t.Run("Root /health returns 200 OK", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, "/health", nil)
@@ -132,7 +134,7 @@ func TestAuthMeEndpoint(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil, nil)
+	}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil, nil, nil, nil)
 
 	t.Run("without a token returns 401", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
@@ -233,7 +235,7 @@ func TestAnonymousPromoteEndpoint(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, nil, user.NewHandler(nil), tokenManager, anonH, anonSvc, nil, nil, nil)
+	}, nil, user.NewHandler(nil), tokenManager, anonH, anonSvc, nil, nil, nil, nil, nil)
 
 	t.Run("promote without a token returns 401", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/anonymous/promote", nil)
@@ -291,7 +293,7 @@ func TestAnonymousPromoteEndpoint(t *testing.T) {
 			Env:         "test",
 			GinMode:     "test",
 			FrontendURL: "http://localhost:5173",
-		}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil, nil)
+		}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil, nil, nil, nil)
 
 		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/anonymous/promote", nil)
 		w := httptest.NewRecorder()
@@ -382,6 +384,60 @@ func (s *stubJournalService) Reflect(context.Context, string, string) (*journal.
 	return s.entry, s.err
 }
 
+// stubCircleService implements circles.Service by embedding the interface and
+// overriding every method with canned values, so the Phase 6.1 router wiring
+// can be exercised end to end with the anonymous middleware and no database.
+type stubCircleService struct {
+	circles.Service
+	circle     *circles.Circle
+	circleList []circles.Circle
+	message    *circles.CircleMessage
+	messages   []circles.CircleMessage
+	err        error
+}
+
+func (s *stubCircleService) List(context.Context) ([]circles.Circle, error) {
+	return s.circleList, s.err
+}
+
+func (s *stubCircleService) Get(context.Context, string, string) (*circles.Circle, error) {
+	return s.circle, s.err
+}
+
+func (s *stubCircleService) Join(context.Context, string, string) error {
+	return s.err
+}
+
+func (s *stubCircleService) Leave(context.Context, string, string) error {
+	return s.err
+}
+
+func (s *stubCircleService) ListMessages(context.Context, string, string, int, *time.Time) ([]circles.CircleMessage, error) {
+	return s.messages, s.err
+}
+
+func (s *stubCircleService) SendMessage(context.Context, string, string, string) (*circles.CircleMessage, error) {
+	return s.message, s.err
+}
+
+// stubTherapistService implements therapists.Service by embedding the interface
+// and overriding both methods with canned values, so the Phase 6.2 router
+// wiring can be exercised with the registered-JWT middleware and no database.
+type stubTherapistService struct {
+	therapists.Service
+	therapist     *therapists.Therapist
+	therapistList []therapists.Therapist
+	err           error
+}
+
+func (s *stubTherapistService) List(context.Context, therapists.ListOptions, int, *time.Time) ([]therapists.Therapist, error) {
+	return s.therapistList, s.err
+}
+
+func (s *stubTherapistService) Get(context.Context, string) (*therapists.Therapist, error) {
+	return s.therapist, s.err
+}
+
 // TestPhase5JournalRoutes verifies the Phase 5 wiring: every journal route
 // exists behind the registered-user AuthRequired middleware, rejects missing
 // and anonymous tokens, accepts a valid registered JWT, and is absent when the
@@ -409,7 +465,7 @@ func TestPhase5JournalRoutes(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil, journal.NewHandler(journalSvc))
+	}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil, journal.NewHandler(journalSvc), nil, nil)
 
 	journalCases := []struct {
 		name   string
@@ -491,7 +547,7 @@ func TestPhase5JournalRoutes(t *testing.T) {
 			Env:         "test",
 			GinMode:     "test",
 			FrontendURL: "http://localhost:5173",
-		}, nil, nil, nil, nil, nil, nil, nil, nil)
+		}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 		for _, tc := range journalCases {
 			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
@@ -555,7 +611,7 @@ func TestPhase4WellnessRoutes(t *testing.T) {
 		FrontendURL: "http://localhost:5173",
 	}, nil,
 		user.NewHandler(userSvc), tokenManager, nil, nil,
-		mood.NewHandler(moodSvc), dashboard.NewHandler(dashSvc), nil)
+		mood.NewHandler(moodSvc), dashboard.NewHandler(dashSvc), nil, nil, nil)
 
 	jwt, err := tokenManager.SignAccessToken(registeredID)
 	if err != nil {
@@ -680,7 +736,7 @@ func TestPhase4WellnessRoutes(t *testing.T) {
 			Env:         "test",
 			GinMode:     "test",
 			FrontendURL: "http://localhost:5173",
-		}, nil, nil, nil, nil, nil, nil, nil, nil)
+		}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 		for _, tc := range registerCases {
 			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
@@ -697,7 +753,7 @@ func TestPhase4WellnessRoutes(t *testing.T) {
 			Env:         "test",
 			GinMode:     "test",
 			FrontendURL: "http://localhost:5173",
-		}, nil, user.NewHandler(userSvc), tokenManager, nil, nil, nil, nil, nil)
+		}, nil, user.NewHandler(userSvc), tokenManager, nil, nil, nil, nil, nil, nil, nil)
 
 		for _, tc := range []struct{ method, path string }{
 			{http.MethodGet, "/api/v1/moods"},
@@ -716,6 +772,285 @@ func TestPhase4WellnessRoutes(t *testing.T) {
 		partial.ServeHTTP(w, req)
 		if w.Code != http.StatusUnauthorized {
 			t.Errorf("profile route should remain registered and protected (401 without token), got %d", w.Code)
+		}
+	})
+}
+
+// TestPhase6CircleRoutes verifies the Phase 6.1 wiring: every circle route
+// exists behind the anonymous-session AnonymousAuthRequired middleware, rejects
+// missing and registered-JWT tokens, accepts a valid anonymous token, and is
+// absent when the circles stack is not wired. Registered-user JWT flows are
+// deliberately untouched: an anonymous token is still rejected by auth/me.
+func TestPhase6CircleRoutes(t *testing.T) {
+	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
+	if err != nil {
+		t.Fatalf("auth.NewManager returned error: %v", err)
+	}
+
+	const (
+		circleID     = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+		anonIdentity = "33333333-3333-3333-3333-333333333333"
+		rawAnonToken = "raw-anonymous-token-phase-6"
+		griefName    = "Grief & Loss"
+	)
+	anonSvc := newFakeAnonService(rawAnonToken, anonIdentity)
+
+	circle := &circles.Circle{
+		ID:          circleID,
+		Slug:        "grief",
+		Name:        griefName,
+		MemberCount: 1,
+		CreatedAt:   time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC),
+	}
+	msg := &circles.CircleMessage{
+		ID:             "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+		AnonName:       "Anon Baobab",
+		Content:        "Lost my father last month.",
+		ReactionCounts: map[string]int{},
+		CreatedAt:      time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC),
+	}
+	circleSvc := &stubCircleService{
+		circle:     circle,
+		circleList: []circles.Circle{*circle},
+		message:    msg,
+		messages:   []circles.CircleMessage{*msg},
+	}
+
+	router := setupRouter(&config.Config{
+		Env:         "test",
+		GinMode:     "test",
+		FrontendURL: "http://localhost:5173",
+	}, nil, user.NewHandler(nil), tokenManager, nil, anonSvc, nil, nil, nil, circles.NewHandler(circleSvc), nil)
+
+	circleCases := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+		want   int
+	}{
+		{"discovery", http.MethodGet, "/api/v1/circles", "", http.StatusOK},
+		{"detail", http.MethodGet, "/api/v1/circles/" + circleID, "", http.StatusOK},
+		{"join", http.MethodPost, "/api/v1/circles/" + circleID + "/join", "", http.StatusNoContent},
+		{"leave", http.MethodDelete, "/api/v1/circles/" + circleID + "/leave", "", http.StatusNoContent},
+		{"list messages", http.MethodGet, "/api/v1/circles/" + circleID + "/messages", "", http.StatusOK},
+		{"send message", http.MethodPost, "/api/v1/circles/" + circleID + "/messages", `{"content":"hi"}`, http.StatusCreated},
+	}
+
+	t.Run("routes reject missing tokens", func(t *testing.T) {
+		for _, tc := range circleCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != http.StatusUnauthorized {
+				t.Errorf("%s: expected 401 without a token, got %d: %s", tc.name, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("routes reject registered-user JWTs", func(t *testing.T) {
+		jwt, err := tokenManager.SignAccessToken("11111111-1111-1111-1111-111111111111")
+		if err != nil {
+			t.Fatalf("SignAccessToken returned error: %v", err)
+		}
+		for _, tc := range circleCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer "+jwt)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != http.StatusUnauthorized {
+				t.Errorf("%s: expected 401 for a registered JWT, got %d: %s", tc.name, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("anonymous token reaches every circle route", func(t *testing.T) {
+		for _, tc := range circleCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			if tc.body != "" {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			req.Header.Set("Authorization", "Bearer "+rawAnonToken)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != tc.want {
+				t.Errorf("%s: expected %d, got %d: %s", tc.name, tc.want, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("circle responses never leak identity or auth material", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, "/api/v1/circles/"+circleID+"/messages", nil)
+		req.Header.Set("Authorization", "Bearer "+rawAnonToken)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		body := w.Body.String()
+		for _, leak := range []string{"anon_identity_id", "anonIdentity", "device_uuid", "token_hash", "password", anonIdentity} {
+			if strings.Contains(body, leak) {
+				t.Errorf("response must never include %s: %s", leak, body)
+			}
+		}
+		if !strings.Contains(body, `"anon_name":"Anon Baobab"`) {
+			t.Errorf("expected the anonymous display name: %s", body)
+		}
+	})
+
+	t.Run("registered auth flows still reject the anonymous token", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+		req.Header.Set("Authorization", "Bearer "+rawAnonToken)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401 for an anonymous token on auth/me, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("circle routes are not registered without the anonymous stack", func(t *testing.T) {
+		sparseRouter := setupRouter(&config.Config{
+			Env:         "test",
+			GinMode:     "test",
+			FrontendURL: "http://localhost:5173",
+		}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+		for _, tc := range circleCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			w := httptest.NewRecorder()
+			sparseRouter.ServeHTTP(w, req)
+			if w.Code != http.StatusNotFound {
+				t.Errorf("%s: expected 404 without the circles stack, got %d", tc.name, w.Code)
+			}
+		}
+	})
+}
+
+// TestPhase6TherapistDiscoveryRoutes verifies the Phase 6.2 wiring: both
+// therapist routes exist behind the registered-user AuthRequired middleware,
+// reject missing and anonymous tokens, accept a valid registered JWT, only
+// expose public profile fields, and are absent when the stack is not wired.
+func TestPhase6TherapistDiscoveryRoutes(t *testing.T) {
+	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
+	if err != nil {
+		t.Fatalf("auth.NewManager returned error: %v", err)
+	}
+
+	const (
+		registeredID = "11111111-1111-1111-1111-111111111111"
+		therapistID  = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+		anonToken    = "raw-anonymous-token-phase-6"
+	)
+	bio := "Clinical psychologist with 8 years of experience."
+	price := 800
+	therapist := &therapists.Therapist{
+		ID:           therapistID,
+		DisplayName:  "Dr. Amina Korir",
+		Bio:          &bio,
+		Languages:    []string{"English", "Swahili"},
+		Specialties:  []string{"Grief", "Trauma"},
+		SessionPrice: &price,
+		Currency:     therapists.SessionCurrency,
+		IsActive:     true,
+		CreatedAt:    time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC),
+	}
+	therapistSvc := &stubTherapistService{
+		therapist:     therapist,
+		therapistList: []therapists.Therapist{*therapist},
+	}
+
+	router := setupRouter(&config.Config{
+		Env:         "test",
+		GinMode:     "test",
+		FrontendURL: "http://localhost:5173",
+	}, nil, nil, tokenManager, nil, nil, nil, nil, nil, nil, therapists.NewHandler(therapistSvc))
+
+	therapistCases := []struct {
+		name string
+		path string
+	}{
+		{"directory", "/api/v1/therapists"},
+		{"profile", "/api/v1/therapists/" + therapistID},
+	}
+
+	t.Run("routes reject missing tokens", func(t *testing.T) {
+		for _, tc := range therapistCases {
+			req, _ := http.NewRequest(http.MethodGet, tc.path, nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != http.StatusUnauthorized {
+				t.Errorf("%s: expected 401 without a token, got %d: %s", tc.name, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("routes reject anonymous-format tokens", func(t *testing.T) {
+		for _, tc := range therapistCases {
+			req, _ := http.NewRequest(http.MethodGet, tc.path, nil)
+			req.Header.Set("Authorization", "Bearer "+anonToken)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != http.StatusUnauthorized {
+				t.Errorf("%s: expected 401 for an anonymous token, got %d: %s", tc.name, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("registered JWT reaches every therapist route", func(t *testing.T) {
+		jwt, err := tokenManager.SignAccessToken(registeredID)
+		if err != nil {
+			t.Fatalf("SignAccessToken returned error: %v", err)
+		}
+		for _, tc := range therapistCases {
+			req, _ := http.NewRequest(http.MethodGet, tc.path, nil)
+			req.Header.Set("Authorization", "Bearer "+jwt)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Errorf("%s: expected 200, got %d: %s", tc.name, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("therapist responses only expose the public wire fields", func(t *testing.T) {
+		jwt, err := tokenManager.SignAccessToken(registeredID)
+		if err != nil {
+			t.Fatalf("SignAccessToken returned error: %v", err)
+		}
+		req, _ := http.NewRequest(http.MethodGet, "/api/v1/therapists", nil)
+		req.Header.Set("Authorization", "Bearer "+jwt)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		body := w.Body.String()
+		for _, leak := range []string{"credentials", "years_exp", "photo_url", "location", "free_sessions", "price_kes", "full_name", "email", "password"} {
+			if strings.Contains(body, leak) {
+				t.Errorf("response must never include %q: %s", leak, body)
+			}
+		}
+		for _, want := range []string{`"display_name":"Dr. Amina Korir"`, `"session_price":800`, `"currency":"KES"`, `"languages"`, `"specialties"`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("response missing %q: %s", want, body)
+			}
+		}
+	})
+
+	t.Run("anonymous tokens still reach registered-only auth flows but not therapists", func(t *testing.T) {
+		sparseRouter := setupRouter(&config.Config{
+			Env:         "test",
+			GinMode:     "test",
+			FrontendURL: "http://localhost:5173",
+		}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+		for _, tc := range therapistCases {
+			req, _ := http.NewRequest(http.MethodGet, tc.path, nil)
+			w := httptest.NewRecorder()
+			sparseRouter.ServeHTTP(w, req)
+			if w.Code != http.StatusNotFound {
+				t.Errorf("%s: expected 404 without the therapists stack, got %d", tc.name, w.Code)
+			}
 		}
 	})
 }
