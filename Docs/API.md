@@ -23,11 +23,11 @@ basic features without registration.
 Protected endpoints are picky about token type:
 
 - **Registered-user endpoints** (`/auth/me`, `/users/me`, `/moods`,
-  `/dashboard`) require a registered-user **JWT** and reject anonymous tokens
-  with `401`.
-- **Anonymous endpoints** (`/auth/anonymous/me`, `/auth/anonymous/promote`)
-  require the opaque anonymous token and reject registered-user JWTs with
-  `401`.
+  `/dashboard`, `/journal`) require a registered-user **JWT** and reject
+  anonymous tokens with `401`.
+- **Anonymous endpoints** (`/auth/anonymous/me`, `/auth/anonymous/promote`,
+  and all `/circles` routes) require the opaque anonymous token and reject
+  registered-user JWTs with `401`.
 
 ---
 
@@ -473,6 +473,10 @@ credentials, tokens, and keys never leave the server.
 
 ### Circles
 
+Circle endpoints require an **anonymous** token. Registered-user JWTs are
+rejected with `401`. Circle IDs are UUIDs (use the value returned by
+`GET /circles`).
+
 #### `GET /circles`
 List all active circles with live member counts.
 
@@ -486,7 +490,7 @@ List all active circles with live member counts.
       "name": "Grief & loss circle",
       "description": "Navigating death and mourning in African families",
       "icon": "🕊️",
-      "online_count": 8
+      "member_count": 8
     }
   ]
 }
@@ -494,12 +498,50 @@ List all active circles with live member counts.
 
 ---
 
-#### `GET /circles/:slug/messages`
-Get recent messages in a circle.
+#### `GET /circles/:id`
+Details for one active circle, including the caller's membership.
+
+**Response `200`:**
+```json
+{
+  "circle": {
+    "id": "uuid",
+    "slug": "grief",
+    "name": "Grief & loss circle",
+    "description": "Navigating death and mourning in African families",
+    "icon": "🕊️",
+    "member_count": 8,
+    "is_member": true
+  }
+}
+```
+
+---
+
+#### `POST /circles/:id/join`
+Join a circle.
+
+**Response `204`:** no body
+- `409` if the identity is already a member (`ALREADY_MEMBER`)
+- `404` if the circle does not exist
+
+---
+
+#### `DELETE /circles/:id/leave`
+Leave a circle. Idempotent — leaving a circle you are not a member of still
+returns `204`.
+
+**Response `204`:** no body
+- `404` if the circle does not exist
+
+---
+
+#### `GET /circles/:id/messages`
+Get recent messages in a circle. Only members may read.
 
 **Query params:**
-- `limit` — default 30, max 100
-- `before` — cursor (ISO timestamp) for pagination
+- `limit` — default 20, max 50
+- `before` — cursor (ISO timestamp) for pagination, exclusive on `created_at`
 
 **Response `200`:**
 ```json
@@ -509,17 +551,23 @@ Get recent messages in a circle.
       "id": "uuid",
       "anon_name": "Anon Baobab",
       "content": "Lost my father last month...",
-      "reaction_counts": { "💙": 12, "🙏": 4 },
+      "reaction_counts": {},
       "created_at": "2026-08-19T09:45:00Z"
     }
-  ]
+  ],
+  "next_cursor": "2026-08-19T09:44:00Z"
 }
 ```
 
+`next_cursor` is present only when more messages may follow.
+
+- `403` if the caller is not a member (`NOT_A_MEMBER`)
+- `404` if the circle does not exist
+
 ---
 
-#### `POST /circles/:slug/messages`
-Send an anonymous message to a circle.
+#### `POST /circles/:id/messages`
+Send an anonymous message to a circle. Only members may send.
 
 **Request:**
 ```json
@@ -541,38 +589,11 @@ Send an anonymous message to a circle.
 }
 ```
 
----
+- `400` (`field: "content"`) if content is blank or exceeds 1000 characters
+- `403` if the caller is not a member (`NOT_A_MEMBER`)
+- `404` if the circle does not exist
 
-#### `POST /circles/messages/:id/react`
-Add or toggle a reaction on a message.
-
-**Request:**
-```json
-{
-  "emoji": "💙"
-}
-```
-
-**Response `200`:**
-```json
-{
-  "reaction_counts": { "💙": 13 }
-}
-```
-
----
-
-#### `POST /circles/messages/:id/flag`
-Flag a message as harmful.
-
-**Request:**
-```json
-{
-  "reason": "This content could be harmful to someone in crisis"
-}
-```
-
-**Response `201`:** `{ "flagged": true }`
+Reactions (`react`) and safety flags (`flag`) are planned but not built yet.
 
 ---
 

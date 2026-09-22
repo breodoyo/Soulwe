@@ -15,6 +15,7 @@ users
  └── therapist_matches
 
 circles
+ └── circle_members
  └── circle_messages
       └── message_flags
 
@@ -213,6 +214,29 @@ and prevents abuse. New circles are added by the team.
 
 ---
 
+### circle_members
+
+Membership in a circle. Keyed to `anon_identities` (never registered users),
+mirroring `circle_messages` — members must stay anonymous.
+
+```sql
+CREATE TABLE circle_members (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    circle_id        UUID NOT NULL REFERENCES circles(id) ON DELETE CASCADE,
+    anon_identity_id UUID NOT NULL REFERENCES anon_identities(id) ON DELETE CASCADE,
+    joined_at        TIMESTAMPTZ DEFAULT NOW(),
+
+    UNIQUE(circle_id, anon_identity_id)
+);
+```
+
+- `UNIQUE(circle_id, anon_identity_id)` makes joining twice a unique
+  violation, which the service maps to a `409 ALREADY_MEMBER`.
+- Live member counts are a `COUNT` over `circle_members` grouped by circle.
+- Leaving is an idempotent `DELETE` (no-op when the row is absent).
+
+---
+
 ### circle_messages
 
 ```sql
@@ -327,6 +351,7 @@ Migrations live in `backend/db/migrations/` and are numbered sequentially:
 010_seed_circles.sql
 011_add_anon_session_identity.sql
 012_add_mood_logs_user_index.sql
+013_create_circle_members.sql
 ```
 
 We run them with `golang-migrate`. Each file contains both an `up` migration

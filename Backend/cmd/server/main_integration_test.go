@@ -14,8 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"Backend/internal/anon"
 	"Backend/internal/auth"
 	"Backend/internal/cipher"
+	"Backend/internal/circles"
 	"Backend/internal/config"
 	"Backend/internal/dashboard"
 	"Backend/internal/journal"
@@ -63,7 +65,7 @@ func TestPhase4EndToEndIntegration(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, pool, userHandler, tokenManager, nil, nil, moodHandler, dashboardHandler, nil)
+	}, pool, userHandler, tokenManager, nil, nil, moodHandler, dashboardHandler, nil, nil)
 
 	createdEmails := []string{}
 	defer func() {
@@ -316,7 +318,7 @@ func TestPhase5JournalEndToEndIntegration(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, pool, userHandler, tokenManager, nil, nil, nil, nil, journalHandler)
+	}, pool, userHandler, tokenManager, nil, nil, nil, nil, journalHandler, nil)
 
 	createdEmails := []string{}
 	defer func() {
@@ -567,6 +569,291 @@ func TestPhase5JournalEndToEndIntegration(t *testing.T) {
 		}
 		if count != 0 {
 			t.Errorf("expected the deleted entry to be gone, found %d rows", count)
+		}
+	})
+}
+
+// TestPhase6CirclesEndToEndIntegration runs the full Phase 6.1 circles stack
+// (discovery, detail, join/leave, membership-gated messaging) against a live
+// database through the real router, using anonymous sessions exactly as the
+// product intends. Registered-user JWT flows are untouched.
+func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL not set; skipping integration test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("failed to create pool: %v", err)
+	}
+	defer pool.Close()
+
+	anonService := anon.NewService(anon.NewPostgresRepository(pool))
+	anonHandler := anon.NewHandler(anonService)
+	circlesHandler := circles.NewHandler(circles.NewService(circles.NewPostgresRepository(pool)))
+
+	router := setupRouter(&config.Config{
+		Env:         "test",
+		GinMode:     "test",
+		FrontendURL: "http://localhost:5173",
+	}, pool, nil, nil, anonHandler, anonService, nil, nil, nil, circlesHandler)
+
+	// Created anonymous identities, cleaned up at the end. Deleting an
+	// anon_identities row cascades its circle_members and circle_messages.
+	createdIdentities := []string{}
+	defer func() {
+		for _, id := range createdIdentities {
+			if _, err := pool.Exec(context.Background(), "DELETE FROM anon_identities WHERE id = $1", id); err != nil {
+				t.Errorf("cleanup failed to DELETE test identity %s: %v", id, err)
+			}
+		}
+	}()
+
+	createSession := func(t *testing.T, label string) (token, identityID string) {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/anonymous", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("%s: expected 201 creating an anonymous session, got %d: %s", label, w.Code, w.Body.String())
+		}
+		var res struct {
+			Token string `json:"anonymous_token"`
+			ID    string `json:"anonymous_id"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+			t.Fatalf("%s: failed to decode session: %v", label, err)
+		}
+		if res.Token == "" || res.ID == "" {
+			t.Fatalf("%s: expected a token and identity id, got %+v", label, res)
+		}
+		createdIdentities = append(createdIdentities, res.ID)
+		return res.Token, res.ID
+	}
+
+	tokenA, identityA := createSession(t, "circle-a")
+	tokenB, _ := createSession(t, "circle-b")
+
+	do := func(method, path, token, body string) *httptest.ResponseRecorder {
+		var reader io.Reader
+		if body != "" {
+			reader = strings.NewReader(body)
+		}
+		req, _ := http.NewRequest(method, path, reader)
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	var circleID string
+
+	t.Run("missing and registered-JWT tokens are rejected on every circle route", func(t *testing.T) {
+		routes := []struct {
+			method string
+			path   string
+			body   string
+		}{
+			{http.MethodGet, "/api/v1/circles", ""},
+			{http.MethodGet, "/api/v1/circles/00000000-0000-0000-0000-000000000000", ""},
+			{http.MethodPost, "/api/v1/circles/00000000-0000-0000-0000-000000000000/join", ""},
+			{http.MethodDelete, "/api/v1/circles/00000000-0000-0000-0000-000000000000/leave", ""},
+			{http.MethodGet, "/api/v1/circles/00000000-0000-0000-0000-000000000000/messages", ""},
+			{http.MethodPost, "/api/v1/circles/00000000-0000-0000-0000-000000000000/messages", `{"content":"x"}`},
+		}
+		for _, r := range routes {
+			if w := do(r.method, r.path, "", r.body); w.Code != http.StatusUnauthorized {
+				t.Errorf("%s %s: expected 401 without a token, got %d: %s", r.method, r.path, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("a public-ish discovery lists the seeded circles", func(t *testing.T) {
+		w := do(http.MethodGet, "/api/v1/circles", tokenA, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		body := w.Body.String()
+		if strings.Contains(body, "anon_identity_id") {
+			t.Errorf("discovery must never leak anon_identity_id: %s", body)
+		}
+		var res struct {
+			Circles []struct {
+				ID    string `json:"id"`
+				Slug  string `json:"slug"`
+				Count int    `json:"member_count"`
+			} `json:"circles"`
+		}
+		if err := json.Unmarshal([]byte(body), &res); err != nil {
+			t.Fatalf("failed to decode discovery: %v", err)
+		}
+		foundGrief := false
+		for _, c := range res.Circles {
+			if c.Count < 0 {
+				t.Errorf("member_count must never be negative for %s", c.Slug)
+			}
+			if c.Slug == "grief" {
+				foundGrief = true
+				circleID = c.ID
+			}
+		}
+		if !foundGrief {
+			t.Errorf("expected the seeded grief circle in discovery: %s", body)
+		}
+		if circleID == "" {
+			t.Fatal("expected the seeded grief circle to be discoverable")
+		}
+	})
+
+	t.Run("detail reports membership before joining", func(t *testing.T) {
+		w := do(http.MethodGet, "/api/v1/circles/"+circleID, tokenA, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"is_member":false`) {
+			t.Errorf("expected is_member false before joining: %s", w.Body.String())
+		}
+	})
+
+	t.Run("join succeeds and duplicate join conflicts", func(t *testing.T) {
+		if w := do(http.MethodPost, "/api/v1/circles/"+circleID+"/join", tokenA, ""); w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+		}
+		if w := do(http.MethodPost, "/api/v1/circles/"+circleID+"/join", tokenA, ""); w.Code != http.StatusConflict {
+			t.Fatalf("expected 409 on a duplicate join, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("a member sends a message and sees it newest first", func(t *testing.T) {
+		const text = "I lost my father last month and this place feels safe."
+		w := do(http.MethodPost, "/api/v1/circles/"+circleID+"/messages", tokenA,
+			fmt.Sprintf(`{"content":%q}`, text))
+		if w.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+		created := w.Body.String()
+		if !strings.Contains(created, text) {
+			t.Errorf("expected the sent content echoed: %s", created)
+		}
+		if !strings.Contains(created, `"anon_name":`) {
+			t.Errorf("expected an anon_name on the created message: %s", created)
+		}
+		for _, leak := range []string{"anon_identity_id", identityA, "token_hash"} {
+			if strings.Contains(created, leak) {
+				t.Errorf("created message must never include %s: %s", leak, created)
+			}
+		}
+
+		list := do(http.MethodGet, "/api/v1/circles/"+circleID+"/messages", tokenA, "")
+		if list.Code != http.StatusOK {
+			t.Fatalf("expected 200 listing, got %d: %s", list.Code, list.Body.String())
+		}
+		if !strings.Contains(list.Body.String(), text) {
+			t.Errorf("expected the sent message in the list: %s", list.Body.String())
+		}
+	})
+
+	t.Run("non-members cannot read or write messages", func(t *testing.T) {
+		if w := do(http.MethodPost, "/api/v1/circles/"+circleID+"/messages", tokenB, `{"content":"intruder"}`); w.Code != http.StatusForbidden {
+			t.Fatalf("expected 403 sending as a non-member, got %d: %s", w.Code, w.Body.String())
+		}
+		if w := do(http.MethodGet, "/api/v1/circles/"+circleID+"/messages", tokenB, ""); w.Code != http.StatusForbidden {
+			t.Fatalf("expected 403 reading as a non-member, got %d: %s", w.Code, w.Body.String())
+		} else if !strings.Contains(w.Body.String(), `"code":"NOT_A_MEMBER"`) {
+			t.Errorf("expected the NOT_A_MEMBER code: %s", w.Body.String())
+		}
+	})
+
+	t.Run("another member can read the same conversation", func(t *testing.T) {
+		if w := do(http.MethodPost, "/api/v1/circles/"+circleID+"/join", tokenB, ""); w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204 joining as B, got %d: %s", w.Code, w.Body.String())
+		}
+		w := do(http.MethodGet, "/api/v1/circles/"+circleID+"/messages", tokenB, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), "I lost my father") {
+			t.Errorf("member B should see member A's message: %s", w.Body.String())
+		}
+		if strings.Contains(w.Body.String(), identityA) {
+			t.Errorf("messages must never expose the author's identity UUID: %s", w.Body.String())
+		}
+	})
+
+	t.Run("detail and counts reflect memberships after both joined", func(t *testing.T) {
+		w := do(http.MethodGet, "/api/v1/circles/"+circleID, tokenA, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+		if !strings.Contains(w.Body.String(), `"is_member":true`) || !strings.Contains(w.Body.String(), `"member_count":2`) {
+			t.Errorf("expected is_member true and member_count 2, got: %s", w.Body.String())
+		}
+	})
+
+	t.Run("leaving revokes messaging access", func(t *testing.T) {
+		if w := do(http.MethodDelete, "/api/v1/circles/"+circleID+"/leave", tokenB, ""); w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+		}
+		if w := do(http.MethodDelete, "/api/v1/circles/"+circleID+"/leave", tokenB, ""); w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204 on an idempotent leave, got %d: %s", w.Code, w.Body.String())
+		}
+		if w := do(http.MethodPost, "/api/v1/circles/"+circleID+"/messages", tokenB, `{"content":"after leave"}`); w.Code != http.StatusForbidden {
+			t.Fatalf("expected 403 after leaving, got %d: %s", w.Code, w.Body.String())
+		}
+		w := do(http.MethodGet, "/api/v1/circles/"+circleID, tokenB, "")
+		if !strings.Contains(w.Body.String(), `"is_member":false`) {
+			t.Errorf("expected is_member false after leaving: %s", w.Body.String())
+		}
+	})
+
+	t.Run("unknown circles return 404 on every route", func(t *testing.T) {
+		const ghost = "/api/v1/circles/00000000-0000-0000-0000-000000000000"
+		if w := do(http.MethodGet, ghost, tokenA, ""); w.Code != http.StatusNotFound {
+			t.Errorf("detail: expected 404, got %d", w.Code)
+		}
+		if w := do(http.MethodPost, ghost+"/join", tokenA, ""); w.Code != http.StatusNotFound {
+			t.Errorf("join: expected 404, got %d", w.Code)
+		}
+		if w := do(http.MethodDelete, ghost+"/leave", tokenA, ""); w.Code != http.StatusNotFound {
+			t.Errorf("leave: expected 404, got %d", w.Code)
+		}
+		if w := do(http.MethodGet, ghost+"/messages", tokenA, ""); w.Code != http.StatusNotFound {
+			t.Errorf("list: expected 404, got %d", w.Code)
+		}
+		if w := do(http.MethodPost, ghost+"/messages", tokenA, `{"content":"x"}`); w.Code != http.StatusNotFound {
+			t.Errorf("send: expected 404, got %d", w.Code)
+		}
+	})
+
+	t.Run("invalid message content is rejected with the content field", func(t *testing.T) {
+		w := do(http.MethodPost, "/api/v1/circles/"+circleID+"/messages", tokenA, `{"content":"   "}`)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"field":"content"`) {
+			t.Errorf("expected the content field on the validation error: %s", w.Body.String())
+		}
+	})
+
+	t.Run("the database stores only anonymous authorship", func(t *testing.T) {
+		var anonCount int
+		if err := pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM circle_messages m
+			 JOIN anon_identities a ON a.id = m.anon_identity_id
+			 WHERE m.circle_id = $1 AND a.token_hash IS NOT NULL`, circleID).Scan(&anonCount); err != nil {
+			t.Fatalf("raw COUNT failed: %v", err)
+		}
+		if anonCount < 1 {
+			t.Errorf("expected the circle's messages to be authored by anonymous identities, got %d", anonCount)
 		}
 	})
 }

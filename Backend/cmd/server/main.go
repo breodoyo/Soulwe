@@ -15,6 +15,7 @@ import (
 	"Backend/internal/anon"
 	"Backend/internal/auth"
 	"Backend/internal/cipher"
+	"Backend/internal/circles"
 	"Backend/internal/config"
 	"Backend/internal/dashboard"
 	"Backend/internal/journal"
@@ -27,7 +28,7 @@ import (
 )
 
 // setupRouter initializes the Gin engine, global middleware, and foundational routes.
-func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler, tokenManager *auth.Manager, anonHandler *anon.Handler, anonService anon.Service, moodHandler *mood.Handler, dashboardHandler *dashboard.Handler, journalHandler *journal.Handler) *gin.Engine {
+func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler, tokenManager *auth.Manager, anonHandler *anon.Handler, anonService anon.Service, moodHandler *mood.Handler, dashboardHandler *dashboard.Handler, journalHandler *journal.Handler, circlesHandler *circles.Handler) *gin.Engine {
 	// Set Gin mode (debug or release)
 	gin.SetMode(cfg.GinMode)
 
@@ -150,6 +151,22 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 				journalGroup.POST("/:id/reflect", middleware.AuthRequired(tokenManager), journalHandler.Reflect)
 			}
 		}
+		if anonService != nil && circlesHandler != nil {
+			// Phase 6.1 peer support circles. Circles are an anonymous-session
+			// feature: memberships and messages are keyed to anon_identities,
+			// and every route (discovery through messaging) requires a valid
+			// anonymous bearer token. Registered-user JWTs are rejected by
+			// AnonymousAuthRequired.
+			circlesGroup := v1.Group("/circles", middleware.AnonymousAuthRequired(anonService))
+			{
+				circlesGroup.GET("", circlesHandler.List)
+				circlesGroup.GET("/:id", circlesHandler.Get)
+				circlesGroup.POST("/:id/join", circlesHandler.Join)
+				circlesGroup.DELETE("/:id/leave", circlesHandler.Leave)
+				circlesGroup.GET("/:id/messages", circlesHandler.ListMessages)
+				circlesGroup.POST("/:id/messages", circlesHandler.SendMessage)
+			}
+		}
 	}
 
 	return r
@@ -212,9 +229,14 @@ func main() {
 	journalService := journal.NewService(journal.NewPostgresRepository(pool), journalCodec, reflection)
 	journalHandler := journal.NewHandler(journalService)
 
+	// 4d. Compose the Phase 6.1 circles stack. Memberships and messages are
+	// keyed to anonymous identities; the same anonymous-session service that
+	// mints tokens authenticates every circle request.
+	circlesHandler := circles.NewHandler(circles.NewService(circles.NewPostgresRepository(pool)))
+
 	// 5. Setup router and middleware; the same token manager validates the
 	// Bearer tokens on the protected routes.
-	router := setupRouter(cfg, pool, userHandler, tokenManager, anonHandler, anonService, moodHandler, dashboardHandler, journalHandler)
+	router := setupRouter(cfg, pool, userHandler, tokenManager, anonHandler, anonService, moodHandler, dashboardHandler, journalHandler, circlesHandler)
 
 	// 6. Configure HTTP server
 	serverAddr := ":" + cfg.Port
