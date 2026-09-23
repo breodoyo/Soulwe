@@ -23,7 +23,8 @@ basic features without registration.
 Protected endpoints are picky about token type:
 
 - **Registered-user endpoints** (`/auth/me`, `/users/me`, `/moods`,
-  `/dashboard`, `/journal`, `/therapists`) require a registered-user **JWT** and
+  `/dashboard`, `/journal`, `/therapists`, `/bookings`, and
+  `POST /therapists/:id/bookings`) require a registered-user **JWT** and
   reject anonymous tokens with `401`.
 - **Anonymous endpoints** (`/auth/anonymous/me`, `/auth/anonymous/promote`,
   and all `/circles` routes) require the opaque anonymous token and reject
@@ -672,6 +673,101 @@ View one therapist's public profile.
 - `400 INVALID_INPUT` with `field: id` when the id is not a UUID.
 - `404 NOT_FOUND` when no therapist has that id.
 
+### Bookings
+
+Book a session with a therapist and manage the authenticated user's own
+bookings. Every booking response exposes only the public fields below — the
+owner's id, email, or any auth material is never serialized. All four routes
+require a registered-user JWT.
+
+#### `POST /therapists/:id/bookings`
+Create a booking for a therapist, initially `pending`.
+
+**Request:**
+```json
+{
+  "scheduled_at": "2026-10-01T10:00:00Z"
+}
+```
+
+**Response `201`:**
+```json
+{
+  "booking": {
+    "id": "uuid",
+    "therapist_id": "uuid",
+    "display_name": "Dr. Amina Korir",
+    "scheduled_at": "2026-10-01T10:00:00Z",
+    "status": "pending",
+    "created_at": "2026-09-01T09:00:00Z",
+    "updated_at": "2026-09-01T09:00:00Z"
+  }
+}
+```
+
+**Validation & conflict rules:**
+- `scheduled_at` must be a valid ISO 8601 timestamp in the future.
+- The therapist must exist and be `is_active`.
+- A session is assumed to last 60 minutes. A user can never hold two bookings
+  whose windows overlap, and a therapist slot (exact `scheduled_at`) can never
+  be sold twice — the database enforces the latter even under concurrent
+  requests.
+- Cancelled slots are freed for rebooking.
+
+**Errors:**
+- `400 INVALID_INPUT` with `field: scheduled_at` for a missing, malformed, or
+  past timestamp, or with `field: id` for a malformed therapist id.
+- `401 UNAUTHORIZED` when unauthenticated or using an anonymous token.
+- `404 NOT_FOUND` when no therapist has that id.
+- `409 CONFLICT` (`THERAPIST_UNAVAILABLE`) when the therapist is not accepting
+  bookings, or (`BOOKING_CONFLICT`) when the slot or an overlapping window is
+  already taken.
+
+#### `GET /bookings`
+List the authenticated user's own bookings, newest first. Other users'
+bookings never appear.
+
+**Response `200`:**
+```json
+{
+  "bookings": [
+    {
+      "id": "uuid",
+      "therapist_id": "uuid",
+      "display_name": "Dr. Amina Korir",
+      "scheduled_at": "2026-10-01T10:00:00Z",
+      "status": "pending",
+      "created_at": "2026-09-01T09:00:00Z",
+      "updated_at": "2026-09-01T09:00:00Z"
+    }
+  ]
+}
+```
+
+**Errors:**
+- `401 UNAUTHORIZED` when unauthenticated or using an anonymous token.
+
+#### `GET /bookings/:id`
+View one of the authenticated user's own bookings.
+
+**Errors:**
+- `400 INVALID_INPUT` with `field: id` when the id is not a UUID.
+- `401 UNAUTHORIZED` when unauthenticated or using an anonymous token.
+- `404 NOT_FOUND` for an unknown id — or for someone else's booking, which is
+  indistinguishable from missing.
+
+#### `PATCH /bookings/:id/cancel`
+Cancel a booking. Only a `pending` booking can be cancelled.
+
+**Response `200`** returns the booking with `"status": "cancelled"`.
+
+**Errors:**
+- `400 INVALID_INPUT` with `field: id` when the id is not a UUID.
+- `401 UNAUTHORIZED` when unauthenticated or using an anonymous token.
+- `404 NOT_FOUND` when the booking is not the caller's.
+- `409 CONFLICT` (`BOOKING_STATUS_CONFLICT`) when the booking is no longer
+  pending.
+
 ---
 
 ### Breathing
@@ -731,6 +827,17 @@ All errors follow the same shape:
 | `CONFLICT`          | 409  | Duplicate resource (e.g. email taken)        |
 | `RATE_LIMITED`      | 429  | Too many requests                            |
 | `INTERNAL`          | 500  | Something went wrong on our side             |
+
+Handlers return their own `INTERNAL_SERVER_ERROR` code for unexpected server
+failures rather than the generic `INTERNAL` listed above.
+
+Booking routes also use these payload-specific codes:
+
+| Code                        | Meaning                                        |
+|-----------------------------|------------------------------------------------|
+| `THERAPIST_UNAVAILABLE`     | The therapist exists but is not accepting bookings |
+| `BOOKING_CONFLICT`          | The slot or an overlapping window is taken     |
+| `BOOKING_STATUS_CONFLICT`   | Cancelling a booking that is no longer pending |
 
 ---
 

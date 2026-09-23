@@ -334,6 +334,63 @@ CREATE TABLE breathing_sessions (
 
 ---
 
+### bookings
+
+```sql
+CREATE TABLE bookings (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    therapist_id UUID NOT NULL REFERENCES therapists(id) ON DELETE CASCADE,
+    scheduled_at TIMESTAMPTZ NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'confirmed', 'cancelled', 'completed')),
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+A booking starts as `pending`; cancelling transitions `pending → cancelled`.
+`confirmed` and `completed` are reserved for later therapist-side flows.
+
+Every live booking occupies the half-open session window
+`[scheduled_at, scheduled_at + 60 minutes)`, and a session can **never** be
+double-sold. Two layers enforce it, both database-side so racing requests
+cannot slip past:
+
+- **Exact-minute guard (014).** Two partial unique indexes cover live bookings
+  (pending or confirmed); cancelling a booking lets its slot be rebooked:
+  - `bookings_active_slot_unique` on `(therapist_id, scheduled_at)` — the exact
+    same therapist at the exact same minute cannot be booked twice.
+  - `bookings_active_user_slot_unique` on `(user_id, scheduled_at)` — one user
+    cannot book the exact same minute twice.
+- **Window guard (015).** Two partial GiST `EXCLUDE` constraints reject any two
+  live bookings whose 60-minute windows *overlap*, around a small IMMUTABLE
+  `booking_window(timestamptz)` helper that maps a start time to its half-open
+  window:
+  - `bookings_therapist_window_excl` — no overlapping windows for the same
+    therapist: 10:00–11:00 + 10:30–11:30 is rejected, while 10:00–11:00 +
+    11:00–12:00 is allowed (adjacent windows only touch).
+  - `bookings_user_window_excl` — one user cannot hold two live windows that
+    overlap in time, closing the check-then-insert TOCTOU race a service check
+    could not.
+  These constraints need `btree_gist` (a standard contrib module, same family
+  as `pgcrypto` already used in 001), which migration 015 creates idempotently.
+  A concurrent loser fails with SQLSTATE `23P01`, which the repository maps to
+  the same `ErrBookingConflict` as the `23505` unique violations — the API just
+  sees `409 BOOKING_CONFLICT`.
+  Migration 015 adds no columns or tables; `migrate_test.go`'s expected-table
+  list is unchanged.
+
+The service layer still runs a friendly overlap pre-check for the common serial
+cases, but it is no longer the enforcement point.
+
+Two b-tree indexes keep the common reads cheap:
+- `idx_bookings_user_id` on `(user_id, created_at DESC)` — "my bookings" list.
+- `idx_bookings_therapist_id` on `(therapist_id, scheduled_at)` — a future
+  therapist diary view.
+
+---
+
 ## Migration strategy
 
 Migrations live in `backend/db/migrations/` and are numbered sequentially:
@@ -352,6 +409,8 @@ Migrations live in `backend/db/migrations/` and are numbered sequentially:
 011_add_anon_session_identity.sql
 012_add_mood_logs_user_index.sql
 013_create_circle_members.sql
+014_create_bookings.sql
+015_create_booking_overlap_guard.sql
 ```
 
 We run them with `golang-migrate`. Each file contains both an `up` migration

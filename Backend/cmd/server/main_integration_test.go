@@ -17,6 +17,7 @@ import (
 
 	"Backend/internal/anon"
 	"Backend/internal/auth"
+	"Backend/internal/bookings"
 	"Backend/internal/cipher"
 	"Backend/internal/circles"
 	"Backend/internal/config"
@@ -67,7 +68,7 @@ func TestPhase4EndToEndIntegration(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, pool, userHandler, tokenManager, nil, nil, moodHandler, dashboardHandler, nil, nil, nil)
+	}, pool, userHandler, tokenManager, nil, nil, moodHandler, dashboardHandler, nil, nil, nil, nil)
 
 	createdEmails := []string{}
 	defer func() {
@@ -320,7 +321,7 @@ func TestPhase5JournalEndToEndIntegration(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, pool, userHandler, tokenManager, nil, nil, nil, nil, journalHandler, nil, nil)
+	}, pool, userHandler, tokenManager, nil, nil, nil, nil, journalHandler, nil, nil, nil)
 
 	createdEmails := []string{}
 	defer func() {
@@ -602,7 +603,7 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, pool, nil, nil, anonHandler, anonService, nil, nil, nil, circlesHandler, nil)
+	}, pool, nil, nil, anonHandler, anonService, nil, nil, nil, circlesHandler, nil, nil)
 
 	// Created anonymous identities, cleaned up at the end. Deleting an
 	// anon_identities row cascades its circle_members and circle_messages.
@@ -897,7 +898,7 @@ func TestPhase6TherapistDiscoveryEndToEndIntegration(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, pool, userHandler, tokenManager, anonHandler, anonService, nil, nil, nil, nil, therapistsHandler)
+	}, pool, userHandler, tokenManager, anonHandler, anonService, nil, nil, nil, nil, therapistsHandler, nil)
 
 	createdEmails := []string{}
 	createdTherapistNames := []string{}
@@ -1230,6 +1231,380 @@ func TestPhase6TherapistDiscoveryEndToEndIntegration(t *testing.T) {
 		w := do(t, http.MethodGet, "/api/v1/auth/me", rawAnon, "")
 		if w.Code != http.StatusUnauthorized {
 			t.Errorf("expected 401 for an anonymous token on auth/me, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+// TestPhase6BookingEndToEndIntegration runs the Phase 6.3 booking stack
+// (create under a therapist, list/get/cancel the caller's own bookings) against
+// a live database through the real router. It is excluded from the default
+// build via the "integration" tag and skipped when DATABASE_URL is not set.
+func TestPhase6BookingEndToEndIntegration(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL not set; skipping integration test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("failed to create pool: %v", err)
+	}
+	defer pool.Close()
+
+	tokenManager, err := auth.NewManager("integration-test-secret-not-for-production")
+	if err != nil {
+		t.Fatalf("auth.NewManager returned error: %v", err)
+	}
+
+	userRepo := user.NewPostgresRepository(pool)
+	userService := user.NewService(userRepo, tokenManager)
+	userHandler := user.NewHandler(userService)
+
+	anonService := anon.NewService(anon.NewPostgresRepository(pool))
+	anonHandler := anon.NewHandler(anonService)
+
+	therapistsHandler := therapists.NewHandler(therapists.NewService(therapists.NewPostgresRepository(pool)))
+	bookingsHandler := bookings.NewHandler(bookings.NewService(bookings.NewPostgresRepository(pool)))
+
+	router := setupRouter(&config.Config{
+		Env:         "test",
+		GinMode:     "test",
+		FrontendURL: "http://localhost:5173",
+	}, pool, userHandler, tokenManager, anonHandler, anonService, nil, nil, nil, nil, therapistsHandler, bookingsHandler)
+
+	createdEmails := []string{}
+	createdTherapistNames := []string{}
+	defer func() {
+		for _, e := range createdEmails {
+			if _, err := pool.Exec(context.Background(), "DELETE FROM users WHERE email = $1", e); err != nil {
+				t.Errorf("cleanup failed to DELETE test user %s: %v", e, err)
+			}
+		}
+		for _, name := range createdTherapistNames {
+			if _, err := pool.Exec(context.Background(), "DELETE FROM therapists WHERE full_name = $1", name); err != nil {
+				t.Errorf("cleanup failed to DELETE therapist %s: %v", name, err)
+			}
+		}
+	}()
+
+	register := func(t *testing.T, prefix string) (token, email string) {
+		t.Helper()
+		email = fmt.Sprintf("%s-%d@soulwe.local", prefix, time.Now().UnixNano())
+		createdEmails = append(createdEmails, email)
+		const password = "integration-secret-password"
+		body := fmt.Sprintf(`{"email":%q,"password":%q}`, email, password)
+
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("register: expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+
+		loginBody := fmt.Sprintf(`{"email":%q,"password":%q}`, email, password)
+		req, _ = http.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(loginBody))
+		req.Header.Set("Content-Type", "application/json")
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("login: expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var res struct {
+			AccessToken string `json:"access_token"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+			t.Fatalf("login: failed to decode response: %v", err)
+		}
+		return res.AccessToken, email
+	}
+
+	do := func(t *testing.T, method, path, token, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req, _ := http.NewRequest(method, path, strings.NewReader(body))
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	// Seed one active and one inactive therapist, each with a unique name so
+	// the run is isolated from the Phase 6.2 e2e's therapists.
+	seed := func(name string, active bool) string {
+		t.Helper()
+		var id string
+		if err := pool.QueryRow(ctx, `
+			INSERT INTO therapists (full_name, credentials, years_exp, bio, location,
+				is_online_only, price_kes, free_sessions, specialties, is_active, created_at)
+			VALUES ($1, 'MA', 5, 'bio', 'Nairobi', FALSE, 800, 1, ARRAY['Grief'], $2, NOW())
+			RETURNING id`, name, active).Scan(&id); err != nil {
+			t.Fatalf("failed to seed therapist %s: %v", name, err)
+		}
+		createdTherapistNames = append(createdTherapistNames, name)
+		return id
+	}
+
+	dayoID := seed("Dr. Dayo Achieng", true)
+	inactiveID := seed("Dr. Faith Kamau", false)
+
+	alice, _ := register(t, "booking-alice")
+	bob, _ := register(t, "booking-bob")
+
+	// Slots are strictly in the future (48-55h out) so the scheduled_at checks
+	// and overlap window never depend on the clock being in a particular day.
+	slot := func(hoursFromNow int) string {
+		return time.Now().UTC().Add(time.Duration(48+hoursFromNow) * time.Hour).Truncate(time.Second).Format(time.RFC3339Nano)
+	}
+	slotA := slot(0) // alice's first booking
+	slotB := slot(2) // 2h after slotA -> no overlap
+	// 30 minutes after slotA, strictly inside the assumed 60-minute session
+	// window, so the overlap check must reject it.
+	slotOverlap := time.Now().UTC().Add(48*time.Hour + 30*time.Minute).Truncate(time.Second).Format(time.RFC3339Nano)
+	past := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339Nano)
+
+	bookingRoutes := []struct {
+		name, method, path, body string
+	}{
+		{"create", http.MethodPost, "/api/v1/therapists/" + dayoID + "/bookings", `{"scheduled_at":"` + slotA + `"}`},
+		{"list", http.MethodGet, "/api/v1/bookings", ""},
+		{"get", http.MethodGet, "/api/v1/bookings/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", ""},
+		{"cancel", http.MethodPatch, "/api/v1/bookings/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/cancel", ""},
+	}
+
+	t.Run("booking routes reject missing and anonymous tokens", func(t *testing.T) {
+		for _, tc := range bookingRoutes {
+			if w := do(t, tc.method, tc.path, "", tc.body); w.Code != http.StatusUnauthorized {
+				t.Errorf("%s: expected 401 without a token, got %d: %s", tc.name, w.Code, w.Body.String())
+			}
+		}
+
+		rawAnon := func() string {
+			w := do(t, http.MethodPost, "/api/v1/auth/anonymous", "", "")
+			if w.Code != http.StatusCreated {
+				t.Fatalf("anonymous: expected 201, got %d: %s", w.Code, w.Body.String())
+			}
+			var res struct {
+				Token string `json:"anonymous_token"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+				t.Fatalf("anonymous: failed to decode response: %v", err)
+			}
+			return res.Token
+		}()
+		for _, tc := range bookingRoutes {
+			if w := do(t, tc.method, tc.path, rawAnon, tc.body); w.Code != http.StatusUnauthorized {
+				t.Errorf("%s: expected 401 for an anonymous token, got %d: %s", tc.name, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	var aliceBookingID, aliceSecondID string
+
+	t.Run("creating a booking returns a pending booking with public fields", func(t *testing.T) {
+		w := do(t, http.MethodPost, "/api/v1/therapists/"+dayoID+"/bookings", alice, `{"scheduled_at":"`+slotA+`"}`)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+		var res struct {
+			Booking struct {
+				ID          string `json:"id"`
+				TherapistID string `json:"therapist_id"`
+				DisplayName string `json:"display_name"`
+				ScheduledAt string `json:"scheduled_at"`
+				Status      string `json:"status"`
+				CreatedAt   string `json:"created_at"`
+				UpdatedAt   string `json:"updated_at"`
+			} `json:"booking"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+			t.Fatalf("failed to decode created booking: %v", err)
+		}
+		b := res.Booking
+		if b.TherapistID != dayoID || b.DisplayName != "Dr. Dayo Achieng" {
+			t.Errorf("expected the seeded therapist wired in, got %+v", b)
+		}
+		if b.Status != "pending" {
+			t.Errorf("expected initial status pending, got %q", b.Status)
+		}
+		if b.ID == "" || b.CreatedAt == "" || b.UpdatedAt == "" {
+			t.Errorf("expected generated id and timestamps, got %+v", b)
+		}
+		if !strings.Contains(b.ScheduledAt, "T") {
+			t.Errorf("expected a serialized scheduled_at, got %q", b.ScheduledAt)
+		}
+		body := w.Body.String()
+		for _, leak := range []string{"user_id", "password", "password_hash", "email", "full_name"} {
+			if strings.Contains(body, leak) {
+				t.Errorf("created booking must never include %q: %s", leak, body)
+			}
+		}
+		aliceBookingID = b.ID
+	})
+
+	t.Run("the same slot cannot be double-booked", func(t *testing.T) {
+		w := do(t, http.MethodPost, "/api/v1/therapists/"+dayoID+"/bookings", bob, `{"scheduled_at":"`+slotA+`"}`)
+		if w.Code != http.StatusConflict {
+			t.Fatalf("expected 409 for bob taking the taken slot, got %d: %s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"code":"BOOKING_CONFLICT"`) {
+			t.Errorf("expected BOOKING_CONFLICT code: %s", w.Body.String())
+		}
+
+		w = do(t, http.MethodPost, "/api/v1/therapists/"+dayoID+"/bookings", alice, `{"scheduled_at":"`+slotOverlap+`"}`)
+		if w.Code != http.StatusConflict {
+			t.Fatalf("expected 409 for an overlapping window, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("past, inactive, and missing targets are rejected", func(t *testing.T) {
+		w := do(t, http.MethodPost, "/api/v1/therapists/"+dayoID+"/bookings", alice, `{"scheduled_at":"`+past+`"}`)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for a past scheduled_at, got %d: %s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"field":"scheduled_at"`) {
+			t.Errorf("expected the scheduled_at field on the validation error: %s", w.Body.String())
+		}
+
+		w = do(t, http.MethodPost, "/api/v1/therapists/"+inactiveID+"/bookings", alice, `{"scheduled_at":"`+slotB+`"}`)
+		if w.Code != http.StatusConflict {
+			t.Fatalf("expected 409 for an inactive therapist, got %d: %s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"code":"THERAPIST_UNAVAILABLE"`) {
+			t.Errorf("expected THERAPIST_UNAVAILABLE code: %s", w.Body.String())
+		}
+
+		w = do(t, http.MethodPost, "/api/v1/therapists/00000000-0000-0000-0000-000000000000/bookings", alice, `{"scheduled_at":"`+slotB+`"}`)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404 for a missing therapist, got %d: %s", w.Code, w.Body.String())
+		}
+
+		w = do(t, http.MethodPost, "/api/v1/therapists/not-a-uuid/bookings", alice, `{"scheduled_at":"`+slotB+`"}`)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for a malformed therapist id, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("listing returns only my bookings with therapist display names", func(t *testing.T) {
+		w := do(t, http.MethodPost, "/api/v1/therapists/"+dayoID+"/bookings", alice, `{"scheduled_at":"`+slotB+`"}`)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("expected 201 for alice's second booking, got %d: %s", w.Code, w.Body.String())
+		}
+		var created struct {
+			Booking struct {
+				ID string `json:"id"`
+			} `json:"booking"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+			t.Fatalf("failed to decode second booking: %v", err)
+		}
+		aliceSecondID = created.Booking.ID
+
+		w = do(t, http.MethodGet, "/api/v1/bookings", alice, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var res struct {
+			Bookings []struct {
+				ID          string `json:"id"`
+				TherapistID string `json:"therapist_id"`
+				DisplayName string `json:"display_name"`
+				Status      string `json:"status"`
+			} `json:"bookings"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+			t.Fatalf("failed to decode booking list: %v", err)
+		}
+		if len(res.Bookings) != 2 {
+			t.Fatalf("expected alice's 2 bookings, got %d", len(res.Bookings))
+		}
+		for _, b := range res.Bookings {
+			if b.DisplayName != "Dr. Dayo Achieng" {
+				t.Errorf("expected the therapist display name on each booking, got %+v", b)
+			}
+			if b.ID != aliceBookingID && b.ID != aliceSecondID {
+				t.Errorf("a foreign booking appeared in alice's list: %+v", b)
+			}
+		}
+
+		w = do(t, http.MethodGet, "/api/v1/bookings", bob, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"bookings":[]`) {
+			t.Errorf("expected bob to have no bookings: %s", w.Body.String())
+		}
+	})
+
+	t.Run("get returns my booking but never another user's", func(t *testing.T) {
+		w := do(t, http.MethodGet, "/api/v1/bookings/"+aliceBookingID, alice, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200 for the owner, got %d: %s", w.Code, w.Body.String())
+		}
+
+		w = do(t, http.MethodGet, "/api/v1/bookings/"+aliceBookingID, bob, "")
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404 for another user's booking, got %d: %s", w.Code, w.Body.String())
+		}
+
+		w = do(t, http.MethodGet, "/api/v1/bookings/not-a-uuid", alice, "")
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for a malformed booking id, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("cancelling a pending booking and its conflict cases", func(t *testing.T) {
+		w := do(t, http.MethodPatch, "/api/v1/bookings/"+aliceBookingID+"/cancel", alice, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"status":"cancelled"`) {
+			t.Errorf("expected the cancelled status in the response: %s", w.Body.String())
+		}
+
+		w = do(t, http.MethodPatch, "/api/v1/bookings/"+aliceBookingID+"/cancel", alice, "")
+		if w.Code != http.StatusConflict {
+			t.Fatalf("expected 409 for cancelling a non-pending booking, got %d: %s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"code":"BOOKING_STATUS_CONFLICT"`) {
+			t.Errorf("expected BOOKING_STATUS_CONFLICT code: %s", w.Body.String())
+		}
+
+		w = do(t, http.MethodPatch, "/api/v1/bookings/"+aliceSecondID+"/cancel", bob, "")
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404 for cancelling a foreign booking, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("a freed slot can be rebooked by someone else", func(t *testing.T) {
+		w := do(t, http.MethodPost, "/api/v1/therapists/"+dayoID+"/bookings", bob, `{"scheduled_at":"`+slotA+`"}`)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("expected 201 after alice cancelled the slot, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("no sensitive material ever appears in booking responses", func(t *testing.T) {
+		for _, path := range []string{
+			"/api/v1/bookings",
+			"/api/v1/bookings/" + aliceSecondID,
+		} {
+			w := do(t, http.MethodGet, path, alice, "")
+			if w.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d", w.Code)
+			}
+			body := w.Body.String()
+			for _, leak := range []string{"user_id", "password", "password_hash", "email", "full_name", "credentials", "price_kes"} {
+				if strings.Contains(body, leak) {
+					t.Errorf("%s: response must never include %q: %s", path, leak, body)
+				}
+			}
 		}
 	})
 }

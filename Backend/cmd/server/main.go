@@ -14,6 +14,7 @@ import (
 	"Backend/internal/ai"
 	"Backend/internal/anon"
 	"Backend/internal/auth"
+	"Backend/internal/bookings"
 	"Backend/internal/cipher"
 	"Backend/internal/circles"
 	"Backend/internal/config"
@@ -29,7 +30,7 @@ import (
 )
 
 // setupRouter initializes the Gin engine, global middleware, and foundational routes.
-func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler, tokenManager *auth.Manager, anonHandler *anon.Handler, anonService anon.Service, moodHandler *mood.Handler, dashboardHandler *dashboard.Handler, journalHandler *journal.Handler, circlesHandler *circles.Handler, therapistsHandler *therapists.Handler) *gin.Engine {
+func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler, tokenManager *auth.Manager, anonHandler *anon.Handler, anonService anon.Service, moodHandler *mood.Handler, dashboardHandler *dashboard.Handler, journalHandler *journal.Handler, circlesHandler *circles.Handler, therapistsHandler *therapists.Handler, bookingsHandler *bookings.Handler) *gin.Engine {
 	// Set Gin mode (debug or release)
 	gin.SetMode(cfg.GinMode)
 
@@ -180,6 +181,23 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 				therapistsGroup.GET("/:id", middleware.AuthRequired(tokenManager), therapistsHandler.Get)
 			}
 		}
+		if tokenManager != nil && bookingsHandler != nil {
+			// Phase 6.3 therapist bookings. Every route requires a registered
+			// user JWT; anonymous tokens are rejected. Create lives under a
+			// therapist, and the list/get/cancel routes are scoped to the
+			// authenticated user so one person's bookings are never exposed
+			// to another.
+			therapistBookingsGroup := v1.Group("/therapists")
+			{
+				therapistBookingsGroup.POST("/:id/bookings", middleware.AuthRequired(tokenManager), bookingsHandler.Create)
+			}
+			bookingsGroup := v1.Group("/bookings", middleware.AuthRequired(tokenManager))
+			{
+				bookingsGroup.GET("", bookingsHandler.List)
+				bookingsGroup.GET("/:id", bookingsHandler.Get)
+				bookingsGroup.PATCH("/:id/cancel", bookingsHandler.Cancel)
+			}
+		}
 	}
 
 	return r
@@ -252,9 +270,15 @@ func main() {
 	// or authorization decisions live in the handlers themselves.
 	therapistsHandler := therapists.NewHandler(therapists.NewService(therapists.NewPostgresRepository(pool)))
 
+	// 4f. Compose the Phase 6.3 therapist booking stack. Bookings tie a
+	// registered user to an active therapist's slot; both the service (overlap
+	// of different-but-adjacent times) and the schema (partial unique indexes
+	// for exact-minute races) defend against double-booking.
+	bookingsHandler := bookings.NewHandler(bookings.NewService(bookings.NewPostgresRepository(pool)))
+
 	// 5. Setup router and middleware; the same token manager validates the
 	// Bearer tokens on the protected routes.
-	router := setupRouter(cfg, pool, userHandler, tokenManager, anonHandler, anonService, moodHandler, dashboardHandler, journalHandler, circlesHandler, therapistsHandler)
+	router := setupRouter(cfg, pool, userHandler, tokenManager, anonHandler, anonService, moodHandler, dashboardHandler, journalHandler, circlesHandler, therapistsHandler, bookingsHandler)
 
 	// 6. Configure HTTP server
 	serverAddr := ":" + cfg.Port
