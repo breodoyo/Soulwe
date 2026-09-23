@@ -15,6 +15,7 @@ import (
 	"Backend/internal/anon"
 	"Backend/internal/auth"
 	"Backend/internal/bookings"
+	"Backend/internal/breathing"
 	"Backend/internal/cipher"
 	"Backend/internal/circles"
 	"Backend/internal/config"
@@ -30,7 +31,7 @@ import (
 )
 
 // setupRouter initializes the Gin engine, global middleware, and foundational routes.
-func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler, tokenManager *auth.Manager, anonHandler *anon.Handler, anonService anon.Service, moodHandler *mood.Handler, dashboardHandler *dashboard.Handler, journalHandler *journal.Handler, circlesHandler *circles.Handler, therapistsHandler *therapists.Handler, bookingsHandler *bookings.Handler) *gin.Engine {
+func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handler, tokenManager *auth.Manager, anonHandler *anon.Handler, anonService anon.Service, moodHandler *mood.Handler, dashboardHandler *dashboard.Handler, journalHandler *journal.Handler, circlesHandler *circles.Handler, therapistsHandler *therapists.Handler, bookingsHandler *bookings.Handler, breathingHandler *breathing.Handler) *gin.Engine {
 	// Set Gin mode (debug or release)
 	gin.SetMode(cfg.GinMode)
 
@@ -198,6 +199,21 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 				bookingsGroup.PATCH("/:id/cancel", bookingsHandler.Cancel)
 			}
 		}
+		if tokenManager != nil && breathingHandler != nil {
+			// Phase 6.4 breathing exercises. The catalog is shared public data,
+			// but browsing it — and recording or listing sessions — is a
+			// registered-user feature: every route requires a valid JWT
+			// (AuthRequired), and anonymous tokens are rejected. Session
+			// ownership is never taken from the request; each handler derives
+			// the user from the JWT context.
+			breathingGroup := v1.Group("/breathing")
+			{
+				breathingGroup.GET("/exercises", middleware.AuthRequired(tokenManager), breathingHandler.ListExercises)
+				breathingGroup.GET("/exercises/:id", middleware.AuthRequired(tokenManager), breathingHandler.GetExercise)
+				breathingGroup.POST("/sessions", middleware.AuthRequired(tokenManager), breathingHandler.RecordSession)
+				breathingGroup.GET("/sessions", middleware.AuthRequired(tokenManager), breathingHandler.ListSessions)
+			}
+		}
 	}
 
 	return r
@@ -276,9 +292,14 @@ func main() {
 	// for exact-minute races) defend against double-booking.
 	bookingsHandler := bookings.NewHandler(bookings.NewService(bookings.NewPostgresRepository(pool)))
 
+	// 4g. Compose the Phase 6.4 breathing stack. Exercises are a seeded public
+	// catalog; sessions tie a registered user to an exercise and are always
+	// scoped by the authenticated JWT.
+	breathingHandler := breathing.NewHandler(breathing.NewService(breathing.NewPostgresRepository(pool)))
+
 	// 5. Setup router and middleware; the same token manager validates the
 	// Bearer tokens on the protected routes.
-	router := setupRouter(cfg, pool, userHandler, tokenManager, anonHandler, anonService, moodHandler, dashboardHandler, journalHandler, circlesHandler, therapistsHandler, bookingsHandler)
+	router := setupRouter(cfg, pool, userHandler, tokenManager, anonHandler, anonService, moodHandler, dashboardHandler, journalHandler, circlesHandler, therapistsHandler, bookingsHandler, breathingHandler)
 
 	// 6. Configure HTTP server
 	serverAddr := ":" + cfg.Port

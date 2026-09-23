@@ -772,13 +772,53 @@ Cancel a booking. Only a `pending` booking can be cancelled.
 
 ### Breathing
 
+All breathing endpoints require a registered user's JWT; anonymous tokens are
+rejected with `401 UNAUTHORIZED`.
+
+#### `GET /breathing/exercises`
+
+List the exercise catalog. Exercises are returned in the order they were
+defined (curated insertion order).
+
+**Response `200`:**
+```json
+{
+  "exercises": [
+    {
+      "id": "uuid",
+      "slug": "478",
+      "name": "4-7-8 Breathing",
+      "description": "Inhale for 4s, hold for 7s, exhale for 8s.",
+      "technique": "478",
+      "inhale_s": 4,
+      "hold_s": 7,
+      "exhale_s": 8
+    }
+  ]
+}
+```
+
+**Errors:**
+- `401 UNAUTHORIZED` when unauthenticated or using an anonymous token.
+
+#### `GET /breathing/exercises/:id`
+
+View one exercise from the catalog.
+
+**Errors:**
+- `400 INVALID_INPUT` with `field: id` when the id is not a UUID.
+- `401 UNAUTHORIZED` when unauthenticated or using an anonymous token.
+- `404 NOT_FOUND` for an unknown id.
+
 #### `POST /breathing/sessions`
-Log a completed breathing session.
+
+Record a completed breathing session for the authenticated user. The
+`completed` flag is optional and defaults to `true`.
 
 **Request:**
 ```json
 {
-  "technique": "478",
+  "exercise_id": "uuid",
   "breaths": 5,
   "duration_s": 95,
   "completed": true
@@ -788,13 +828,52 @@ Log a completed breathing session.
 **Response `201`:**
 ```json
 {
-  "id": "uuid",
-  "technique": "478",
-  "breaths": 5,
-  "duration_s": 95,
-  "created_at": "2026-08-19T10:00:00Z"
+  "session": {
+    "id": "uuid",
+    "exercise_id": "uuid",
+    "technique": "478",
+    "name": "4-7-8 Breathing",
+    "breaths": 5,
+    "duration_s": 95,
+    "completed": true,
+    "created_at": "2026-08-19T10:00:00Z"
+  }
 }
 ```
+
+The session echoes `technique` and `name` from the referenced catalog entry.
+
+**Errors:**
+- `400 INVALID_INPUT` with `field: exercise_id` when it is not a UUID.
+- `400 INVALID_INPUT` with `field: breaths` when less than 1.
+- `400 INVALID_INPUT` with `field: duration_s` when less than 1.
+- `401 UNAUTHORIZED` when unauthenticated or using an anonymous token.
+- `404 NOT_FOUND` with `field: exercise_id` when the exercise does not exist.
+
+#### `GET /breathing/sessions`
+
+List the authenticated user's own sessions, newest first.
+
+**Response `200`:**
+```json
+{
+  "sessions": [
+    {
+      "id": "uuid",
+      "exercise_id": "uuid",
+      "technique": "478",
+      "name": "4-7-8 Breathing",
+      "breaths": 5,
+      "duration_s": 95,
+      "completed": true,
+      "created_at": "2026-08-19T10:00:00Z"
+    }
+  ]
+}
+```
+
+**Errors:**
+- `401 UNAUTHORIZED` when unauthenticated or using an anonymous token.
 
 ---
 

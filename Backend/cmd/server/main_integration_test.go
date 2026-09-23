@@ -18,6 +18,7 @@ import (
 	"Backend/internal/anon"
 	"Backend/internal/auth"
 	"Backend/internal/bookings"
+	"Backend/internal/breathing"
 	"Backend/internal/cipher"
 	"Backend/internal/circles"
 	"Backend/internal/config"
@@ -68,7 +69,7 @@ func TestPhase4EndToEndIntegration(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, pool, userHandler, tokenManager, nil, nil, moodHandler, dashboardHandler, nil, nil, nil, nil)
+	}, pool, userHandler, tokenManager, nil, nil, moodHandler, dashboardHandler, nil, nil, nil, nil, nil)
 
 	createdEmails := []string{}
 	defer func() {
@@ -321,7 +322,7 @@ func TestPhase5JournalEndToEndIntegration(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, pool, userHandler, tokenManager, nil, nil, nil, nil, journalHandler, nil, nil, nil)
+	}, pool, userHandler, tokenManager, nil, nil, nil, nil, journalHandler, nil, nil, nil, nil)
 
 	createdEmails := []string{}
 	defer func() {
@@ -603,7 +604,7 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, pool, nil, nil, anonHandler, anonService, nil, nil, nil, circlesHandler, nil, nil)
+	}, pool, nil, nil, anonHandler, anonService, nil, nil, nil, circlesHandler, nil, nil, nil)
 
 	// Created anonymous identities, cleaned up at the end. Deleting an
 	// anon_identities row cascades its circle_members and circle_messages.
@@ -898,7 +899,7 @@ func TestPhase6TherapistDiscoveryEndToEndIntegration(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, pool, userHandler, tokenManager, anonHandler, anonService, nil, nil, nil, nil, therapistsHandler, nil)
+	}, pool, userHandler, tokenManager, anonHandler, anonService, nil, nil, nil, nil, therapistsHandler, nil, nil)
 
 	createdEmails := []string{}
 	createdTherapistNames := []string{}
@@ -1273,7 +1274,7 @@ func TestPhase6BookingEndToEndIntegration(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, pool, userHandler, tokenManager, anonHandler, anonService, nil, nil, nil, nil, therapistsHandler, bookingsHandler)
+	}, pool, userHandler, tokenManager, anonHandler, anonService, nil, nil, nil, nil, therapistsHandler, bookingsHandler, nil)
 
 	createdEmails := []string{}
 	createdTherapistNames := []string{}
@@ -1605,6 +1606,288 @@ func TestPhase6BookingEndToEndIntegration(t *testing.T) {
 					t.Errorf("%s: response must never include %q: %s", path, leak, body)
 				}
 			}
+		}
+	})
+}
+
+// TestPhase6BreathingEndToEndIntegration runs the Phase 6.4 breathing stack
+// (exercise discovery, session recording, the caller's own history) against a
+// live database through the real router. It is excluded from the default build
+// via the "integration" tag and skipped when DATABASE_URL is not set.
+func TestPhase6BreathingEndToEndIntegration(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL not set; skipping integration test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("failed to create pool: %v", err)
+	}
+	defer pool.Close()
+
+	tokenManager, err := auth.NewManager("integration-test-secret-not-for-production")
+	if err != nil {
+		t.Fatalf("auth.NewManager returned error: %v", err)
+	}
+
+	userRepo := user.NewPostgresRepository(pool)
+	userService := user.NewService(userRepo, tokenManager)
+	userHandler := user.NewHandler(userService)
+
+	anonService := anon.NewService(anon.NewPostgresRepository(pool))
+	anonHandler := anon.NewHandler(anonService)
+
+	breathingHandler := breathing.NewHandler(breathing.NewService(breathing.NewPostgresRepository(pool)))
+
+	router := setupRouter(&config.Config{
+		Env:         "test",
+		GinMode:     "test",
+		FrontendURL: "http://localhost:5173",
+	}, pool, userHandler, tokenManager, anonHandler, anonService, nil, nil, nil, nil, nil, nil, breathingHandler)
+
+	createdEmails := []string{}
+	defer func() {
+		for _, e := range createdEmails {
+			// Breaths cascade-delete with the user, and exercise rows come from
+			// the migration seed, so only the seeded users need cleanup.
+			if _, err := pool.Exec(context.Background(), "DELETE FROM users WHERE email = $1", e); err != nil {
+				t.Errorf("cleanup failed to DELETE test user %s: %v", e, err)
+			}
+		}
+	}()
+
+	register := func(t *testing.T, prefix string) (token, email string) {
+		t.Helper()
+		email = fmt.Sprintf("%s-%d@soulwe.local", prefix, time.Now().UnixNano())
+		createdEmails = append(createdEmails, email)
+		const password = "integration-secret-password"
+		body := fmt.Sprintf(`{"email":%q,"password":%q}`, email, password)
+
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("register: expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+
+		loginBody := fmt.Sprintf(`{"email":%q,"password":%q}`, email, password)
+		req, _ = http.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(loginBody))
+		req.Header.Set("Content-Type", "application/json")
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("login: expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var res struct {
+			AccessToken string `json:"access_token"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+			t.Fatalf("login: failed to decode response: %v", err)
+		}
+		return res.AccessToken, email
+	}
+
+	do := func(t *testing.T, method, path, token, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req, _ := http.NewRequest(method, path, strings.NewReader(body))
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	alice, _ := register(t, "breathe-alice")
+	bob, _ := register(t, "breathe-bob")
+
+	t.Run("breathing routes reject anonymous callers", func(t *testing.T) {
+		for _, path := range []string{"/api/v1/breathing/exercises", "/api/v1/breathing/sessions"} {
+			if w := do(t, http.MethodGet, path, "", ""); w.Code != http.StatusUnauthorized {
+				t.Errorf("%s: expected 401 without a token, got %d: %s", path, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	var exerciseID, slug string
+	t.Run("the catalog is served to a registered user", func(t *testing.T) {
+		w := do(t, http.MethodGet, "/api/v1/breathing/exercises", alice, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("list exercises: expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var res struct {
+			Exercises []struct {
+				ID          string `json:"id"`
+				Slug        string `json:"slug"`
+				Name        string `json:"name"`
+				Description string `json:"description"`
+				Technique   string `json:"technique"`
+				InhaleS     int    `json:"inhale_s"`
+				HoldS       int    `json:"hold_s"`
+				ExhaleS     int    `json:"exhale_s"`
+			} `json:"exercises"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+			t.Fatalf("list exercises: failed to decode response: %v", err)
+		}
+		if len(res.Exercises) < 2 {
+			t.Fatalf("expected the seeded catalog, got %d exercises", len(res.Exercises))
+		}
+		for _, e := range res.Exercises {
+			if e.ID == "" || e.Name == "" || e.Technique == "" || e.InhaleS <= 0 || e.ExhaleS <= 0 {
+				t.Errorf("exercise guide data incomplete: %+v", e)
+			}
+			if strings.Contains(e.Slug, "user_id") {
+				t.Errorf("exercise payload must not leak identity: %+v", e)
+			}
+		}
+		exerciseID = res.Exercises[0].ID
+		slug = res.Exercises[0].Slug
+	})
+
+	t.Run("a single exercise can be fetched", func(t *testing.T) {
+		w := do(t, http.MethodGet, "/api/v1/breathing/exercises/"+exerciseID, alice, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("get exercise: expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		body := w.Body.String()
+		if !strings.Contains(body, `"slug":"`+slug+`"`) {
+			t.Errorf("get exercise: expected slug %q in response: %s", slug, body)
+		}
+		for _, leak := range []string{"user_id", "full_name", "email", "credentials"} {
+			if strings.Contains(body, leak) {
+				t.Errorf("get exercise: response must never include %q: %s", leak, body)
+			}
+		}
+	})
+
+	t.Run("unknown and malformed exercise ids are rejected", func(t *testing.T) {
+		if w := do(t, http.MethodGet, "/api/v1/breathing/exercises/00000000-0000-0000-0000-000000000000", alice, ""); w.Code != http.StatusNotFound {
+			t.Errorf("expected 404 for an unknown exercise, got %d: %s", w.Code, w.Body.String())
+		}
+		if w := do(t, http.MethodGet, "/api/v1/breathing/exercises/not-a-uuid", alice, ""); w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400 for a malformed exercise id, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("a session is recorded and echoed without the owner", func(t *testing.T) {
+		w := do(t, http.MethodPost, "/api/v1/breathing/sessions", alice,
+			fmt.Sprintf(`{"exercise_id":%q,"breaths":5,"duration_s":95,"completed":true}`, exerciseID))
+		if w.Code != http.StatusCreated {
+			t.Fatalf("record session: expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+		body := w.Body.String()
+		if !strings.Contains(body, `"exercise_id":"`+exerciseID+`"`) ||
+			!strings.Contains(body, `"technique":"`) || !strings.Contains(body, `"breaths":5`) || !strings.Contains(body, `"duration_s":95`) {
+			t.Errorf("record session: echoed session incomplete: %s", body)
+		}
+		for _, leak := range []string{"user_id", "full_name", "email", "credentials"} {
+			if strings.Contains(body, leak) {
+				t.Errorf("record session: response must never include %q: %s", leak, body)
+			}
+		}
+	})
+
+	t.Run("completed defaults to true when omitted", func(t *testing.T) {
+		w := do(t, http.MethodPost, "/api/v1/breathing/sessions", alice,
+			fmt.Sprintf(`{"exercise_id":%q,"breaths":4,"duration_s":60}`, exerciseID))
+		if w.Code != http.StatusCreated {
+			t.Fatalf("record session: expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"completed":true`) {
+			t.Errorf("expected completed to default to true: %s", w.Body.String())
+		}
+	})
+
+	t.Run("invalid session payloads are rejected", func(t *testing.T) {
+		cases := map[string]string{
+			"unknown exercise": fmt.Sprintf(`{"exercise_id":%q,"breaths":5,"duration_s":95}`, "99999999-9999-9999-9999-999999999999"),
+			"zero breaths":     fmt.Sprintf(`{"exercise_id":%q,"breaths":0,"duration_s":95}`, exerciseID),
+			"missing duration": fmt.Sprintf(`{"exercise_id":%q,"breaths":5}`, exerciseID),
+			"malformed json":   `{"exercise_id":`,
+		}
+		for name, body := range cases {
+			if w := do(t, http.MethodPost, "/api/v1/breathing/sessions", alice, body); w.Code != http.StatusBadRequest && w.Code != http.StatusNotFound {
+				t.Errorf("%s: expected a 4xx, got %d: %s", name, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("history is newest first and scoped to the caller", func(t *testing.T) {
+		// Warm up with two more distinct sessions so ordering is observable.
+		for i := 0; i < 2; i++ {
+			w := do(t, http.MethodPost, "/api/v1/breathing/sessions", alice,
+				fmt.Sprintf(`{"exercise_id":%q,"breaths":%d,"duration_s":60,"completed":true}`, exerciseID, 6+i))
+			if w.Code != http.StatusCreated {
+				t.Fatalf("record session: expected 201, got %d: %s", w.Code, w.Body.String())
+			}
+			time.Sleep(2 * time.Millisecond)
+		}
+
+		w := do(t, http.MethodGet, "/api/v1/breathing/sessions", alice, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("list sessions: expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var res struct {
+			Sessions []struct {
+				ID         string    `json:"id"`
+				ExerciseID *string   `json:"exercise_id"`
+				Technique  string    `json:"technique"`
+				Name       *string   `json:"name,omitempty"`
+				Breaths    int       `json:"breaths"`
+				DurationS  int       `json:"duration_s"`
+				Completed  bool      `json:"completed"`
+				CreatedAt  time.Time `json:"created_at"`
+			} `json:"sessions"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+			t.Fatalf("list sessions: failed to decode response: %v", err)
+		}
+		if len(res.Sessions) < 3 {
+			t.Fatalf("expected at least 3 sessions, got %d", len(res.Sessions))
+		}
+		for i := 1; i < len(res.Sessions); i++ {
+			if res.Sessions[i-1].CreatedAt.Before(res.Sessions[i].CreatedAt) {
+				t.Errorf("history not newest-first at index %d", i)
+			}
+		}
+		if res.Sessions[0].Breaths != 7 {
+			t.Errorf("expected the newest session (breaths 7) first, got %d", res.Sessions[0].Breaths)
+		}
+		if res.Sessions[0].ExerciseID == nil || *res.Sessions[0].ExerciseID != exerciseID ||
+			res.Sessions[0].Technique == "" || res.Sessions[0].Name == nil {
+			t.Errorf("session echo missing catalog join data: %+v", res.Sessions[0])
+		}
+		body := w.Body.String()
+		for _, leak := range []string{"user_id", "full_name", "email", "credentials"} {
+			if strings.Contains(body, leak) {
+				t.Errorf("list sessions: response must never include %q: %s", leak, body)
+			}
+		}
+	})
+
+	t.Run("a user with no sessions gets an empty list", func(t *testing.T) {
+		w := do(t, http.MethodGet, "/api/v1/breathing/sessions", bob, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"sessions":[]`) {
+			t.Errorf("expected an empty sessions array: %s", w.Body.String())
+		}
+	})
+
+	t.Run("one user never sees another user's sessions", func(t *testing.T) {
+		bobW := do(t, http.MethodGet, "/api/v1/breathing/sessions", bob, "")
+		if strings.Contains(bobW.Body.String(), exerciseID) {
+			t.Errorf("bob's history must not include alice's exercise: %s", bobW.Body.String())
 		}
 	})
 }

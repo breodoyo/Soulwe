@@ -23,7 +23,8 @@ therapists
  └── therapist_availability
  └── therapist_languages
 
-breathing_sessions
+breathing_exercises
+ └── breathing_sessions
 ```
 
 ---
@@ -317,20 +318,50 @@ rather than searching inside an array.
 
 ---
 
+### breathing_exercises
+
+```sql
+CREATE TABLE breathing_exercises (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug        TEXT NOT NULL UNIQUE,
+    name        TEXT NOT NULL,
+    description TEXT NOT NULL,
+    technique   TEXT NOT NULL CHECK (technique IN ('478', 'box')),
+    inhale_s    INTEGER NOT NULL CHECK (inhale_s > 0),
+    hold_s      INTEGER NOT NULL DEFAULT 0 CHECK (hold_s >= 0),
+    exhale_s    INTEGER NOT NULL CHECK (exhale_s > 0),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+The catalog is seeded by migration `016_create_breathing_exercises` with the
+same two techniques the frontend already recognizes:
+
+| slug | name          | technique | inhale_s | hold_s | exhale_s |
+| ---- | ------------- | --------- | -------- | ------ | -------- |
+| 478  | 4-7-8 Breathing | 478      | 4        | 7      | 8        |
+| box  | Box Breathing | box       | 4        | 4      | 4        |
+
 ### breathing_sessions
 
 ```sql
 CREATE TABLE breathing_sessions (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
-    device_uuid TEXT,                      -- for anonymous users
-    technique   TEXT NOT NULL,             -- '478' or 'box'
+    device_uuid TEXT,                       -- for anonymous users
+    exercise_id UUID REFERENCES breathing_exercises(id) ON DELETE SET NULL,
+    technique   TEXT NOT NULL,              -- '478' or 'box'
     breaths     INTEGER NOT NULL,
-    duration_s  INTEGER NOT NULL,          -- total seconds
+    duration_s  INTEGER NOT NULL,           -- total seconds
     completed   BOOLEAN DEFAULT FALSE,
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 ```
+
+One ownership marker must be set (`user_id` XOR `device_uuid`). Phase 6.4
+records sessions for registered users only, so `user_id` is set and
+`device_uuid` stays NULL. Migration `016_create_breathing_exercises` adds the
+`exercise_id` column (and a matching index) to this table.
 
 ---
 
@@ -411,6 +442,7 @@ Migrations live in `backend/db/migrations/` and are numbered sequentially:
 013_create_circle_members.sql
 014_create_bookings.sql
 015_create_booking_overlap_guard.sql
+016_create_breathing_exercises.sql
 ```
 
 We run them with `golang-migrate`. Each file contains both an `up` migration

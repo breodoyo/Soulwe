@@ -14,6 +14,7 @@ import (
 	"Backend/internal/anon"
 	"Backend/internal/auth"
 	"Backend/internal/bookings"
+	"Backend/internal/breathing"
 	"Backend/internal/circles"
 	"Backend/internal/config"
 	"Backend/internal/dashboard"
@@ -36,7 +37,7 @@ func TestHealthEndpoints(t *testing.T) {
 	// The pool is only required for the /readyz endpoint, and the auth handler
 	// is only used for /api/v1/auth/* routes. Neither is exercised by these
 	// unit tests, so both are omitted here.
-	router := setupRouter(cfg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	router := setupRouter(cfg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	t.Run("Root /health returns 200 OK", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, "/health", nil)
@@ -135,7 +136,7 @@ func TestAuthMeEndpoint(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil, nil, nil, nil, nil)
+	}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	t.Run("without a token returns 401", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
@@ -236,7 +237,7 @@ func TestAnonymousPromoteEndpoint(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, nil, user.NewHandler(nil), tokenManager, anonH, anonSvc, nil, nil, nil, nil, nil, nil)
+	}, nil, user.NewHandler(nil), tokenManager, anonH, anonSvc, nil, nil, nil, nil, nil, nil, nil)
 
 	t.Run("promote without a token returns 401", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/anonymous/promote", nil)
@@ -294,7 +295,7 @@ func TestAnonymousPromoteEndpoint(t *testing.T) {
 			Env:         "test",
 			GinMode:     "test",
 			FrontendURL: "http://localhost:5173",
-		}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil, nil, nil, nil, nil)
+		}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/anonymous/promote", nil)
 		w := httptest.NewRecorder()
@@ -465,6 +466,35 @@ func (s *stubBookingService) Cancel(context.Context, string, string) (*bookings.
 	return s.booking, s.err
 }
 
+// stubBreathingService implements breathing.Service by embedding the
+// interface and overriding every method with canned values, so the Phase 6.4
+// router wiring can be exercised with the registered-JWT middleware and no
+// database.
+type stubBreathingService struct {
+	breathing.Service
+	exercise     *breathing.Exercise
+	exerciseList []breathing.Exercise
+	session      *breathing.Session
+	sessionList  []breathing.Session
+	err          error
+}
+
+func (s *stubBreathingService) ListExercises(context.Context, int) ([]breathing.Exercise, error) {
+	return s.exerciseList, s.err
+}
+
+func (s *stubBreathingService) GetExercise(context.Context, string) (*breathing.Exercise, error) {
+	return s.exercise, s.err
+}
+
+func (s *stubBreathingService) RecordSession(context.Context, string, string, int, int, bool) (*breathing.Session, error) {
+	return s.session, s.err
+}
+
+func (s *stubBreathingService) ListSessions(context.Context, string, int) ([]breathing.Session, error) {
+	return s.sessionList, s.err
+}
+
 // TestPhase5JournalRoutes verifies the Phase 5 wiring: every journal route
 // exists behind the registered-user AuthRequired middleware, rejects missing
 // and anonymous tokens, accepts a valid registered JWT, and is absent when the
@@ -492,7 +522,7 @@ func TestPhase5JournalRoutes(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil, journal.NewHandler(journalSvc), nil, nil, nil)
+	}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil, journal.NewHandler(journalSvc), nil, nil, nil, nil)
 
 	journalCases := []struct {
 		name   string
@@ -574,7 +604,7 @@ func TestPhase5JournalRoutes(t *testing.T) {
 			Env:         "test",
 			GinMode:     "test",
 			FrontendURL: "http://localhost:5173",
-		}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 		for _, tc := range journalCases {
 			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
@@ -638,7 +668,7 @@ func TestPhase4WellnessRoutes(t *testing.T) {
 		FrontendURL: "http://localhost:5173",
 	}, nil,
 		user.NewHandler(userSvc), tokenManager, nil, nil,
-		mood.NewHandler(moodSvc), dashboard.NewHandler(dashSvc), nil, nil, nil, nil)
+		mood.NewHandler(moodSvc), dashboard.NewHandler(dashSvc), nil, nil, nil, nil, nil)
 
 	jwt, err := tokenManager.SignAccessToken(registeredID)
 	if err != nil {
@@ -763,7 +793,7 @@ func TestPhase4WellnessRoutes(t *testing.T) {
 			Env:         "test",
 			GinMode:     "test",
 			FrontendURL: "http://localhost:5173",
-		}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 		for _, tc := range registerCases {
 			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
@@ -780,7 +810,7 @@ func TestPhase4WellnessRoutes(t *testing.T) {
 			Env:         "test",
 			GinMode:     "test",
 			FrontendURL: "http://localhost:5173",
-		}, nil, user.NewHandler(userSvc), tokenManager, nil, nil, nil, nil, nil, nil, nil, nil)
+		}, nil, user.NewHandler(userSvc), tokenManager, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 		for _, tc := range []struct{ method, path string }{
 			{http.MethodGet, "/api/v1/moods"},
@@ -847,7 +877,7 @@ func TestPhase6CircleRoutes(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, nil, user.NewHandler(nil), tokenManager, nil, anonSvc, nil, nil, nil, circles.NewHandler(circleSvc), nil, nil)
+	}, nil, user.NewHandler(nil), tokenManager, nil, anonSvc, nil, nil, nil, circles.NewHandler(circleSvc), nil, nil, nil)
 
 	circleCases := []struct {
 		name   string
@@ -940,7 +970,7 @@ func TestPhase6CircleRoutes(t *testing.T) {
 			Env:         "test",
 			GinMode:     "test",
 			FrontendURL: "http://localhost:5173",
-		}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 		for _, tc := range circleCases {
 			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
@@ -990,7 +1020,7 @@ func TestPhase6TherapistDiscoveryRoutes(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, nil, nil, tokenManager, nil, nil, nil, nil, nil, nil, therapists.NewHandler(therapistSvc), nil)
+	}, nil, nil, tokenManager, nil, nil, nil, nil, nil, nil, therapists.NewHandler(therapistSvc), nil, nil)
 
 	therapistCases := []struct {
 		name string
@@ -1069,7 +1099,7 @@ func TestPhase6TherapistDiscoveryRoutes(t *testing.T) {
 			Env:         "test",
 			GinMode:     "test",
 			FrontendURL: "http://localhost:5173",
-		}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 		for _, tc := range therapistCases {
 			req, _ := http.NewRequest(http.MethodGet, tc.path, nil)
@@ -1123,7 +1153,7 @@ func TestPhase6BookingRoutes(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, nil, nil, tokenManager, nil, nil, nil, nil, nil, nil, nil, bookings.NewHandler(bookingSvc))
+	}, nil, nil, tokenManager, nil, nil, nil, nil, nil, nil, nil, bookings.NewHandler(bookingSvc), nil)
 
 	bookingCases := []struct {
 		name, method, path, body string
@@ -1211,7 +1241,7 @@ func TestPhase6BookingRoutes(t *testing.T) {
 				Env:         "test",
 				GinMode:     "test",
 				FrontendURL: "http://localhost:5173",
-			}, nil, nil, tokenManager, nil, nil, nil, nil, nil, nil, nil, nil)
+			}, nil, nil, tokenManager, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
 			req.Header.Set("Authorization", "Bearer x")
@@ -1219,6 +1249,167 @@ func TestPhase6BookingRoutes(t *testing.T) {
 			sparseRouter.ServeHTTP(w, req)
 			if w.Code != http.StatusNotFound {
 				t.Errorf("%s: expected 404 without the bookings stack, got %d", tc.name, w.Code)
+			}
+		}
+	})
+}
+
+// TestPhase6BreathingRoutes verifies the Phase 6.4 wiring: all breathing
+// routes live behind the registered-user AuthRequired middleware, reject
+// missing and anonymous tokens, accept a valid registered JWT, and are absent
+// when the breathing stack is not wired (404, not a handler decision).
+func TestPhase6BreathingRoutes(t *testing.T) {
+	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
+	if err != nil {
+		t.Fatalf("auth.NewManager returned error: %v", err)
+	}
+
+	const (
+		userID     = "11111111-1111-1111-1111-111111111111"
+		exerciseID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+		anonToken  = "raw-anonymous-token-phase-6"
+	)
+	scheduledAt := time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC)
+	exercise := &breathing.Exercise{
+		ID:          exerciseID,
+		Slug:        "478",
+		Name:        "4-7-8 Breathing",
+		Description: "Inhale 4s, hold 7s, exhale 8s",
+		Technique:   "478",
+		InhaleS:     4,
+		HoldS:       7,
+		ExhaleS:     8,
+	}
+	name := "4-7-8 Breathing"
+	exID := exerciseID
+	session := &breathing.Session{
+		ID:         "22222222-2222-2222-2222-222222222222",
+		UserID:     userID,
+		ExerciseID: &exID,
+		Technique:  "478",
+		Name:       &name,
+		Breaths:    5,
+		DurationS:  95,
+		Completed:  true,
+		CreatedAt:  scheduledAt,
+	}
+	breathingSvc := &stubBreathingService{
+		exercise:     exercise,
+		exerciseList: []breathing.Exercise{*exercise},
+		session:      session,
+		sessionList:  []breathing.Session{*session},
+	}
+
+	router := setupRouter(&config.Config{
+		Env:         "test",
+		GinMode:     "test",
+		FrontendURL: "http://localhost:5173",
+	}, nil, nil, tokenManager, nil, nil, nil, nil, nil, nil, nil, nil, breathing.NewHandler(breathingSvc))
+
+	breathingCases := []struct {
+		name, method, path, body string
+	}{
+		{"list exercises", http.MethodGet, "/api/v1/breathing/exercises", ""},
+		{"get exercise", http.MethodGet, "/api/v1/breathing/exercises/" + exerciseID, ""},
+		{"record session", http.MethodPost, "/api/v1/breathing/sessions",
+			`{"exercise_id":"` + exerciseID + `","breaths":5,"duration_s":95,"completed":true}`},
+		{"list sessions", http.MethodGet, "/api/v1/breathing/sessions", ""},
+	}
+
+	t.Run("routes reject missing tokens", func(t *testing.T) {
+		for _, tc := range breathingCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != http.StatusUnauthorized {
+				t.Errorf("%s: expected 401 without a token, got %d: %s", tc.name, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("routes reject anonymous-format tokens", func(t *testing.T) {
+		for _, tc := range breathingCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer "+anonToken)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != http.StatusUnauthorized {
+				t.Errorf("%s: expected 401 for an anonymous token, got %d: %s", tc.name, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("registered JWT reaches every breathing route", func(t *testing.T) {
+		jwt, err := tokenManager.SignAccessToken(userID)
+		if err != nil {
+			t.Fatalf("SignAccessToken returned error: %v", err)
+		}
+		for _, tc := range breathingCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			if tc.method == http.MethodPost {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			req.Header.Set("Authorization", "Bearer "+jwt)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if tc.method == http.MethodPost && w.Code != http.StatusCreated {
+				t.Errorf("%s: expected 201, got %d: %s", tc.name, w.Code, w.Body.String())
+			}
+			if tc.method != http.MethodPost && w.Code != http.StatusOK {
+				t.Errorf("%s: expected 200, got %d: %s", tc.name, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("breathing responses never expose owner or auth material", func(t *testing.T) {
+		jwt, err := tokenManager.SignAccessToken(userID)
+		if err != nil {
+			t.Fatalf("SignAccessToken returned error: %v", err)
+		}
+		for _, tc := range []struct{ name, path string }{
+			{"exercises", "/api/v1/breathing/exercises"},
+			{"sessions", "/api/v1/breathing/sessions"},
+		} {
+			req, _ := http.NewRequest(http.MethodGet, tc.path, nil)
+			req.Header.Set("Authorization", "Bearer "+jwt)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("%s: expected 200, got %d: %s", tc.name, w.Code, w.Body.String())
+			}
+			body := w.Body.String()
+			for _, leak := range []string{"user_id", "password", "full_name", "email", "credentials"} {
+				if strings.Contains(body, leak) {
+					t.Errorf("%s: response must never include %q: %s", tc.name, leak, body)
+				}
+			}
+			wants := []string{`"technique":"478"`}
+			if tc.name == "exercises" {
+				wants = append(wants, `"slug":"478"`)
+			}
+			for _, want := range wants {
+				if !strings.Contains(body, want) {
+					t.Errorf("%s: response missing %q: %s", tc.name, want, body)
+				}
+			}
+		}
+	})
+
+	t.Run("breathing routes are absent without the breathing stack", func(t *testing.T) {
+		for _, tc := range breathingCases {
+			// Spare router without the breathing handler.
+			sparseRouter := setupRouter(&config.Config{
+				Env:         "test",
+				GinMode:     "test",
+				FrontendURL: "http://localhost:5173",
+			}, nil, nil, tokenManager, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer x")
+			w := httptest.NewRecorder()
+			sparseRouter.ServeHTTP(w, req)
+			if w.Code != http.StatusNotFound {
+				t.Errorf("%s: expected 404 without the breathing stack, got %d", tc.name, w.Code)
 			}
 		}
 	})
