@@ -38,6 +38,12 @@ const BreatheIcon = () => (
     <line x1="15" y1="9" x2="15.01" y2="9" />
   </svg>
 )
+const ProfileIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="8" r="4" />
+    <path d="M4 20v-1a7 7 0 0 1 7-7h2a7 7 0 0 1 7 7v1" />
+  </svg>
+)
 const LogoutIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -52,6 +58,7 @@ const tabs = [
   { to: '/circle',    label: 'Circle',    swahili: 'Duara',   Icon: CircleIcon    },
   { to: '/therapist', label: 'Therapist', swahili: 'Mshauri', Icon: TherapistIcon },
   { to: '/breathe',   label: 'Breathe',   swahili: 'Pumzika', Icon: BreatheIcon   },
+  { to: '/profile',   label: 'Profile',   swahili: 'Wasifu',  Icon: ProfileIcon   },
 ]
 
 const breadcrumbLabels: Record<string, string> = {
@@ -60,6 +67,7 @@ const breadcrumbLabels: Record<string, string> = {
   '/circle':    'Circle',
   '/therapist': 'Therapist',
   '/breathe':   'Breathe',
+  '/profile':   'Profile',
 }
 
 function Breadcrumbs() {

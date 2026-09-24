@@ -9,6 +9,7 @@ import JournalPage from '@/pages/JournalPage'
 import CirclePage from '@/pages/CirclePage'
 import TherapistPage from '@/pages/TherapistPage'
 import BreathePage from '@/pages/BreathePage'
+import ProfilePage from '@/pages/ProfilePage'
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/journal"   element={<RequireAuth><JournalPage /></RequireAuth>} />
         <Route path="/therapist" element={<RequireAuth><TherapistPage /></RequireAuth>} />
         <Route path="/breathe"   element={<RequireAuth><BreathePage /></RequireAuth>} />
+        <Route path="/profile"   element={<RequireAuth><ProfilePage /></RequireAuth>} />
 
         {/* Anonymous-only feature (circles). The anonymous-session flow is a
             later Phase 7 sub-phase; the page stays reachable for now. */}

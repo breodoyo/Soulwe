@@ -11,10 +11,15 @@
 
 import type {
   ApiErrorBody,
+  CreateMoodPayload,
+  DashboardResponse,
   LoginResponse,
   MeResponse,
+  MoodLog,
+  MoodsResponse,
   ProfileResponse,
   RegisterResponse,
+  UpdateProfilePayload,
 } from '@/types'
 import { ApiError } from '@/types'
 
@@ -173,6 +178,35 @@ export const api = {
     profile: (): Promise<ProfileResponse> => request<ProfileResponse>('/users/me'),
   },
 
-  // Future domain clients (journal, mood, circles, therapists, breathing) plug
+  users: {
+    // GET /users/me — the authenticated user's profile.
+    me: (): Promise<ProfileResponse> => request<ProfileResponse>('/users/me'),
+
+    // PATCH /users/me — updates display_name/language_pref (omitted fields are
+    // left untouched; a blank display_name clears the stored name).
+    updateProfile: (payload: UpdateProfilePayload): Promise<ProfileResponse> =>
+      request<ProfileResponse>('/users/me', { method: 'PATCH', body: payload }),
+  },
+
+  moods: {
+    // GET /moods — the user's check-ins, newest first. `limit` is optional
+    // (backend default 20 / max 50).
+    list: (params?: { limit?: number }): Promise<MoodsResponse> => {
+      const query = params?.limit ? `?limit=${params.limit}` : ''
+      return request<MoodsResponse>(`/moods${query}`)
+    },
+
+    // POST /moods — records a mood check-in.
+    create: (payload: CreateMoodPayload): Promise<MoodLog> =>
+      request<MoodLog>('/moods', { method: 'POST', body: payload }),
+  },
+
+  dashboard: {
+    // GET /dashboard — the user's wellness snapshot (profile, latest + recent
+    // moods, and total check-in count).
+    get: (): Promise<DashboardResponse> => request<DashboardResponse>('/dashboard'),
+  },
+
+  // Future domain clients (journal, circles, therapists, breathing) plug
   // in here using the same `request` helper.
 }

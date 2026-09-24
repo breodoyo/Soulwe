@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BookOpen, Users, Wind, UserCheck, CloudRain, Minus, TrendingUp, Leaf, Heart, type LucideIcon } from 'lucide-react'
+import { api } from '@/lib/api'
+import { isApiError, type DashboardResponse, type Mood, type MoodLog } from '@/types'
 import styles from './HomePage.module.css'
-
-type Mood = 'Heavy' | 'Okay' | 'Better' | 'At peace' | 'Grateful'
 
 const moods: { Icon: LucideIcon; label: Mood }[] = [
   { Icon: CloudRain, label: 'Heavy'    },
@@ -37,24 +37,115 @@ const affirmations: Record<Mood, { text: string; attribution: string }> = {
 }
 
 const quickCards = [
-  { to: '/journal',   Icon: BookOpen,  label: 'Write in journal', sub: '3-day streak — keep going', color: 'clay'  },
-  { to: '/circle',    Icon: Users,     label: 'Join a circle',    sub: '12 people online now',       color: 'sage'  },
-  { to: '/breathe',   Icon: Wind,      label: 'Breathe',          sub: '2-minute calm reset',        color: 'earth' },
-  { to: '/therapist', Icon: UserCheck, label: 'Find a therapist', sub: 'Starts from KES 500',        color: 'clay'  },
+  { to: '/journal',   Icon: BookOpen,  label: 'Write in journal', sub: 'Your private space', color: 'clay'  },
+  { to: '/circle',    Icon: Users,     label: 'Join a circle',    sub: 'Talk with others',    color: 'sage'  },
+  { to: '/breathe',   Icon: Wind,      label: 'Breathe',          sub: 'Calm reset',          color: 'earth' },
+  { to: '/therapist', Icon: UserCheck, label: 'Find a therapist', sub: 'Book a session',      color: 'clay'  },
 ]
 
-export default function HomePage() {
-  const [mood, setMood] = useState<Mood | null>(null)
-  const navigate = useNavigate()
+function formatLoggedAt(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
 
-  const affirmation = mood ? affirmations[mood] : affirmations['Grateful']
+export default function HomePage() {
+  const navigate = useNavigate()
+  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
+  const [checkins, setCheckins] = useState<MoodLog[]>([])
+  const [activeMood, setActiveMood] = useState<Mood | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [savedMood, setSavedMood] = useState<Mood | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [feedError, setFeedError] = useState<string | null>(null)
+  const [tick, setTick] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    setFeedError(null)
+    Promise.all([api.dashboard.get(), api.moods.list({ limit: 12 })])
+      .then(([dash, moodsRes]) => {
+        if (cancelled) return
+        setDashboard(dash)
+        setCheckins(moodsRes.moods)
+        const latest = dash.latest_mood
+        if (latest) setActiveMood(prev => prev ?? latest.mood)
+      })
+      .catch(err => {
+        if (cancelled) return
+        setFeedError(
+          isApiError(err)
+            ? err.message
+            : 'There was a problem loading your space. Please try again.',
+        )
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [tick])
+
+  const handleMoodSelect = async (label: Mood) => {
+    if (saving) return
+    setActiveMood(label)
+    setSaveError(null)
+    setSavedMood(null)
+    setSaving(true)
+    try {
+      const log = await api.moods.create({ mood: label })
+      setCheckins(prev => [log, ...prev])
+      setSavedMood(label)
+      setDashboard(prev =>
+        prev
+          ? {
+              ...prev,
+              latest_mood: log,
+              recent_moods: [log, ...prev.recent_moods].slice(0, 5),
+              mood_checkins_count: prev.mood_checkins_count + 1,
+            }
+          : prev,
+      )
+    } catch (err) {
+      setSaveError(
+        isApiError(err)
+          ? err.message
+          : 'We could not save your mood right now. Please try again.',
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const affirmation = activeMood ? affirmations[activeMood] : affirmations['Grateful']
+  const member = dashboard?.user ?? null
+  const checkinCount = dashboard?.mood_checkins_count ?? checkins.length
+  const latestMood = checkins[0] ?? null
+  const lastCheckin = latestMood ? formatLoggedAt(latestMood.logged_at) : '—'
+  const recent = checkins.slice(0, 5)
+
+  if (feedError && !dashboard) {
+    return (
+      <div className={styles.page}>
+        <section className={styles.errorPanel} role="alert">
+          <p className={styles.errorEyebrow}>Something went wrong</p>
+          <p className={styles.errorText}>{feedError}</p>
+          <button className={styles.retryBtn} onClick={() => setTick(t => t + 1)}>
+            Try again
+          </button>
+        </section>
+      </div>
+    )
+  }
 
   return (
     <div className={styles.page}>
 
       {/* Greeting band */}
       <section className={styles.greetBand} aria-label="Welcome">
-        <p className={styles.greetEyebrow}>Karibu — Welcome back</p>
+        <p className={styles.greetEyebrow}>
+          {member && member.display_name
+            ? `Karibu, ${member.display_name}`
+            : 'Karibu — Welcome back'}
+        </p>
         <h1 className={styles.greetHeading}>
           Nafsi yangu,<br />
           <em>how are you today?</em>
@@ -68,9 +159,10 @@ export default function HomePage() {
           {moods.map(({ Icon, label }) => (
             <button
               key={label}
-              className={[styles.moodBtn, mood === label ? styles.moodBtnActive : ''].join(' ')}
-              onClick={() => setMood(label)}
-              aria-pressed={mood === label}
+              className={[styles.moodBtn, activeMood === label ? styles.moodBtnActive : ''].join(' ')}
+              onClick={() => handleMoodSelect(label)}
+              disabled={saving}
+              aria-pressed={activeMood === label}
               aria-label={`Feeling ${label}`}
             >
               <span className={styles.moodEmoji} aria-hidden="true">
@@ -80,6 +172,16 @@ export default function HomePage() {
             </button>
           ))}
         </div>
+
+        {/* Mood save status */}
+        {(saving || savedMood !== null || saveError) && (
+          <p
+            className={saveError ? styles.moodError : styles.moodSaved}
+            role={saveError ? 'alert' : 'status'}
+          >
+            {saving ? 'Saving your mood…' : saveError ?? 'Saved — how you are feeling today.'}
+          </p>
+        )}
       </section>
 
       {/* Affirmation */}
@@ -112,22 +214,41 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Streak / stats */}
+      {/* Activity summary */}
       <section className={styles.statsRow} aria-label="Your activity">
         <div className={styles.statItem}>
-          <span className={styles.statNum}>3</span>
-          <span className={styles.statLabel}>Day streak</span>
+          <span className={styles.statNum}>{checkinCount}</span>
+          <span className={styles.statLabel}>Mood check-ins</span>
         </div>
         <div className={styles.statDivider} aria-hidden="true" />
         <div className={styles.statItem}>
-          <span className={styles.statNum}>7</span>
-          <span className={styles.statLabel}>Journal entries</span>
+          <span className={styles.statNum}>{latestMood ? latestMood.mood : '—'}</span>
+          <span className={styles.statLabel}>Latest mood</span>
         </div>
         <div className={styles.statDivider} aria-hidden="true" />
         <div className={styles.statItem}>
-          <span className={styles.statNum}>4</span>
-          <span className={styles.statLabel}>Breathe sessions</span>
+          <span className={styles.statNum}>{lastCheckin}</span>
+          <span className={styles.statLabel}>Last check-in</span>
         </div>
+      </section>
+
+      {/* Recent check-ins */}
+      <section aria-label="Recent check-ins">
+        <p className={styles.sectionLabel}>Recent check-ins</p>
+        {recent.length === 0 ? (
+          <p className={styles.emptyNote}>
+            No check-ins yet — tap a mood above to start.
+          </p>
+        ) : (
+          <ul className={styles.checkinList}>
+            {recent.map(log => (
+              <li key={log.id} className={styles.checkinItem}>
+                <span className={styles.checkinMood}>{log.mood}</span>
+                <span className={styles.checkinDate}>{formatLoggedAt(log.logged_at)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
     </div>

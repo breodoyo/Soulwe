@@ -104,6 +104,23 @@
   color: var(--clay-muted);
 }
 
+.moodBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.moodSaved {
+  font-size: var(--text-xs);
+  color: rgba(250, 246, 241, 0.75);
+  margin-top: var(--space-3);
+}
+
+.moodError {
+  font-size: var(--text-xs);
+  color: #FCA5A5;
+  margin-top: var(--space-3);
+}
+
 /* ── Affirmation ── */
 .affirmation {
   background: var(--night-mid);
@@ -233,6 +250,85 @@
   width: 1px;
   height: 36px;
   background: var(--border);
+}
+
+/* ── Recent check-ins ── */
+.emptyNote {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  background: var(--bg-mid);
+  border: 1px dashed var(--border-soft);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.checkinList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.checkinItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--bg-mid);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+
+.checkinMood {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.checkinDate {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* ── Feed error ── */
+.errorPanel {
+  background: var(--bg-mid);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.errorEyebrow {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #B91C1C;
+}
+
+.errorText {
+  font-size: var(--text-sm);
+  color: var(--ink-mid);
+  line-height: 1.5;
+}
+
+.retryBtn {
+  margin-top: var(--space-2);
+  background: var(--sun);
+  color: #fff;
+  font-weight: 600;
+  font-size: var(--text-sm);
+  padding: 10px var(--space-5);
+  border-radius: var(--radius-full);
+  transition: background var(--duration-base) var(--ease);
+}
+
+.retryBtn:hover {
+  background: var(--sun-deep);
 }
 
 /* ── Desktop ── */
