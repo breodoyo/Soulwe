@@ -1,4 +1,5 @@
 import { Outlet, NavLink, useLocation, Link } from 'react-router-dom'
+import { useAuth } from '@/auth/AuthContext'
 import styles from './AppShell.module.css'
 
 const HomeIcon = () => (
@@ -37,6 +38,13 @@ const BreatheIcon = () => (
     <line x1="15" y1="9" x2="15.01" y2="9" />
   </svg>
 )
+const LogoutIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+    <polyline points="16 17 21 12 16 7" />
+    <line x1="21" y1="12" x2="9" y2="12" />
+  </svg>
+)
 
 const tabs = [
   { to: '/home',      label: 'Home',      swahili: 'Nyumba',  Icon: HomeIcon      },
@@ -73,6 +81,8 @@ function Breadcrumbs() {
 }
 
 export default function AppShell() {
+  const { logout } = useAuth()
+
   return (
     <div className={styles.shell}>
 
@@ -86,10 +96,16 @@ export default function AppShell() {
           </div>
           <span className={styles.brandName}>Soulwe</span>
         </Link>
-        <span className={styles.anonBadge} aria-label="You are browsing anonymously">
-          <span className={styles.anonDot} aria-hidden="true" />
-          Anonymous
-        </span>
+        <div className={styles.topnavActions}>
+          <span className={styles.anonBadge} aria-label="You are browsing anonymously">
+            <span className={styles.anonDot} aria-hidden="true" />
+            Anonymous
+          </span>
+          <button className={styles.logoutBtn} onClick={logout} aria-label="Log out">
+            <LogoutIcon />
+            <span>Log out</span>
+          </button>
+        </div>
       </header>
 
       {/* Breadcrumbs */}
@@ -129,6 +145,14 @@ export default function AppShell() {
             <span className={styles.tabSwahili}>{swahili}</span>
           </NavLink>
         ))}
+
+        {/* Desktop sidebar logout */}
+        <button className={styles.sidebarLogout} onClick={logout} aria-label="Log out">
+          <span className={styles.tabIcon} aria-hidden="true">
+            <LogoutIcon />
+          </span>
+          <span className={styles.tabLabel}>Log out</span>
+        </button>
 
       </nav>
 

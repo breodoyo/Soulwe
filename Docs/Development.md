@@ -128,8 +128,13 @@ cp .env.example .env.local
 
 Edit `frontend/.env.local`:
 ```env
-VITE_API_URL=http://localhost:8080
+VITE_API_BASE_URL=http://localhost:8080
 ```
+
+`VITE_API_BASE_URL` is the origin (scheme + host + port) of the Soulwe API.
+It is used as the base for every `/api/v1` call and can be overridden
+per-environment (e.g. the production URL) without changing application code.
+When it is unset, the client falls back to `http://localhost:8080`.
 
 Run the dev server:
 ```bash
@@ -235,4 +240,4 @@ no extra spaces or quotes.
 
 **Frontend shows blank page**
 Open browser devtools (F12) → Console tab. The error message there will tell
-you what's wrong. Common cause: `VITE_API_URL` is pointing at the wrong port.
+you what's wrong. Common cause: `VITE_API_BASE_URL` is pointing at the wrong port.

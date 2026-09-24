@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BookOpen, Users, Wind, UserCheck, CloudRain, Minus, TrendingUp, Leaf, Heart } from 'lucide-react'
+import { BookOpen, Users, Wind, UserCheck, CloudRain, Minus, TrendingUp, Leaf, Heart, type LucideIcon } from 'lucide-react'
 import styles from './HomePage.module.css'
 
 type Mood = 'Heavy' | 'Okay' | 'Better' | 'At peace' | 'Grateful'
 
-const moods: { Icon: React.ElementType; label: Mood }[] = [
+const moods: { Icon: LucideIcon; label: Mood }[] = [
   { Icon: CloudRain, label: 'Heavy'    },
   { Icon: Minus,     label: 'Okay'     },
   { Icon: TrendingUp,label: 'Better'   },
@@ -65,18 +65,20 @@ export default function HomePage() {
 
         {/* Mood picker */}
         <div className={styles.moodRow} role="group" aria-label="How are you feeling?">
-          {moods.map(({ emoji, label }) => (
-  <button
-    key={label}
-    className={[styles.moodBtn, mood === label ? styles.moodBtnActive : ''].join(' ')}
-    onClick={() => setMood(label)}
-    aria-pressed={mood === label}
-    aria-label={`Feeling ${label}`}
-  >
-    <span className={styles.moodEmoji} aria-hidden="true">{emoji}</span>
-    <span className={styles.moodLabel}>{label}</span>
-  </button>
-))}
+          {moods.map(({ Icon, label }) => (
+            <button
+              key={label}
+              className={[styles.moodBtn, mood === label ? styles.moodBtnActive : ''].join(' ')}
+              onClick={() => setMood(label)}
+              aria-pressed={mood === label}
+              aria-label={`Feeling ${label}`}
+            >
+              <span className={styles.moodEmoji} aria-hidden="true">
+                <Icon size={20} strokeWidth={1.8} />
+              </span>
+              <span className={styles.moodLabel}>{label}</span>
+            </button>
+          ))}
         </div>
       </section>
 

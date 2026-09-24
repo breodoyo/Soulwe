@@ -1,218 +1,178 @@
 // Central API client for Soulwe.
-
+//
+// The backend serves every route under /api/v1 (see Backend/cmd/server/main.go).
+// The origin (scheme + host + port) is configured once with the
+// VITE_API_BASE_URL environment variable (see .env.example); it falls back to
+// the local development backend when unset.
+//
 // Usage:
 //   import { api } from '@/lib/api'
-//   const entries = await api.journal.list()
+//   const { user } = await api.auth.login(email, password)
 
 import type {
-  AuthTokens, CurrentUser,
-  CreateEntryPayload, JournalEntry, PaginatedEntries,
-  Mood, MoodLog,
-  Circle, CircleList, CircleMessage, MessageList,
-  Therapist, TherapistList, BookingRequest, Booking,
-  BreathTechnique, BreathingSession,
+  ApiErrorBody,
+  LoginResponse,
+  MeResponse,
+  ProfileResponse,
+  RegisterResponse,
 } from '@/types'
+import { ApiError } from '@/types'
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+const API_PREFIX = '/api/v1'
+
+const ACCESS_TOKEN_KEY = 'sw_access_token'
 
 // ── Token management ─────────────────────────────────────────────────────────
+// The access token lives in localStorage. It is attached to every
+// authenticated request and is never rendered in the UI or logged.
 
-function getToken(): string | null {
-  return localStorage.getItem('sw_access_token')
+export function getAccessToken(): string | null {
+  return localStorage.getItem(ACCESS_TOKEN_KEY)
 }
 
-function setTokens(tokens: AuthTokens): void {
-  localStorage.setItem('sw_access_token', tokens.access_token)
-  if (tokens.refresh_token) {
-    localStorage.setItem('sw_refresh_token', tokens.refresh_token)
-  }
+export function hasAccessToken(): boolean {
+  return localStorage.getItem(ACCESS_TOKEN_KEY) !== null
 }
 
-function clearTokens(): void {
-  localStorage.removeItem('sw_access_token')
-  localStorage.removeItem('sw_refresh_token')
+export function setAccessToken(token: string): void {
+  localStorage.setItem(ACCESS_TOKEN_KEY, token)
 }
 
-// ── Core fetch wrapper ────────────────────────────────────────────────────────
+export function clearAuth(): void {
+  localStorage.removeItem(ACCESS_TOKEN_KEY)
+}
+
+// Registered by the auth provider so that any authenticated request that is
+// rejected with 401 (expired/invalid token) can return the app to the
+// unauthenticated state immediately.
+type UnauthorizedHandler = () => void
+
+let unauthorizedHandler: UnauthorizedHandler | null = null
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  unauthorizedHandler = handler
+}
+
+// ── Request options ──────────────────────────────────────────────────────────
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   body?: unknown
-  anonymous?: boolean
+  // auth=false labels public endpoints (register, login) that must not carry
+  // the Authorization header even when a token is present.
+  auth?: boolean
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, anonymous = false } = options
+  const { method = 'GET', body, auth = true } = options
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (auth) {
+    const token = getAccessToken()
+    if (token) headers['Authorization'] = `Bearer ${token}`
   }
 
-  if (!anonymous) {
-    const token = getToken()
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}${API_PREFIX}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+  } catch {
+    throw new ApiError(
+      0,
+      'NETWORK_ERROR',
+      'Could not reach the Soulwe server. Please check your connection and try again.',
+    )
   }
 
-  const response = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
-
-  // Handle 401 — try to refresh the token once
-  if (response.status === 401 && !anonymous) {
-    const refreshed = await tryRefreshToken()
-    if (refreshed) {
-      // Retry the original request with the new token
-      return request<T>(path, options)
-    } else {
-      clearTokens()
-      // In Phase 4 we'll redirect to login here
-      throw new Error('Session expired. Please log in again.')
-    }
+  // Expired or invalid credentials on an authenticated request: clear the
+  // stored token and bounce through the normal auth flow.
+  if (response.status === 401 && auth) {
+    clearAuth()
+    unauthorizedHandler?.()
+    throw await readError(response)
   }
 
-  // Parse the response
-  const data = await response.json()
+  if (response.status === 204) {
+    return undefined as T
+  }
 
   if (!response.ok) {
-    // Throw the API error so callers can handle it
-    throw data
+    throw await readError(response)
   }
-
-  return data as T
-}
-
-async function tryRefreshToken(): Promise<boolean> {
-  const refreshToken = localStorage.getItem('sw_refresh_token')
-  if (!refreshToken) return false
 
   try {
-    const data = await fetch(`${BASE_URL}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    }).then(r => r.json())
-
-    if (data.access_token) {
-      localStorage.setItem('sw_access_token', data.access_token)
-      return true
-    }
-    return false
+    return (await response.json()) as T
   } catch {
-    return false
+    throw new ApiError(
+      500,
+      'INTERNAL_SERVER_ERROR',
+      'The server returned an unexpected response. Please try again.',
+    )
   }
 }
 
-// ── API methods ───────────────────────────────────────────────────────────────
+// Turns a failed response into a user-safe ApiError. The backend already keeps
+// its messages free of internal details; as a safety net, 5xx responses always
+// fall back to a generic message regardless of the body.
+async function readError(response: Response): Promise<ApiError> {
+  if (response.status >= 500) {
+    return new ApiError(
+      response.status,
+      'INTERNAL_SERVER_ERROR',
+      'Something went wrong on our end. Please try again.',
+    )
+  }
+
+  let code = 'UNKNOWN'
+  let message = 'Something went wrong. Please try again.'
+  let field: string | undefined
+
+  try {
+    const body = (await response.json()) as ApiErrorBody
+    if (body?.error) {
+      code = body.error.code || code
+      message = body.error.message || message
+      field = body.error.field
+    }
+  } catch {
+    // Non-JSON body — keep the generic fallbacks above.
+  }
+
+  return new ApiError(response.status, code, message, field)
+}
+
+// ── API methods ──────────────────────────────────────────────────────────────
 
 export const api = {
-
   auth: {
-    register: (email: string, password: string) =>
-      request<{ access_token: string; refresh_token: string; user: CurrentUser }>(
-        '/auth/register', { method: 'POST', body: { email, password }, anonymous: true }
-      ).then(data => { setTokens(data); return data }),
-
-    login: (email: string, password: string) =>
-      request<{ access_token: string; refresh_token: string; user: CurrentUser }>(
-        '/auth/login', { method: 'POST', body: { email, password }, anonymous: true }
-      ).then(data => { setTokens(data); return data }),
-
-    anonymous: () =>
-      request<{ access_token: string; anon_name: string }>(
-        '/auth/anonymous', { method: 'POST', anonymous: true }
-      ).then(data => {
-        localStorage.setItem('sw_access_token', data.access_token)
-        return data
+    register: (email: string, password: string): Promise<RegisterResponse> =>
+      request<RegisterResponse>('/auth/register', {
+        method: 'POST',
+        body: { email, password },
+        auth: false,
       }),
 
-    logout: () => clearTokens(),
-  },
-
-  journal: {
-    list: (cursor?: string) => {
-      const params = cursor ? `?before=${encodeURIComponent(cursor)}` : ''
-      return request<PaginatedEntries>(`/journal${params}`)
+    login: async (email: string, password: string): Promise<LoginResponse> => {
+      const data = await request<LoginResponse>('/auth/login', {
+        method: 'POST',
+        body: { email, password },
+        auth: false,
+      })
+      setAccessToken(data.access_token)
+      return data
     },
 
-    get: (id: string) =>
-      request<{ entry: JournalEntry }>(`/journal/${id}`),
+    // GET /auth/me — validates the stored token and returns the user's id.
+    me: (): Promise<MeResponse> => request<MeResponse>('/auth/me'),
 
-    create: (payload: CreateEntryPayload) =>
-      request<{ entry: JournalEntry }>(
-        '/journal', { method: 'POST', body: payload }
-      ),
-
-    delete: (id: string) =>
-      request<void>(`/journal/${id}`, { method: 'DELETE' }),
+    // GET /users/me — the full authenticated profile used to restore a session.
+    profile: (): Promise<ProfileResponse> => request<ProfileResponse>('/users/me'),
   },
 
-  mood: {
-    log: (mood: Mood) =>
-      request<MoodLog>('/mood', { method: 'POST', body: { mood } }),
-  },
-
-  circles: {
-    list: () =>
-      request<CircleList>('/circles'),
-
-    messages: (slug: string, cursor?: string) => {
-      const params = cursor ? `?before=${encodeURIComponent(cursor)}` : ''
-      return request<MessageList>(`/circles/${slug}/messages${params}`)
-    },
-
-    send: (slug: string, content: string) =>
-      request<{ message: CircleMessage }>(
-        `/circles/${slug}/messages`, { method: 'POST', body: { content } }
-      ),
-
-    react: (messageId: string, emoji: string) =>
-      request<{ reaction_counts: Record<string, number> }>(
-        `/circles/messages/${messageId}/react`, { method: 'POST', body: { emoji } }
-      ),
-
-    flag: (messageId: string, reason?: string) =>
-      request<{ flagged: boolean }>(
-        `/circles/messages/${messageId}/flag`, { method: 'POST', body: { reason } }
-      ),
-  },
-
-  therapists: {
-    list: (filters?: {
-      language?: string
-      specialty?: string
-      max_price?: number
-      free_only?: boolean
-      online_only?: boolean
-    }) => {
-      const params = new URLSearchParams()
-      if (filters?.language) params.set('language', filters.language)
-      if (filters?.specialty) params.set('specialty', filters.specialty)
-      if (filters?.max_price) params.set('max_price', String(filters.max_price))
-      if (filters?.free_only) params.set('free_only', 'true')
-      if (filters?.online_only) params.set('online_only', 'true')
-      const qs = params.toString()
-      return request<TherapistList>(`/therapists${qs ? '?' + qs : ''}`)
-    },
-
-    book: (therapistId: string, payload: BookingRequest) =>
-      request<Booking>(
-        `/therapists/${therapistId}/book`, { method: 'POST', body: payload }
-      ),
-  },
-
-  breathing: {
-    logSession: (session: {
-      technique: BreathTechnique
-      breaths: number
-      duration_s: number
-      completed: boolean
-    }) =>
-      request<BreathingSession>(
-        '/breathing/sessions', { method: 'POST', body: session }
-      ),
-  },
+  // Future domain clients (journal, mood, circles, therapists, breathing) plug
+  // in here using the same `request` helper.
 }

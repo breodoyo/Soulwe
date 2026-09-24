@@ -47,6 +47,36 @@
   letter-spacing: -0.02em;
 }
 
+.topnavActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.logoutBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  padding: 6px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-full);
+  transition:
+    color var(--duration-base) var(--ease),
+    border-color var(--duration-base) var(--ease);
+}
+
+.logoutBtn:hover {
+  color: var(--sun-deep);
+  border-color: var(--border);
+}
+
+.logoutBtn svg {
+  width: 14px;
+  height: 14px;
+}
+
 .anonBadge {
   display: flex;
   align-items: center;
@@ -238,6 +268,38 @@
     font-size: var(--text-2xl);
   }
 }
+
+.sidebarLogout {
+  display: none;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  margin: 2px var(--space-2);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  transition:
+    color var(--duration-base) var(--ease),
+    background var(--duration-base) var(--ease);
+}
+
+.sidebarLogout:hover,
+.sidebarLogout:focus-visible {
+  color: var(--sun-deep);
+  background: var(--sun-light);
+}
+
+.sidebarLogout .tabIcon {
+  width: 18px;
+  height: 18px;
+}
+
+@media (min-width: 768px) {
+  .sidebarLogout {
+    display: flex;
+    margin-top: auto;
+  }
+}
   .content {
     flex: 1;
     order: 2;
@@ -310,7 +372,6 @@
     color: var(--teal);
     padding: var(--space-4) var(--space-5);
     border-top: 1px solid var(--border-soft);
-    margin-top: auto;
     letter-spacing: 0.04em;
     font-weight: 500;
   }
