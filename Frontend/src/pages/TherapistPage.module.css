@@ -1,7 +1,7 @@
 .page { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-5); }
-.heading { font-family: var(--font-display); font-size: var(--text-xl); color: var(--cream); margin-bottom: 3px; }
+.heading { font-family: var(--font-display); font-size: var(--text-xl); color: var(--ink); margin-bottom: 3px; }
 .sub { font-size: var(--text-sm); color: var(--muted); }
-.sub em { font-style: italic; color: var(--clay); }
+.sub em { font-style: italic; color: var(--sun-deep); }
 
 .filterRow { display: flex; gap: var(--space-2); overflow-x: auto; padding-bottom: var(--space-1); scrollbar-width: none; }
 .filterRow::-webkit-scrollbar { display: none; }
@@ -9,16 +9,17 @@
 .filterPill {
   flex-shrink: 0; font-size: var(--text-xs); padding: 6px 14px;
   border-radius: var(--radius-full); border: 1px solid var(--border);
-  background: var(--night-mid); color: var(--muted); white-space: nowrap;
+  background: var(--bg-mid); color: var(--muted); white-space: nowrap;
   transition: all var(--duration-base) var(--ease);
 }
-.filterPill:hover { color: var(--cream); border-color: var(--night-soft); }
-.filterPillActive { background: var(--clay); color: #cc6a6a; border-color: var(--clay); }
+.filterPill:hover:not(:disabled) { color: var(--ink); border-color: var(--sun-muted); }
+.filterPill:disabled { opacity: 0.55; cursor: not-allowed; }
+.filterPillActive { background: var(--sun); color: var(--ink); border-color: var(--sun); }
 
 .cardList { display: flex; flex-direction: column; gap: var(--space-4); }
 
 .card {
-  background: var(--night-mid); border: 1px solid var(--border);
+  background: var(--bg-mid); border: 1px solid var(--border);
   border-radius: var(--radius-lg); padding: var(--space-4);
   display: flex; flex-direction: column; gap: var(--space-3);
 }
@@ -32,47 +33,155 @@
 }
 
 .info { flex: 1; }
-.name { font-size: var(--text-base); font-weight: 500; color: var(--cream); margin-bottom: 3px; }
-.creds { font-size: var(--text-xs); color: var(--muted); line-height: 1.5; margin-bottom: 4px; }
+.name { font-size: var(--text-base); font-weight: 500; color: var(--ink); margin-bottom: 3px; }
+.bio { font-size: var(--text-xs); color: var(--muted); line-height: 1.5; margin-bottom: 4px; }
 .location { display: flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--muted); }
 
 .tags { display: flex; flex-wrap: wrap; gap: var(--space-1); }
-.tag { font-size: 11px; background: rgba(196,113,74,0.12); color: var(--clay-muted); padding: 3px 10px; border-radius: var(--radius-full); }
-.tagLang { background: rgba(74,103,65,0.12); color: var(--sage); }
+.tag { font-size: 11px; background: rgba(212,120,10,0.10); color: var(--sun-deep); padding: 3px 10px; border-radius: var(--radius-full); }
+.tagLang { background: rgba(15,118,110,0.10); color: var(--teal-deep); }
 
 .priceRow { display: flex; align-items: center; gap: var(--space-3); }
-.price { font-size: var(--text-sm); color: var(--sage); font-weight: 500; }
-.freeTag { font-size: 11px; background: rgba(74,103,65,0.15); color: var(--sage); padding: 3px 10px; border-radius: var(--radius-full); border: 1px solid rgba(74,103,65,0.25); }
+.price { font-size: var(--text-sm); color: var(--teal-deep); font-weight: 500; }
 
 .cardBottom { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
-.avail { font-size: var(--text-xs); color: var(--muted); display: flex; align-items: center; gap: var(--space-1); }
-
-.onlineDot {
-  width: 7px; height: 7px; background: var(--clay); border-radius: 50%;
-  animation: pulse 2.5s ease infinite;
-}
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
 .bookBtn {
-  background: var(--cream); color: var(--earth); font-size: var(--text-sm); font-weight: 500;
+  background: var(--sun); color: var(--ink); font-size: var(--text-sm); font-weight: 500;
   padding: var(--space-2) var(--space-4); border-radius: var(--radius-md);
   transition: all var(--duration-base) var(--ease); flex-shrink: 0;
 }
-.bookBtn:hover { background: var(--clay); color: #fff; }
-.bookBtnBooked { background: var(--sage); color: #e8a9a9; }
-.bookBtnBooked:hover { background: var(--sage); opacity: 0.85; }
+.bookBtn:hover:not(:disabled) { background: var(--sun-deep); color: #fff; }
+.bookBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+.bookBtnBooked { background: var(--teal); color: #fff; }
+.bookBtnBooked:hover:not(:disabled) { background: var(--teal-deep); color: #fff; }
 
 .bookConfirm {
-  font-size: var(--text-xs); color: var(--sage);
-  background: rgba(74,103,65,0.1); border: 1px solid rgba(74,103,65,0.2);
+  font-size: var(--text-xs); color: var(--teal-deep);
+  background: var(--teal-light); border: 1px solid rgba(15,118,110,0.25);
   border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3);
   animation: fadeIn 0.3s ease;
 }
 @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
 
+/* ── Booking panel ── */
+.bookPanel {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  border: 1px dashed var(--border); border-radius: var(--radius-md);
+  padding: var(--space-3); background: var(--bg);
+}
+
+.slotInput {
+  font-size: var(--text-sm); color: var(--ink);
+  background: var(--bg-mid); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--space-2) var(--space-3);
+}
+.slotInput:focus { outline: 2px solid var(--sun); outline-offset: 1px; }
+
+.bookActions { display: flex; align-items: center; gap: var(--space-3); }
+
+.confirmBtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 140px;
+  background: var(--sun); color: var(--ink); font-size: var(--text-sm); font-weight: 500;
+  padding: var(--space-2) var(--space-4); border-radius: var(--radius-md);
+  transition: all var(--duration-base) var(--ease);
+}
+.confirmBtn:hover:not(:disabled) { background: var(--sun-deep); color: #fff; }
+.confirmBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.bookSpinner {
+  width: 15px; height: 15px;
+  border: 2px solid rgba(28,25,23,0.25); border-top-color: var(--ink);
+  border-radius: 50%; animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Status / notices ── */
+.status {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  padding: var(--space-3) 0;
+}
+
+.errorNote {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  font-size: var(--text-sm); color: #B91C1C;
+  background: rgba(185,28,28,0.06); border: 1px solid rgba(185,28,28,0.35);
+  border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); line-height: 1.6;
+}
+
+.errorText {
+  font-size: var(--text-sm); color: #B91C1C; line-height: 1.6;
+}
+
+.inlineBtn {
+  font-size: var(--text-xs); padding: 6px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--bg-mid); color: var(--muted); cursor: pointer;
+  transition: background var(--duration-base) var(--ease), color var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease);
+  align-self: flex-start;
+}
+.inlineBtn:hover { color: var(--ink); border-color: var(--sun-muted); }
+
+.loadMoreBtn {
+  align-self: flex-start;
+  font-size: var(--text-xs); padding: 6px 12px;
+  border: 1px dashed var(--border); border-radius: var(--radius-full);
+  background: transparent; color: var(--muted); cursor: pointer;
+  transition: color var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease);
+}
+.loadMoreBtn:hover:not(:disabled) { color: var(--ink); border-color: var(--sun-muted); }
+.loadMoreBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+
 .empty { text-align: center; padding: var(--space-10) var(--space-4); }
 .empty p { font-size: var(--text-sm); color: var(--muted); margin-bottom: var(--space-4); }
-.clearFilter { font-size: var(--text-sm); color: var(--clay); text-decoration: underline; }
+.clearFilter { font-size: var(--text-sm); color: var(--sun-deep); text-decoration: underline; }
+
+/* ── My bookings ── */
+.bookingsSection { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.sectionHeader { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-2); }
+.sectionTitle {
+  font-family: var(--font-display); font-size: var(--text-lg);
+  color: var(--ink); border-top: 1px solid var(--border); padding-top: var(--space-4);
+}
+
+.emptyNote {
+  font-size: var(--text-sm); color: var(--muted); line-height: 1.6;
+  padding: var(--space-4); border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+.bookingList { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.bookingRow {
+  display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+  background: var(--bg-mid); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--space-3) var(--space-4);
+}
+
+.bookingMain { flex: 1; min-width: 160px; }
+.bookingTherapist { font-size: var(--text-sm); font-weight: 500; color: var(--ink); margin-bottom: 2px; }
+.bookingTime { font-size: var(--text-xs); color: var(--muted); }
+
+.statusChip {
+  font-size: 11px; padding: 3px 10px; border-radius: var(--radius-full);
+  border: 1px solid transparent; white-space: nowrap;
+}
+.chipPending { background: var(--sun-light); color: var(--sun-deep); border-color: var(--sun-muted); }
+.chipConfirmed { background: var(--teal-light); color: var(--teal-deep); border-color: var(--teal); }
+.chipCancelled { background: var(--bg-mid); color: var(--muted); border-color: var(--border-soft); }
+.chipCompleted { background: var(--sage-light); color: var(--sage-deep); border-color: rgba(34,197,94,0.3); }
+
+.cancelBtn {
+  font-size: var(--text-xs); padding: 6px 12px;
+  border: 1px solid rgba(185,28,28,0.45); border-radius: var(--radius-md);
+  background: transparent; color: #B91C1C; cursor: pointer;
+  transition: background var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease);
+}
+.cancelBtn:hover:not(:disabled) { background: rgba(185,28,28,0.06); border-color: rgba(185,28,28,0.7); }
+.cancelBtn:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* ── Desktop ── */
 @media (min-width: 768px) {

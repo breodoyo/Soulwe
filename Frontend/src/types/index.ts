@@ -194,6 +194,70 @@ export interface CircleMessageResponse {
   message: CircleMessage
 }
 
+// A therapist's public directory/profile as returned by GET /therapists and
+// GET /therapists/:id (Backend/internal/therapists/model.go). bio and
+// session_price are nullable; languages/specialties are always arrays
+// (possibly empty); currency is the fixed "KES" constant. Internal fields
+// (credentials, years_exp, photo_url, location, free_sessions) are never
+// serialized by the backend and are absent here by design.
+export interface Therapist {
+  id: string
+  display_name: string
+  bio: string | null
+  languages: string[]
+  specialties: string[]
+  session_price: number | null
+  currency: string
+  is_active: boolean
+  is_online_only: boolean
+}
+
+// GET /api/v1/therapists — newest first. next_cursor is the created_at of the
+// last therapist in a full page, otherwise null (send it back as `before`).
+export interface TherapistsResponse {
+  therapists: Therapist[]
+  next_cursor: string | null
+}
+
+// GET /api/v1/therapists/:id
+export interface TherapistResponse {
+  therapist: Therapist
+}
+
+// Booking statuses, matching the backend CHECK constraint and
+// Backend/internal/bookings/model.go.
+export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed'
+
+// A session booking (Backend/internal/bookings/model.go). The owner is never
+// serialized; the therapist is represented by id plus display_name. There is
+// no `amount` or `notes` field in the backend contract.
+export interface Booking {
+  id: string
+  therapist_id: string
+  display_name: string
+  scheduled_at: string
+  status: BookingStatus
+  created_at: string
+  updated_at: string
+}
+
+// POST /api/v1/therapists/:id/bookings — ISO 8601 timestamp, must be in the
+// future. Sessions are treated as a fixed 60-minute window by the backend.
+export interface CreateBookingPayload {
+  scheduled_at: string
+}
+
+// {booking} envelope shared by POST /therapists/:id/bookings (201),
+// GET /bookings/:id, and PATCH /bookings/:id/cancel.
+export interface BookingResponse {
+  booking: Booking
+}
+
+// GET /api/v1/bookings — the authenticated user's own bookings, newest first.
+export interface BookingsResponse {
+  bookings: Booking[]
+}
+
 // The documented error envelope: {"error": {"code", "message", "field"?}}.
 export interface ApiErrorBody {
   error: {

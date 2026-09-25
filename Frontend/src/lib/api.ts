@@ -13,10 +13,13 @@ import type {
   AnonymousMeResponse,
   AnonymousSessionResponse,
   ApiErrorBody,
+  BookingResponse,
+  BookingsResponse,
   CircleListResponse,
   CircleMessageResponse,
   CircleMessagesResponse,
   CircleResponse,
+  CreateBookingPayload,
   CreateCircleMessagePayload,
   CreateJournalPayload,
   CreateMoodPayload,
@@ -29,6 +32,8 @@ import type {
   MoodsResponse,
   ProfileResponse,
   RegisterResponse,
+  TherapistResponse,
+  TherapistsResponse,
   UpdateJournalPayload,
   UpdateProfilePayload,
 } from '@/types'
@@ -350,6 +355,48 @@ export const api = {
     },
   },
 
-  // Future domain clients (therapists, breathing) plug
+  therapists: {
+    // GET /therapists — the public directory, newest first. language and
+    // specialty are case-insensitive substring filters applied server-side
+    // only when non-empty; before/cursor resume pagination.
+    list: (params?: { language?: string; specialty?: string; before?: string }): Promise<TherapistsResponse> => {
+      const query = new URLSearchParams()
+      if (params?.language) query.set('language', params.language)
+      if (params?.specialty) query.set('specialty', params.specialty)
+      if (params?.before) query.set('before', params.before)
+      const qs = query.toString()
+      return request<TherapistsResponse>(`/therapists${qs ? `?${qs}` : ''}`)
+    },
+
+    // GET /therapists/:id — one therapist's public profile.
+    get: (id: string): Promise<TherapistResponse> =>
+      request<TherapistResponse>(`/therapists/${encodeURIComponent(id)}`),
+  },
+
+  bookings: {
+    // POST /therapists/:id/bookings — 201 with the created (pending) booking.
+    // Conflicts surface as 409 BOOKING_CONFLICT / THERAPIST_UNAVAILABLE.
+    create: (therapistId: string, payload: CreateBookingPayload): Promise<BookingResponse> =>
+      request<BookingResponse>(`/therapists/${encodeURIComponent(therapistId)}/bookings`, {
+        method: 'POST',
+        body: payload,
+      }),
+
+    // GET /bookings — the authenticated user's own bookings, newest first.
+    list: (): Promise<BookingsResponse> => request<BookingsResponse>('/bookings'),
+
+    // GET /bookings/:id — one of the user's own bookings.
+    get: (id: string): Promise<BookingResponse> =>
+      request<BookingResponse>(`/bookings/${encodeURIComponent(id)}`),
+
+    // PATCH /bookings/:id/cancel — only pending bookings can be cancelled;
+    // a non-pending one yields 409 BOOKING_STATUS_CONFLICT.
+    cancel: (id: string): Promise<BookingResponse> =>
+      request<BookingResponse>(`/bookings/${encodeURIComponent(id)}/cancel`, {
+        method: 'PATCH',
+      }),
+  },
+
+  // Future domain clients (breathing) plug
   // in here using the same `request` helper.
 }
