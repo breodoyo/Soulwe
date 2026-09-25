@@ -10,7 +10,14 @@
 //   const { user } = await api.auth.login(email, password)
 
 import type {
+  AnonymousMeResponse,
+  AnonymousSessionResponse,
   ApiErrorBody,
+  CircleListResponse,
+  CircleMessageResponse,
+  CircleMessagesResponse,
+  CircleResponse,
+  CreateCircleMessagePayload,
   CreateJournalPayload,
   CreateMoodPayload,
   DashboardResponse,
@@ -31,9 +38,10 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080
 const API_PREFIX = '/api/v1'
 
 const ACCESS_TOKEN_KEY = 'sw_access_token'
+const ANON_TOKEN_KEY = 'sw_anon_token'
 
-// ── Token management ─────────────────────────────────────────────────────────
-// The access token lives in localStorage. It is attached to every
+// ── Registered token management ──────────────────────────────────────────────
+// The registered access token lives in localStorage. It is attached to every
 // authenticated request and is never rendered in the UI or logged.
 
 export function getAccessToken(): string | null {
@@ -52,6 +60,26 @@ export function clearAuth(): void {
   localStorage.removeItem(ACCESS_TOKEN_KEY)
 }
 
+// ── Anonymous token management ───────────────────────────────────────────────
+// The anonymous session token is deliberately stored separately from the
+// registered JWT: circles authenticate through the anonymous system, and the
+// two flows must never share a credential. Persisting the token is what lets
+// the same anonymous identity keep its circle memberships across page reloads.
+// Only the raw token is stored — never the anonymous_id, never the registered
+// JWT here, and never any device UUID.
+
+export function getAnonToken(): string | null {
+  return localStorage.getItem(ANON_TOKEN_KEY)
+}
+
+export function setAnonToken(token: string): void {
+  localStorage.setItem(ANON_TOKEN_KEY, token)
+}
+
+export function clearAnonToken(): void {
+  localStorage.removeItem(ANON_TOKEN_KEY)
+}
+
 // Registered by the auth provider so that any authenticated request that is
 // rejected with 401 (expired/invalid token) can return the app to the
 // unauthenticated state immediately.
@@ -68,16 +96,21 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   body?: unknown
-  // auth=false labels public endpoints (register, login) that must not carry
-  // the Authorization header even when a token is present.
-  auth?: boolean
+  // Which credential, if any, the request carries:
+  //   auth: true         → the registered JWT (default)
+  //   auth: 'anonymous'  → the anonymous sessions token (circles, anonymous/me)
+  //   auth: false        → public endpoints (register, login, anonymous create)
+  auth?: boolean | 'anonymous'
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, auth = true } = options
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (auth) {
+  if (auth === 'anonymous') {
+    const token = getAnonToken()
+    if (token) headers['Authorization'] = `Bearer ${token}`
+  } else if (auth === true) {
     const token = getAccessToken()
     if (token) headers['Authorization'] = `Bearer ${token}`
   }
@@ -97,9 +130,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     )
   }
 
-  // Expired or invalid credentials on an authenticated request: clear the
-  // stored token and bounce through the normal auth flow.
-  if (response.status === 401 && auth) {
+  // Expired or invalid credentials on a registered request: clear the stored
+  // token and bounce through the normal auth flow. Anonymous requests never
+  // touch the registered JWT — they just surface the 401 for the caller to
+  // renew its anonymous session.
+  if (response.status === 401 && auth === true) {
     clearAuth()
     unauthorizedHandler?.()
     throw await readError(response)
@@ -250,6 +285,71 @@ export const api = {
       }),
   },
 
-  // Future domain clients (circles, therapists, breathing) plug
+  anon: {
+    // POST /auth/anonymous — public. Mints an anonymous session; the raw token
+    // is returned once and only its hash is stored server-side. Optional
+    // X-Device-ID is intentionally not sent: the stored token alone keeps the
+    // same identity across reloads, so no device identifier is invented.
+    create: (): Promise<AnonymousSessionResponse> =>
+      request<AnonymousSessionResponse>('/auth/anonymous', { method: 'POST', auth: false }),
+
+    // GET /auth/anonymous/me — validates the stored anonymous token.
+    me: (): Promise<AnonymousMeResponse> =>
+      request<AnonymousMeResponse>('/auth/anonymous/me', { auth: 'anonymous' }),
+  },
+
+  circles: {
+    // GET /circles — every active circle with a live member count.
+    list: (): Promise<CircleListResponse> =>
+      request<CircleListResponse>('/circles', { auth: 'anonymous' }),
+
+    // GET /circles/:id — one circle plus the caller's membership.
+    get: (id: string): Promise<CircleResponse> =>
+      request<CircleResponse>(`/circles/${encodeURIComponent(id)}`, { auth: 'anonymous' }),
+
+    // POST /circles/:id/join — 204; 409 ALREADY_MEMBER when already a member.
+    join: (id: string): Promise<void> =>
+      request<void>(`/circles/${encodeURIComponent(id)}/join`, {
+        method: 'POST',
+        auth: 'anonymous',
+      }),
+
+    // DELETE /circles/:id/leave — 204. Idempotent: leaving a circle you were
+    // never in still succeeds.
+    leave: (id: string): Promise<void> =>
+      request<void>(`/circles/${encodeURIComponent(id)}/leave`, {
+        method: 'DELETE',
+        auth: 'anonymous',
+      }),
+
+    // GET /circles/:id/messages — members only. Newest first; `limit` (default
+    // 20, max 50) and `before` (created_at cursor, exclusive) are optional.
+    messages: (
+      id: string,
+      params?: { limit?: number; before?: string },
+    ): Promise<CircleMessagesResponse> => {
+      const query = new URLSearchParams()
+      if (params?.limit) query.set('limit', String(params.limit))
+      if (params?.before) query.set('before', params.before)
+      const qs = query.toString()
+      return request<CircleMessagesResponse>(
+        `/circles/${encodeURIComponent(id)}/messages${qs ? `?${qs}` : ''}`,
+        { auth: 'anonymous' },
+      )
+    },
+
+    // POST /circles/:id/messages — members only. 201 returns the stored message
+    // with its server-generated anon_name.
+    sendMessage: (id: string, content: string): Promise<CircleMessageResponse> => {
+      const payload: CreateCircleMessagePayload = { content }
+      return request<CircleMessageResponse>(`/circles/${encodeURIComponent(id)}/messages`, {
+        method: 'POST',
+        body: payload,
+        auth: 'anonymous',
+      })
+    },
+  },
+
+  // Future domain clients (therapists, breathing) plug
   // in here using the same `request` helper.
 }

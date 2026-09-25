@@ -1,227 +1,624 @@
-import { useState, useRef, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { api } from '@/lib/api'
+import { clearAnonToken, getAnonToken, setAnonToken } from '@/lib/api'
+import { isApiError, type Circle, type CircleMessage } from '@/types'
 import styles from './CirclePage.module.css'
 
-interface Circle {
-  id: string; slug: string; name: string
-  description: string; icon: string; online: number
+const MESSAGE_PAGE_SIZE = 25
+const MAX_MESSAGE_LENGTH = 1000
+
+const ANON_COLORS = ['#0F766E', '#D4780A', '#16A34A', '#44403C', '#78716C']
+
+// The anonymous session is set up lazily when the circle experience first
+// opens: reuse a stored token (validating it), otherwise create one. Only the
+// anonymous token is ever persisted — never the registered JWT for these
+// endpoints, and never anything else about the identity.
+async function ensureAnonSession(): Promise<void> {
+  const existing = getAnonToken()
+  if (existing) {
+    try {
+      await api.anon.me()
+      return
+    } catch (err) {
+      if (isApiError(err) && err.status === 401) {
+        clearAnonToken()
+      } else {
+        throw err
+      }
+    }
+  }
+  const { anonymous_token } = await api.anon.create()
+  setAnonToken(anonymous_token)
 }
 
-interface Message {
-  id: string; anonName: string; color: string
-  text: string; time: string; reactions: Record<string, number>
-  mine?: boolean
+function errorMessage(err: unknown, fallback: string): string {
+  return isApiError(err) ? err.message : fallback
 }
 
-const circles: Circle[] = [
-  { id:'1', slug:'grief',         name:'Grief & loss circle',      description:'Navigating death and mourning in African families',             icon:'🕊️', online:8  },
-  { id:'2', slug:'work',          name:'Work pressure circle',      description:'Burnout, hustle culture, and financial stress',                 icon:'💼', online:14 },
-  { id:'3', slug:'family',        name:'Family expectations',       description:'When culture and mental health collide',                        icon:'🌿', online:6  },
-  { id:'4', slug:'young',         name:'Young adults circle',       description:'Identity, relationships, and finding your path',                icon:'🌱', online:3  },
-  { id:'5', slug:'trauma',        name:'Trauma & healing circle',   description:'A safe space for survivors of trauma, PTSD, and abuse',         icon:'💜', online:5  },
-  { id:'6', slug:'relationships', name:'Relationships circle',      description:'Marriage, separation, infidelity, and loneliness in love',      icon:'💍', online:9  },
-  { id:'7', slug:'faith',         name:'Faith & doubt circle',      description:'Spiritual struggles, unanswered prayers, and finding God',      icon:'🙏', online:4  },
-  { id:'8', slug:'anxiety',       name:'Anxiety & depression',      description:'Panic, low mood, intrusive thoughts — you are not alone',       icon:'🧠', online:11 },
-]
-
-const seedMessages: Record<string, Message[]> = {
-  grief: [
-    { id:'1', anonName:'Anon Baobab',  color:'#C4714A', text:"Lost my father last month. The relatives keep saying 'be strong' but nobody asks if I'm okay. I'm exhausted from performing strength.", time:'2m ago',   reactions:{'💙':12,'🙏':4} },
-    { id:'2', anonName:'Anon Willow',  color:'#4A6741', text:"I understand this so deeply. In our culture grief has a script — you have to mourn the right way. It's suffocating.",                  time:'5m ago',   reactions:{'💙':8}         },
-    { id:'3', anonName:'Anon Savanna', color:'#5C3D2E', text:"What helped me was giving myself permission to grieve privately. You don't have to perform for anyone.",                               time:'8m ago',   reactions:{'💙':14,'✨':3}  },
-  ],
-  work: [
-    { id:'1', anonName:'Anon Acacia',  color:'#C4714A', text:"Three jobs and still can't send money home. Feel like I'm failing everyone who believed in me.",                                        time:'1m ago',   reactions:{'🙏':22}         },
-    { id:'2', anonName:'Anon River',   color:'#4A6741', text:"The pressure to be the 'family success story' is real. Therapy helped me separate my worth from my income.",                           time:'4m ago',   reactions:{'💙':17}         },
-  ],
-  family: [
-    { id:'1', anonName:'Anon Sunrise', color:'#5C3D2E', text:"Mama says therapy is for people who hate their family. I'm doing it anyway but secretly. The guilt is heavy.",                         time:'just now', reactions:{'💙':9}          },
-    { id:'2', anonName:'Anon Fern',    color:'#C4714A', text:"I told mine it was 'counselling for work stress.' They accepted that. Sometimes you translate mental health into language they can receive.", time:'3m ago', reactions:{'✨':31}       },
-  ],
-  young: [
-    { id:'1', anonName:'Anon Ndovu',   color:'#4A6741', text:"Anyone else feel like you're between two worlds? Too westernised for home, too African for everywhere else?",                           time:'6m ago',   reactions:{'💙':19}         },
-  ],
-  trauma: [
-    { id:'1', anonName:'Anon Cedar',   color:'#7C3D9E', text:"My PTSD makes me flinch at loud noises. My family thinks I'm being dramatic. It's been 2 years since the accident and they still don't understand.", time:'3m ago', reactions:{'💙':24,'🙏':8} },
-    { id:'2', anonName:'Anon Flame',   color:'#C4714A', text:"You are not dramatic. What happened to you was real. The body keeps score long after the mind tries to move on. Keep going.", time:'5m ago', reactions:{'💙':31,'✨':12} },
-    { id:'3', anonName:'Anon Stone',   color:'#4A6741', text:"EMDR therapy changed everything for me. If you can access it, please try. It took 6 months but I can finally sleep through the night.", time:'9m ago', reactions:{'🙏':18} },
-  ],
-  relationships: [
-    { id:'1', anonName:'Anon Lotus',   color:'#C4714A', text:"My husband and I haven't spoken properly in 6 months. We just coexist. I don't know how to start the conversation without it becoming a fight.", time:'2m ago', reactions:{'💙':15,'🙏':6} },
-    { id:'2', anonName:'Anon Pearl',   color:'#5C3D2E', text:"We went for couples counselling and it was the best decision we ever made. The therapist helped us hear each other for the first time.", time:'7m ago', reactions:{'✨':22} },
-    { id:'3', anonName:'Anon Tide',    color:'#4A6741', text:"Separation is so lonely. Even when the marriage was painful, the silence of being alone is a different kind of pain.", time:'11m ago', reactions:{'💙':28,'🙏':14} },
-  ],
-  faith: [
-    { id:'1', anonName:'Anon Ember',   color:'#C4714A', text:"I've been praying for 3 years about the same thing and nothing has changed. I'm starting to wonder if God is listening.", time:'4m ago', reactions:{'🙏':33,'💙':11} },
-    { id:'2', anonName:'Anon Grace',   color:'#4A6741', text:"I went through the same season of silence. What helped me was shifting from asking God to fix things to asking Him to sit with me in it.", time:'6m ago', reactions:{'✨':41,'🙏':19} },
-  ],
-  anxiety: [
-    { id:'1', anonName:'Anon Rain',    color:'#5C3D2E', text:"I had my first panic attack at work last week. I thought I was dying. My chest, my breathing — everything shut down. I'm scared it will happen again.", time:'1m ago', reactions:{'💙':21,'🙏':9} },
-    { id:'2', anonName:'Anon Mist',    color:'#C4714A', text:"Panic attacks are terrifying but they cannot hurt you. The 4-7-8 breathing in this app helped me get through my last one. Try it next time you feel one coming.", time:'3m ago', reactions:{'💙':18,'✨':7} },
-    { id:'3', anonName:'Anon Brook',   color:'#4A6741', text:"Depression makes every day feel like walking through mud. But I've learned to celebrate tiny wins — I got out of bed today. That is enough.", time:'8m ago', reactions:{'💙':44,'✨':22} },
-  ],
+function initialsOf(name: string): string {
+  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 }
 
-const EMOJIS = ['💙', '🙏', '✨', '💪']
-const ANON_COLORS = ['#C4714A', '#4A6741', '#5C3D2E', '#8C7B73']
+// Deterministic per-author colour so a message's bubble matches its avatar
+// without ever exposing who the author is.
+function avatarColor(name: string): string {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) >>> 0
+  }
+  return ANON_COLORS[hash % ANON_COLORS.length]
+}
+
+function formatMessageTime(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  const minutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60000))
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  return date.toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })
+}
 
 export default function CirclePage() {
-  const [activeCircle, setActiveCircle] = useState<Circle | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
+  // Anonymous session lifecycle
+  const [sessionState, setSessionState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [sessionError, setSessionError] = useState<string | null>(null)
+  const [sessionTick, setSessionTick] = useState(0)
+
+  // Circle discovery
+  const [circles, setCircles] = useState<Circle[] | null>(null)
+  const [circlesError, setCirclesError] = useState<string | null>(null)
+  const [circlesTick, setCirclesTick] = useState(0)
+
+  // Circle detail / membership
+  const [activeCircleId, setActiveCircleId] = useState<string | null>(null)
+  const [detail, setDetail] = useState<Circle | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
+
+  // Message history (chronological: oldest → newest)
+  const [messages, setMessages] = useState<CircleMessage[]>([])
+  const [messagesLoading, setMessagesLoading] = useState(false)
+  const [messagesError, setMessagesError] = useState<string | null>(null)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [olderError, setOlderError] = useState<string | null>(null)
+
+  // Sending
   const [reply, setReply] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
+
+  // Join / leave
+  const [joining, setJoining] = useState(false)
+  const [leaving, setLeaving] = useState(false)
+  const [leaveConfirm, setLeaveConfirm] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [pageNotice, setPageNotice] = useState<string | null>(null)
+
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  const openCircle = (circle: Circle) => {
-    setActiveCircle(circle)
-    setMessages(seedMessages[circle.slug] || [])
-  }
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null)
 
-  const closeCircle = () => {
-    setActiveCircle(null)
-    setMessages([])
-  }
-
-  const sendReply = () => {
-    if (!reply.trim()) return
-    const newMsg: Message = {
-      id: Date.now().toString(),
-      anonName: 'You (Anon)',
-      color: ANON_COLORS[Math.floor(Math.random() * ANON_COLORS.length)],
-      text: reply.trim(),
-      time: 'just now',
-      reactions: {},
-      mine: true,
-    }
-    setMessages(prev => [...prev, newMsg])
-    setReply('')
-  }
-
-  const react = (msgId: string, emoji: string) => {
-    setMessages(prev => prev.map(m => {
-      if (m.id !== msgId) return m
-      const counts = { ...m.reactions }
-      counts[emoji] = (counts[emoji] || 0) + 1
-      return { ...m, reactions: counts }
-    }))
+  // The anonymous token may have been invalidated by the server (e.g. rotated
+  // by another device). Drop it, return to the circle list, and mint a fresh
+  // session on the next pass.
+  const handleSessionLost = () => {
+    clearAnonToken()
+    setSessionNotice('Your anonymous session was renewed. Please open the circle again.')
+    setSessionTick(t => t + 1)
   }
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    let cancelled = false
+    setSessionState('loading')
+    setSessionError(null)
+    void (async () => {
+      try {
+        await ensureAnonSession()
+        if (cancelled) return
+        setSessionState('ready')
+        setActiveCircleId(null)
+        setDetail(null)
+        setDetailError(null)
+        setMessages([])
+        setMessagesError(null)
+        setNextCursor(null)
+      } catch (err) {
+        if (cancelled) return
+        setSessionState('error')
+        setSessionError(
+          errorMessage(err, 'We could not set up your anonymous session right now. Please try again.'),
+        )
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [sessionTick])
+
+  useEffect(() => {
+    if (sessionState !== 'ready') return
+    let cancelled = false
+    setCircles(null)
+    setCirclesError(null)
+    api.circles
+      .list()
+      .then(res => {
+        if (cancelled) return
+        setCircles(res.circles)
+      })
+      .catch(err => {
+        if (cancelled) return
+        if (isApiError(err) && err.status === 401) {
+          handleSessionLost()
+          return
+        }
+        setCirclesError(
+          errorMessage(err, 'We could not load the circles right now. Please try again.'),
+        )
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [sessionState, circlesTick])
+
+  const loadMessages = async (circleId: string, mode: 'initial' | 'older') => {
+    if (mode === 'initial') {
+      setMessagesLoading(true)
+      setMessagesError(null)
+    } else {
+      setLoadingOlder(true)
+      setOlderError(null)
+    }
+    try {
+      // `before` resumes from the oldest message currently loaded.
+      const cursor = mode === 'older' ? messages[0]?.created_at : undefined
+      const res = await api.circles.messages(circleId, {
+        limit: MESSAGE_PAGE_SIZE,
+        before: cursor,
+      })
+      // The API returns newest first; flip each page so the thread reads
+      // oldest → newest, with the newest message at the bottom.
+      const block = [...res.messages].reverse()
+      if (mode === 'initial') {
+        setMessages(block)
+      } else {
+        setMessages(prev => [...block, ...prev])
+      }
+      setNextCursor(res.next_cursor)
+    } catch (err) {
+      if (isApiError(err) && err.status === 401) {
+        handleSessionLost()
+        return
+      }
+      if (mode === 'initial') {
+        setMessagesError(
+          errorMessage(err, 'We could not load the messages right now. Please try again.'),
+        )
+      } else {
+        setOlderError(
+          errorMessage(err, 'We could not load older messages right now. Please try again.'),
+        )
+      }
+    } finally {
+      if (mode === 'initial') {
+        setMessagesLoading(false)
+      } else {
+        setLoadingOlder(false)
+      }
+    }
+  }
+
+  const openCircle = async (id: string) => {
+    setActiveCircleId(id)
+    setDetail(null)
+    setDetailLoading(true)
+    setDetailError(null)
+    setMessages([])
+    setMessagesError(null)
+    setNextCursor(null)
+    setOlderError(null)
+    setActionError(null)
+    setSendError(null)
+    setLeaveConfirm(false)
+    setPageNotice(null)
+    try {
+      const res = await api.circles.get(id)
+      setDetail(res.circle)
+      if (res.circle.is_member) {
+        await loadMessages(id, 'initial')
+      }
+    } catch (err) {
+      if (isApiError(err) && err.status === 401) {
+        handleSessionLost()
+        return
+      }
+      setDetailError(
+        errorMessage(err, 'We could not open this circle right now. Please try again.'),
+      )
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const closeCircle = () => {
+    setActiveCircleId(null)
+    setDetail(null)
+    setDetailError(null)
+    setMessages([])
+    setMessagesError(null)
+    setNextCursor(null)
+    setActionError(null)
+    setSendError(null)
+    setLeaveConfirm(false)
+    setPageNotice(null)
+  }
+
+  const afterJoined = async (circleId: string) => {
+    setDetail(prev => (prev ? { ...prev, is_member: true } : prev))
+    setPageNotice('You joined the circle.')
+    setActionError(null)
+    await loadMessages(circleId, 'initial')
+  }
+
+  const handleJoin = async () => {
+    if (joining || !activeCircleId) return
+    const circleId = activeCircleId
+    setJoining(true)
+    setActionError(null)
+    try {
+      await api.circles.join(circleId)
+      await afterJoined(circleId)
+    } catch (err) {
+      if (isApiError(err) && err.status === 401) {
+        handleSessionLost()
+        return
+      }
+      if (isApiError(err) && err.code === 'ALREADY_MEMBER') {
+        // Already a member (e.g. a stale view) — treat as joined.
+        await afterJoined(circleId)
+      } else {
+        setActionError(
+          errorMessage(err, 'We could not join this circle right now. Please try again.'),
+        )
+      }
+    } finally {
+      setJoining(false)
+    }
+  }
+
+  const handleLeave = async () => {
+    if (leaving || !activeCircleId) return
+    if (!leaveConfirm) {
+      setLeaveConfirm(true)
+      return
+    }
+    const circleId = activeCircleId
+    setLeaving(true)
+    setActionError(null)
+    try {
+      await api.circles.leave(circleId)
+      setDetail(prev => (prev ? { ...prev, is_member: false } : prev))
+      setMessages([])
+      setMessagesError(null)
+      setNextCursor(null)
+      setLeaveConfirm(false)
+      setPageNotice('You left the circle. You can rejoin anytime.')
+    } catch (err) {
+      if (isApiError(err) && err.status === 401) {
+        handleSessionLost()
+        return
+      }
+      setActionError(errorMessage(err, 'We could not leave this circle right now. Please try again.'))
+      setLeaveConfirm(false)
+    } finally {
+      setLeaving(false)
+    }
+  }
+
+  const handleSend = async () => {
+    const text = reply.trim()
+    if (!text || sending || !activeCircleId) return
+    const circleId = activeCircleId
+    setSending(true)
+    setSendError(null)
+    try {
+      const res = await api.circles.sendMessage(circleId, text)
+      setMessages(prev => [...prev, res.message])
+      setReply('')
+    } catch (err) {
+      if (isApiError(err) && err.status === 401) {
+        handleSessionLost()
+        return
+      }
+      setSendError(
+        isApiError(err) && err.status === 429
+          ? 'You are sending messages too quickly. Please wait a moment and try again.'
+          : errorMessage(err, 'We could not send your message right now. Please try again.'),
+      )
+    } finally {
+      setSending(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeCircleId && messages.length > 0) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages, activeCircleId])
+
+  if (sessionState === 'loading') {
+    return (
+      <div className={styles.page}>
+        <p className={styles.status} role="status">Setting up your anonymous session…</p>
+      </div>
+    )
+  }
+
+  if (sessionState === 'error') {
+    return (
+      <div className={styles.page}>
+        <div className={styles.header}>
+          <h1 className={styles.heading}>Community circles</h1>
+          <p className={styles.sub}>Peer support, African voices, safe space — <em>salama</em></p>
+        </div>
+        <div className={styles.errorNote} role="alert">
+          <p>{sessionError}</p>
+          <button className={styles.inlineBtn} onClick={() => setSessionTick(t => t + 1)}>
+            Try again
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={styles.page}>
 
       {/* Circle list */}
-      {!activeCircle && (
+      {!activeCircleId && (
         <>
           <div className={styles.header}>
             <h1 className={styles.heading}>Community circles</h1>
             <p className={styles.sub}>Peer support, African voices, safe space — <em>salama</em></p>
           </div>
 
+          {sessionNotice && <p className={styles.noticeInfo} role="status">{sessionNotice}</p>}
+
           <div className={styles.anonNotice} role="note">
             <span aria-hidden="true">🔒</span>
             <p>All circles are anonymous. Your name is never shown. Conversations stay within the circle.</p>
           </div>
 
-          <p className={styles.sectionLabel}>Active now</p>
-          <div className={styles.circleList}>
-            {circles.map(c => (
-              <button
-                key={c.id}
-                className={styles.circleCard}
-                onClick={() => openCircle(c)}
-                aria-label={`Join ${c.name}`}
-              >
-                <span className={styles.circleIcon} aria-hidden="true">{c.icon}</span>
-                <div className={styles.circleInfo}>
-                  <h2 className={styles.circleName}>{c.name}</h2>
-                  <p className={styles.circleDesc}>{c.description}</p>
-                </div>
-                <div className={styles.circleMeta}>
-                  <span className={styles.onlineDot} aria-hidden="true" />
-                  <span className={styles.onlineCount}>{c.online} online</span>
-                </div>
+          <p className={styles.sectionLabel}>Open circles</p>
+
+          {circles === null && (
+            <p className={styles.status} role="status">Loading circles…</p>
+          )}
+
+          {circles !== null && circlesError && (
+            <div className={styles.errorNote} role="alert">
+              <p>{circlesError}</p>
+              <button className={styles.inlineBtn} onClick={() => setCirclesTick(t => t + 1)}>
+                Try again
               </button>
-            ))}
-          </div>
+            </div>
+          )}
+
+          {circles !== null && !circlesError && circles.length === 0 && (
+            <p className={styles.emptyNote}>No circles are open right now. Please check back soon.</p>
+          )}
+
+          {circles !== null && !circlesError && circles.length > 0 && (
+            <div className={styles.circleList}>
+              {circles.map(c => (
+                <button
+                  key={c.id}
+                  className={styles.circleCard}
+                  onClick={() => openCircle(c.id)}
+                  aria-label={`Open ${c.name}`}
+                >
+                  <span className={styles.circleIcon} aria-hidden="true">{c.icon ?? '💬'}</span>
+                  <div className={styles.circleInfo}>
+                    <h2 className={styles.circleName}>{c.name}</h2>
+                    {c.description && <p className={styles.circleDesc}>{c.description}</p>}
+                  </div>
+                  <div className={styles.circleMeta}>
+                    <span className={styles.memberCount}>
+                      {c.member_count} {c.member_count === 1 ? 'member' : 'members'}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </>
       )}
 
       {/* Thread view */}
-      {activeCircle && (
+      {activeCircleId && (
         <div className={styles.thread}>
           <button className={styles.backBtn} onClick={closeCircle} aria-label="Back to circles">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-              <polyline points="15 18 9 12 15 6"/>
+              <polyline points="15 18 9 12 15 6" />
             </svg>
             Back to circles
           </button>
 
           <div className={styles.threadHeader}>
-            <span aria-hidden="true">{activeCircle.icon}</span>
+            <span className={styles.threadIcon} aria-hidden="true">{detail?.icon ?? '💬'}</span>
             <div>
-              <h1 className={styles.threadName}>{activeCircle.name}</h1>
-              <p className={styles.threadDesc}>{activeCircle.description}</p>
+              <h1 className={styles.threadName}>{detail?.name ?? 'Circle'}</h1>
+              {detail?.description && <p className={styles.threadDesc}>{detail.description}</p>}
+              {detail && (
+                <p className={styles.threadMeta}>
+                  {detail.member_count} {detail.member_count === 1 ? 'member' : 'members'}
+                </p>
+              )}
             </div>
           </div>
 
-          <div className={styles.messageList} role="log" aria-label="Circle messages" aria-live="polite">
-            {messages.map(msg => (
-              <div key={msg.id} className={[styles.msg, msg.mine ? styles.msgMine : ''].join(' ')}>
-                <div
-                  className={styles.msgAvatar}
-                  style={{ background: msg.color }}
-                  aria-hidden="true"
-                >
-                  {msg.anonName.split(' ').map(w => w[0]).join('').slice(0, 2)}
-                </div>
-                <div className={styles.msgBubble}>
-                  <p className={styles.msgName}>{msg.anonName}</p>
-                  <p className={styles.msgText}>{msg.text}</p>
-                  <div className={styles.msgFooter}>
-                    <span className={styles.msgTime}>{msg.time}</span>
-                    <div className={styles.msgReacts}>
-                      {EMOJIS.map(e => (
-                        <button
-                          key={e}
-                          className={styles.reactBtn}
-                          onClick={() => react(msg.id, e)}
-                          aria-label={`React with ${e}`}
-                        >
-                          {e} {msg.reactions[e] ? <span>{msg.reactions[e]}</span> : null}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-            <div ref={bottomRef} />
-          </div>
+          {pageNotice && <p className={styles.noticeSuccess} role="status">{pageNotice}</p>}
 
-          <div className={styles.replyBox}>
-            <textarea
-              className={styles.replyInput}
-              value={reply}
-              onChange={e => setReply(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  sendReply()
-                }
-              }}
-              placeholder="Share something anonymously..."
-              aria-label="Type your anonymous message"
-              rows={1}
-            />
-            <button className={styles.sendBtn} onClick={sendReply} aria-label="Send message">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-              </svg>
-            </button>
-          </div>
+          {detailLoading && <p className={styles.status} role="status">Loading circle…</p>}
+
+          {!detailLoading && detailError && (
+            <div className={styles.errorNote} role="alert">
+              <p>{detailError}</p>
+              <button className={styles.inlineBtn} onClick={() => openCircle(activeCircleId)}>
+                Try again
+              </button>
+            </div>
+          )}
+
+          {!detailLoading && !detailError && detail && !detail.is_member && (
+            <div className={styles.joinCard}>
+              <p className={styles.joinText}>
+                This circle is private to its members. Join to read the conversation and share with the group.
+              </p>
+              {actionError && <p className={styles.errorText} role="alert">{actionError}</p>}
+              <button
+                className={styles.joinBtn}
+                onClick={handleJoin}
+                disabled={joining}
+              >
+                {joining ? 'Joining…' : 'Join this circle'}
+              </button>
+            </div>
+          )}
+
+          {!detailLoading && !detailError && detail && detail.is_member && (
+            <>
+              <div className={styles.messageList} role="log" aria-label="Circle messages" aria-live="polite">
+                {messagesLoading && <p className={styles.status} role="status">Loading messages…</p>}
+
+                {!messagesLoading && messagesError && (
+                  <div className={styles.errorNote} role="alert">
+                    <p>{messagesError}</p>
+                    <button
+                      className={styles.inlineBtn}
+                      onClick={() => loadMessages(activeCircleId, 'initial')}
+                    >
+                      Try again
+                    </button>
+                  </div>
+                )}
+
+                {!messagesLoading && !messagesError && messages.length === 0 && (
+                  <p className={styles.emptyNote}>
+                    No messages yet. Be the first to share something with this circle.
+                  </p>
+                )}
+
+                {!messagesLoading && !messagesError && messages.length > 0 && (
+                  <>
+                    {nextCursor && (
+                      <button
+                        className={styles.loadOlderBtn}
+                        onClick={() => loadMessages(activeCircleId, 'older')}
+                        disabled={loadingOlder}
+                      >
+                        {loadingOlder ? 'Loading…' : 'Load older messages'}
+                      </button>
+                    )}
+                    {olderError && <p className={styles.errorText} role="alert">{olderError}</p>}
+                    {messages.map(m => (
+                      <div key={m.id} className={styles.msg}>
+                        <div
+                          className={styles.msgAvatar}
+                          style={{ background: avatarColor(m.anon_name) }}
+                          aria-hidden="true"
+                        >
+                          {initialsOf(m.anon_name)}
+                        </div>
+                        <div className={styles.msgBubble}>
+                          <p className={styles.msgName}>{m.anon_name}</p>
+                          <p className={styles.msgText}>{m.content}</p>
+                          <div className={styles.msgFooter}>
+                            <span className={styles.msgTime}>{formatMessageTime(m.created_at)}</span>
+                            {Object.keys(m.reaction_counts).length > 0 && (
+                              <div className={styles.msgReacts} aria-label="Reactions">
+                                {Object.entries(m.reaction_counts).map(([emoji, count]) => (
+                                  <span key={emoji} className={styles.reactChip} aria-hidden="true">
+                                    {emoji} {count}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+                <div ref={bottomRef} />
+              </div>
+
+              {sendError && <p className={styles.errorText} role="alert">{sendError}</p>}
+              {actionError && <p className={styles.errorText} role="alert">{actionError}</p>}
+
+              <div className={styles.leaveRow}>
+                {leaveConfirm ? (
+                  <>
+                    <span className={styles.leavePrompt}>Leave this circle?</span>
+                    <button
+                      className={styles.dangerBtn}
+                      onClick={handleLeave}
+                      disabled={leaving}
+                    >
+                      {leaving ? 'Leaving…' : 'Confirm leave'}
+                    </button>
+                    <button
+                      className={styles.inlineBtn}
+                      onClick={() => setLeaveConfirm(false)}
+                    >
+                      Stay
+                    </button>
+                  </>
+                ) : (
+                  <button className={styles.leaveBtn} onClick={handleLeave}>
+                    Leave circle
+                  </button>
+                )}
+              </div>
+
+              <div className={styles.replyBox}>
+                <label className="sr-only" htmlFor="circle-reply">Type your anonymous message</label>
+                <textarea
+                  id="circle-reply"
+                  className={styles.replyInput}
+                  value={reply}
+                  onChange={e => setReply(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      void handleSend()
+                    }
+                  }}
+                  placeholder="Share something anonymously..."
+                  maxLength={MAX_MESSAGE_LENGTH}
+                  rows={1}
+                />
+                <button
+                  className={styles.sendBtn}
+                  onClick={handleSend}
+                  disabled={sending || !reply.trim()}
+                  aria-label="Send message"
+                >
+                  {sending
+                    ? <span className={styles.sendSpinner} aria-hidden="true" />
+                    : (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                        <line x1="22" y1="2" x2="11" y2="13" />
+                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                      </svg>
+                    )}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

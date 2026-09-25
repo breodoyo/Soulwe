@@ -127,6 +127,73 @@ export interface JournalListResponse {
   next_cursor: string | null
 }
 
+// POST /api/v1/auth/anonymous — mints a fresh anonymous session. The raw
+// token is returned exactly once; only its SHA-256 hash is stored server-side
+// (Backend/internal/anon/). `anonymous_id` is the internal identity row — the
+// frontend stores only the token and never renders this id.
+export interface AnonymousSessionResponse {
+  anonymous_token: string
+  anonymous_id: string
+}
+
+// GET /api/v1/auth/anonymous/me — validates the anonymous token and echoes the
+// authenticated identity back.
+export interface AnonymousMeResponse {
+  anonymous_id: string
+}
+
+// A peer circle as returned by GET /circles and GET /circles/:id
+// (Backend/internal/circles/model.go). description/icon are nullable;
+// is_member is always present but only meaningful on the detail endpoint (the
+// list always reports false).
+export interface Circle {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  icon: string | null
+  member_count: number
+  is_member: boolean
+}
+
+// A circle chat message. The author is exposed only as the server-generated
+// anon_name; identity UUIDs, device UUIDs, token hashes, and user IDs never
+// leave the API. reaction_counts is always an object (possibly empty).
+export interface CircleMessage {
+  id: string
+  anon_name: string
+  content: string
+  reaction_counts: Record<string, number>
+  created_at: string
+}
+
+// GET /api/v1/circles
+export interface CircleListResponse {
+  circles: Circle[]
+}
+
+// GET /api/v1/circles/:id
+export interface CircleResponse {
+  circle: Circle
+}
+
+// GET /api/v1/circles/:id/messages — newest first. next_cursor is the created_at
+// cursor for the previous (older) page when one exists, otherwise null.
+export interface CircleMessagesResponse {
+  messages: CircleMessage[]
+  next_cursor: string | null
+}
+
+// POST /api/v1/circles/:id/messages
+export interface CreateCircleMessagePayload {
+  content: string
+}
+
+// POST /api/v1/circles/:id/messages → 201
+export interface CircleMessageResponse {
+  message: CircleMessage
+}
+
 // The documented error envelope: {"error": {"code", "message", "field"?}}.
 export interface ApiErrorBody {
   error: {
