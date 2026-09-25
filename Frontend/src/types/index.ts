@@ -258,6 +258,66 @@ export interface BookingsResponse {
   bookings: Booking[]
 }
 
+// A curated breathing exercise as returned by GET /breathing/exercises and
+// GET /breathing/exercises/:id (Backend/internal/breathing/model.go). The
+// catalog is seed data ('478' and 'box'); durations are in seconds and
+// technique mirrors the slug vocabulary. created_at is never serialized.
+export interface BreathingExercise {
+  id: string
+  slug: string
+  name: string
+  description: string
+  technique: string
+  inhale_s: number
+  hold_s: number
+  exhale_s: number
+}
+
+// GET /api/v1/breathing/exercises — in the catalog's defined order.
+export interface BreathingExercisesResponse {
+  exercises: BreathingExercise[]
+}
+
+// GET /api/v1/breathing/exercises/:id — 404 when the exercise doesn't exist.
+export interface BreathingExerciseResponse {
+  exercise: BreathingExercise
+}
+
+// A recorded breathing session (Backend/internal/breathing/model.go). The
+// owner is never serialized; exercise_id is null (and name omitted) only for
+// legacy device sessions without an exercise link. Duration is client-supplied
+// seconds; `completed` defaults to true for sessions recorded via the API.
+export interface BreathingSession {
+  id: string
+  exercise_id: string | null
+  technique: string
+  name?: string | null
+  breaths: number
+  duration_s: number
+  completed: boolean
+  created_at: string
+}
+
+// POST /api/v1/breathing/sessions — breaths and duration_s must be positive
+// integers; completed is optional and defaults to true.
+export interface CreateBreathingSessionPayload {
+  exercise_id: string
+  breaths: number
+  duration_s: number
+  completed?: boolean
+}
+
+// {session} envelope for POST /breathing/sessions (201).
+export interface BreathingSessionResponse {
+  session: BreathingSession
+}
+
+// GET /api/v1/breathing/sessions — the authenticated user's history, newest
+// first (default limit 20, max 50).
+export interface BreathingSessionsResponse {
+  sessions: BreathingSession[]
+}
+
 // The documented error envelope: {"error": {"code", "message", "field"?}}.
 export interface ApiErrorBody {
   error: {

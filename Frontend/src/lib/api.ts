@@ -15,11 +15,16 @@ import type {
   ApiErrorBody,
   BookingResponse,
   BookingsResponse,
+  BreathingExerciseResponse,
+  BreathingExercisesResponse,
+  BreathingSessionResponse,
+  BreathingSessionsResponse,
   CircleListResponse,
   CircleMessageResponse,
   CircleMessagesResponse,
   CircleResponse,
   CreateBookingPayload,
+  CreateBreathingSessionPayload,
   CreateCircleMessagePayload,
   CreateJournalPayload,
   CreateMoodPayload,
@@ -397,6 +402,41 @@ export const api = {
       }),
   },
 
-  // Future domain clients (breathing) plug
-  // in here using the same `request` helper.
+  breathe: {
+    // GET /breathing/exercises — the curated catalog, defined order. Optional
+    // `limit` (default 20, max 50) only trims the tail; there is no cursor.
+    exercises: (params?: { limit?: number }): Promise<BreathingExercisesResponse> => {
+      const query = new URLSearchParams()
+      if (params?.limit) query.set('limit', String(params.limit))
+      const qs = query.toString()
+      return request<BreathingExercisesResponse>(
+        `/breathing/exercises${qs ? `?${qs}` : ''}`,
+      )
+    },
+
+    // GET /breathing/exercises/:id — 404 if the exercise doesn't exist.
+    exercise: (id: string): Promise<BreathingExerciseResponse> =>
+      request<BreathingExerciseResponse>(`/breathing/exercises/${encodeURIComponent(id)}`),
+
+    sessions: {
+      // POST /breathing/sessions — records one completed session (completed
+      // defaults to true). 201 with the stored session.
+      record: (payload: CreateBreathingSessionPayload): Promise<BreathingSessionResponse> =>
+        request<BreathingSessionResponse>('/breathing/sessions', {
+          method: 'POST',
+          body: payload,
+        }),
+
+      // GET /breathing/sessions — the authenticated user's history, newest
+      // first. Optional `limit` (default 20, max 50).
+      list: (params?: { limit?: number }): Promise<BreathingSessionsResponse> => {
+        const query = new URLSearchParams()
+        if (params?.limit) query.set('limit', String(params.limit))
+        const qs = query.toString()
+        return request<BreathingSessionsResponse>(
+          `/breathing/sessions${qs ? `?${qs}` : ''}`,
+        )
+      },
+    },
+  },
 }
