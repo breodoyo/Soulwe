@@ -11,14 +11,18 @@
 
 import type {
   ApiErrorBody,
+  CreateJournalPayload,
   CreateMoodPayload,
   DashboardResponse,
+  JournalEntryResponse,
+  JournalListResponse,
   LoginResponse,
   MeResponse,
   MoodLog,
   MoodsResponse,
   ProfileResponse,
   RegisterResponse,
+  UpdateJournalPayload,
   UpdateProfilePayload,
 } from '@/types'
 import { ApiError } from '@/types'
@@ -207,6 +211,45 @@ export const api = {
     get: (): Promise<DashboardResponse> => request<DashboardResponse>('/dashboard'),
   },
 
-  // Future domain clients (journal, circles, therapists, breathing) plug
+  journal: {
+    // GET /journal — the user's entries, newest first. `limit` (default 20,
+    // max 50) and `before` (created_at cursor, exclusive) are optional.
+    list: (params?: { limit?: number; before?: string }): Promise<JournalListResponse> => {
+      const query = new URLSearchParams()
+      if (params?.limit) query.set('limit', String(params.limit))
+      if (params?.before) query.set('before', params.before)
+      const qs = query.toString()
+      return request<JournalListResponse>(`/journal${qs ? `?${qs}` : ''}`)
+    },
+
+    // GET /journal/:id — a single entry including its decrypted content.
+    get: (id: string): Promise<JournalEntryResponse> =>
+      request<JournalEntryResponse>(`/journal/${encodeURIComponent(id)}`),
+
+    // POST /journal — saves an entry; the server attempts an AI reflection
+    // on create (best-effort, ai_reflection may be null).
+    create: (payload: CreateJournalPayload): Promise<JournalEntryResponse> =>
+      request<JournalEntryResponse>('/journal', { method: 'POST', body: payload }),
+
+    // PATCH /journal/:id — updates content/mood_tags/prompt_used.
+    update: (id: string, payload: UpdateJournalPayload): Promise<JournalEntryResponse> =>
+      request<JournalEntryResponse>(`/journal/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: payload,
+      }),
+
+    // DELETE /journal/:id — permanent, returns 204.
+    delete: (id: string): Promise<void> =>
+      request<void>(`/journal/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+    // POST /journal/:id/reflect — generates and stores a fresh AI reflection.
+    // May throw a 503 ApiError (code AI_REFLECTION_UNAVAILABLE).
+    reflect: (id: string): Promise<JournalEntryResponse> =>
+      request<JournalEntryResponse>(`/journal/${encodeURIComponent(id)}/reflect`, {
+        method: 'POST',
+      }),
+  },
+
+  // Future domain clients (circles, therapists, breathing) plug
   // in here using the same `request` helper.
 }

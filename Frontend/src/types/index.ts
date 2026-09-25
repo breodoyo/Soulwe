@@ -83,6 +83,50 @@ export interface DashboardResponse {
   mood_checkins_count: number
 }
 
+// A journal entry as returned by the journal endpoints
+// (Backend/internal/journal/model.go).
+//
+// `content` is intentionally absent from list and create responses — the
+// backend only decrypts and returns it on the single-entry endpoints
+// (GET/PATCH/reflect). Ciphertext, ownership, and encryption fields are never
+// serialized. There is no `updated_at` field in the backend contract.
+export interface JournalEntry {
+  id: string
+  content?: string
+  mood_tags: string[]
+  prompt_used: string | null
+  ai_reflection: string | null
+  word_count: number
+  created_at: string
+}
+
+// POST /api/v1/journal — content required; mood_tags and prompt_used optional.
+export interface CreateJournalPayload {
+  content: string
+  mood_tags?: string[]
+  prompt_used?: string
+}
+
+// PATCH /api/v1/journal/:id — all fields optional, at least one required.
+// Content edits clear any stored ai_reflection.
+export interface UpdateJournalPayload {
+  content?: string
+  mood_tags?: string[]
+  prompt_used?: string
+}
+
+// {entry} envelope shared by POST, GET /:id, PATCH /:id and POST /:id/reflect.
+export interface JournalEntryResponse {
+  entry: JournalEntry
+}
+
+// GET /api/v1/journal — newest first. next_cursor is the created_at of the
+// last entry in a full page, otherwise null.
+export interface JournalListResponse {
+  entries: JournalEntry[]
+  next_cursor: string | null
+}
+
 // The documented error envelope: {"error": {"code", "message", "field"?}}.
 export interface ApiErrorBody {
   error: {
