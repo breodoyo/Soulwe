@@ -92,13 +92,16 @@
 }
 
 /* ── Hero ── */
+/* The hero is exclusive: min-height 100dvh and nothing above the fold shares
+   it, so the first screen is the message and nothing else. */
 .hero {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 100px var(--space-5) var(--space-10);
+  /* Extra bottom room so the scroll cue never sits on the hero's content. */
+  padding: 100px var(--space-5) 84px;
   gap: var(--space-10);
   position: relative;
   overflow: hidden;
@@ -134,7 +137,7 @@
 @media (min-width: 900px) {
   .hero {
     flex-direction: row;
-    padding: 100px var(--space-10) var(--space-10);
+    padding: 100px var(--space-10) 84px;
     gap: var(--space-10);
     min-height: 100dvh;
   }
@@ -433,29 +436,102 @@
   margin-bottom: var(--space-8);
 }
 
+/* ── Scroll cue ── */
+/* Anchored to the bottom of the hero so it never displaces the headline. */
+.scrollCue {
+  position: absolute;
+  bottom: var(--space-6);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  opacity: 0.75;
+  transition: opacity var(--duration-base) var(--ease);
+}
+
+.scrollCue:hover { opacity: 1; }
+
+.scrollCueText {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.scrollCueArrow {
+  font-size: 18px;
+  line-height: 1;
+  color: var(--sun-deep);
+  animation: cueBob 2s ease-in-out infinite;
+}
+
+@keyframes cueBob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(4px); }
+}
+
+.scrollCue:focus-visible {
+  outline: 2px solid var(--sun-deep);
+  outline-offset: 4px;
+  border-radius: var(--radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scrollCueArrow { animation: none; }
+}
+
 /* ── Features ── */
 .features {
   padding: 80px 0;
   text-align: center;
+  /* The nav is fixed, so an anchor jump would otherwise tuck the section
+     heading underneath it. */
+  scroll-margin-top: 80px;
 }
 
-.featuresGrid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-4);
-  text-align: left;
+.featuresScroller {
+  position: relative;
   margin-top: var(--space-8);
 }
 
-@media (min-width: 640px) {
-  .featuresGrid { grid-template-columns: repeat(2, 1fr); }
+/* A one-row track that scrolls sideways. Cards keep a fixed basis and snap to
+   the start, so the next card peeks in and the row reads as scrollable rather
+   than as a truncated grid. */
+.featuresTrack {
+  display: flex;
+  gap: var(--space-4);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  text-align: left;
+  /* Room for the scrollbar and for the edge fades, which sit outside the
+     track's own padding so they never scroll with the cards. */
+  padding: var(--space-2) var(--space-5) var(--space-5);
+  scrollbar-width: thin;
+  scrollbar-color: var(--sun-muted) transparent;
 }
 
-@media (min-width: 900px) {
-  .featuresGrid { grid-template-columns: repeat(4, 1fr); }
+.featuresTrack::-webkit-scrollbar { height: 6px; }
+.featuresTrack::-webkit-scrollbar-track { background: transparent; }
+.featuresTrack::-webkit-scrollbar-thumb {
+  background: var(--sun-muted);
+  border-radius: var(--radius-full);
 }
 
 .featureCard {
+  flex: 0 0 auto;
+  /* ~280px reads well next to a 960px column; the peeking card is what signals
+     there is more to the right. */
+  width: min(280px, 78vw);
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
   background: #fff;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
@@ -486,6 +562,29 @@
   font-size: var(--text-sm);
   color: var(--muted);
   line-height: 1.65;
+}
+
+/* Soft edges so a card is never sliced by the section boundary. Purely
+   decorative, so the fades are hidden from assistive tech. */
+.featuresScroller::before,
+.featuresScroller::after {
+  content: '';
+  position: absolute;
+  top: var(--space-2);
+  bottom: var(--space-5);
+  width: 40px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.featuresScroller::before {
+  left: 0;
+  background: linear-gradient(to right, var(--bg), transparent);
+}
+
+.featuresScroller::after {
+  right: 0;
+  background: linear-gradient(to left, var(--bg), transparent);
 }
 
 /* ── Problem ── */
@@ -544,6 +643,7 @@
   padding: 80px 0;
   background: var(--ink);
   text-align: center;
+  scroll-margin-top: 80px;
 }
 
 .circlesPills {
@@ -648,6 +748,7 @@
   padding: 80px 0;
   background: var(--bg-mid);
   border-top: 1px solid var(--border-soft);
+  scroll-margin-top: 80px;
 }
 
 .therapistsInner {

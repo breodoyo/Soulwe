@@ -236,9 +236,15 @@
 
 @media (min-width: 768px) {
 
+  /* The app shell owns its scrolling: the sidebar is a fixed-height column and
+     .content is the scroll pane, so the shell is pinned to exactly one
+     viewport and clips its own overflow. Previously this lock lived in
+     global.css on body/#root, which also clipped the landing page — that page
+     renders outside this shell and needs the document to scroll. */
   .shell {
     flex-direction: row;
-    min-height: 100dvh;
+    height: 100dvh;
+    overflow: hidden;
   }
 
   .topnav {

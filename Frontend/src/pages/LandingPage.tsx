@@ -23,6 +23,11 @@ const features = [
     title: 'Breathe through it',
     desc: 'Guided breathing exercises. Two minutes to shift from panic to peace.',
   },
+  {
+    icon: '💛',
+    title: 'Check in on yourself',
+    desc: 'Name how you are feeling — heavy, okay, better, at peace, grateful — and watch it add up over time.',
+  },
 ]
 
 const testimonials = [
@@ -54,6 +59,9 @@ const circles = [
   { icon: '🌱', name: 'Young adults'         },
 ]
 
+// One page. The hero is exclusive: it holds the entire first screen and
+// nothing shares that viewport. Every section the nav links to — features,
+// circles, therapists — is briefed on the page itself.
 export default function LandingPage() {
   const navigate = useNavigate()
 
@@ -131,71 +139,41 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
-      </section>
 
-      {/* ── Stats bar ── */}
-      <div className={styles.statsBar}>
-        {[
-          { num: '8',    label: 'Support circles'     },
-          { num: '3+',   label: 'Kenyan languages'     },
-          { num: 'Free', label: 'Always, for everyone' },
-          { num: '24/7', label: 'Always open'          },
-        ].map(s => (
-          <div key={s.label} className={styles.statItem}>
-            <span className={styles.statNum}>{s.num}</span>
-            <span className={styles.statLabel}>{s.label}</span>
-          </div>
-        ))}
-      </div>
+        {/* The hero fills the screen, so it needs to say that there is more
+            below it. This is the one cue that turns a full-height hero into
+            the first step of a scroll rather than a dead end. */}
+        <a className={styles.scrollCue} href="#features">
+          <span className={styles.scrollCueText}>See what&rsquo;s inside</span>
+          <span className={styles.scrollCueArrow} aria-hidden="true">&darr;</span>
+        </a>
+      </section>
 
       {/* ── Features ── */}
       <section className={styles.features} id="features">
         <div className={styles.inner}>
           <span className={styles.eyebrow}>What Soulwe gives you</span>
           <h2 className={styles.sectionHeading}>Everything in one quiet place.</h2>
-          <div className={styles.featuresGrid}>
-            {features.map(f => (
-              <div key={f.title} className={styles.featureCard}>
-                <span className={styles.featureIcon}>{f.icon}</span>
-                <h3 className={styles.featureTitle}>{f.title}</h3>
-                <p className={styles.featureDesc}>{f.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Problem ── */}
-      <section className={styles.problem}>
-        <div className={styles.inner}>
-          <span className={styles.eyebrow}>Why Soulwe exists</span>
-          <h2 className={styles.sectionHeading}>
-            Mental health care in East Africa has a gap.
-          </h2>
-          <div className={styles.problemGrid}>
-            <div className={styles.problemCard}>
-              <span className={styles.problemNum}>90%</span>
-              <p className={styles.problemText}>
-                of people who need mental health support in sub-Saharan Africa never receive it.
-              </p>
-            </div>
-            <div className={styles.problemCard}>
-              <span className={styles.problemNum}>&lt;100</span>
-              <p className={styles.problemText}>
-                psychiatrists serve Kenya's 55 million people. The wait is months. The cost is thousands.
-              </p>
-            </div>
-            <div className={styles.problemCard}>
-              <span className={styles.problemNum}>0</span>
-              <p className={styles.problemText}>
-                mental health apps designed specifically around African culture, language, and stigma.
-              </p>
+          <div className={styles.featuresScroller}>
+            {/* A single horizontally scrolling row. The tabIndex makes the
+                track focusable so it can be scrolled with the keyboard, and
+                the group role plus label announce it as a scrollable region
+                rather than as five loose cards. */}
+            <div
+              className={styles.featuresTrack}
+              tabIndex={0}
+              role="group"
+              aria-label="Soulwe features, scroll sideways for more"
+            >
+              {features.map(f => (
+                <div key={f.title} className={styles.featureCard}>
+                  <span className={styles.featureIcon}>{f.icon}</span>
+                  <h3 className={styles.featureTitle}>{f.title}</h3>
+                  <p className={styles.featureDesc}>{f.desc}</p>
+                </div>
+              ))}
             </div>
           </div>
-          <p className={styles.problemClose}>
-            Soulwe is not trying to replace psychiatry.<br />
-            It is trying to close the gap between <strong>nothing</strong> and <strong>something.</strong>
-          </p>
         </div>
       </section>
 
@@ -220,25 +198,6 @@ export default function LandingPage() {
           <button className={styles.circlesBtn} onClick={() => navigate('/circle')}>
             Join a circle anonymously →
           </button>
-        </div>
-      </section>
-
-      {/* ── Testimonials ── */}
-      <section className={styles.testimonials}>
-        <div className={styles.inner}>
-          <span className={styles.eyebrow}>From the community</span>
-          <h2 className={styles.sectionHeading}>Real words from real people.</h2>
-          <div className={styles.testimonialsGrid}>
-            {testimonials.map(t => (
-              <div key={t.name} className={styles.testimonialCard}>
-                <p className={styles.testimonialText}>"{t.text}"</p>
-                <div className={styles.testimonialAuthor}>
-                  <span className={styles.testimonialName}>{t.name}</span>
-                  <span className={styles.testimonialLocation}>{t.location}</span>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -279,6 +238,76 @@ export default function LandingPage() {
                   <p className={styles.therapistMiniSpec}>{t.spec}</p>
                 </div>
                 <span className={styles.therapistMiniPrice}>{t.price}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Supporting detail, after the three sections the nav links to ── */}
+
+      {/* ── Stats bar ── */}
+      <div className={styles.statsBar}>
+        {[
+          { num: '8',    label: 'Support circles'     },
+          { num: '3+',   label: 'Kenyan languages'     },
+          { num: 'Free', label: 'Always, for everyone' },
+          { num: '24/7', label: 'Always open'          },
+        ].map(s => (
+          <div key={s.label} className={styles.statItem}>
+            <span className={styles.statNum}>{s.num}</span>
+            <span className={styles.statLabel}>{s.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Problem ── */}
+      <section className={styles.problem}>
+        <div className={styles.inner}>
+          <span className={styles.eyebrow}>Why Soulwe exists</span>
+          <h2 className={styles.sectionHeading}>
+            Mental health care in East Africa has a gap.
+          </h2>
+          <div className={styles.problemGrid}>
+            <div className={styles.problemCard}>
+              <span className={styles.problemNum}>90%</span>
+              <p className={styles.problemText}>
+                of people who need mental health support in sub-Saharan Africa never receive it.
+              </p>
+            </div>
+            <div className={styles.problemCard}>
+              <span className={styles.problemNum}>&lt;100</span>
+              <p className={styles.problemText}>
+                psychiatrists serve Kenya's 55 million people. The wait is months. The cost is thousands.
+              </p>
+            </div>
+            <div className={styles.problemCard}>
+              <span className={styles.problemNum}>0</span>
+              <p className={styles.problemText}>
+                mental health apps designed specifically around African culture, language, and stigma.
+              </p>
+            </div>
+          </div>
+          <p className={styles.problemClose}>
+            Soulwe is not trying to replace psychiatry.<br />
+            It is trying to close the gap between <strong>nothing</strong> and <strong>something.</strong>
+          </p>
+        </div>
+      </section>
+
+      {/* ── Testimonials ── */}
+      <section className={styles.testimonials}>
+        <div className={styles.inner}>
+          <span className={styles.eyebrow}>From the community</span>
+          <h2 className={styles.sectionHeading}>Real words from real people.</h2>
+          <div className={styles.testimonialsGrid}>
+            {testimonials.map(t => (
+              <div key={t.name} className={styles.testimonialCard}>
+                <p className={styles.testimonialText}>"{t.text}"</p>
+                <div className={styles.testimonialAuthor}>
+                  <span className={styles.testimonialName}>{t.name}</span>
+                  <span className={styles.testimonialLocation}>{t.location}</span>
+                </div>
               </div>
             ))}
           </div>

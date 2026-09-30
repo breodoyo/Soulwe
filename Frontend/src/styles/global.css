@@ -9,6 +9,13 @@
 html {
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+  /* The landing page is read by scrolling hero → features → circles →
+     therapists, so anchor jumps should glide rather than snap. */
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
 }
 
 body {
@@ -83,9 +90,4 @@ ul, ol { list-style: none; }
   clip: rect(0,0,0,0);
   white-space: nowrap;
   border: 0;
-}
-
-@media (min-width: 768px) {
-  body { overflow: hidden; }
-  #root { height: 100dvh; overflow: hidden; }
 }
