@@ -19,16 +19,24 @@ var validMoodSet = makeSet(ValidMoods)
 var (
 	// ErrInvalidMood reports a mood value outside the product vocabulary.
 	ErrInvalidMood = errors.New("invalid mood value")
+	// ErrInvalidOwner reports an owner that is neither exactly a registered user
+	// nor exactly an anonymous session. It is a programming-error guard: the
+	// HTTP layer refuses such a request before the service is reached.
+	ErrInvalidOwner = errors.New("mood: request has no single owner")
 )
 
-// MoodLog mirrors the mood_logs table (db/migrations/004_create_mood_logs.up.sql).
-// UserID is never serialized back to the client — ownership is derived from the
-// authenticated JWT and the response carries only id, mood, and logged_at.
+// MoodLog mirrors the mood_logs table (db/migrations/004_create_mood_logs.up.sql,
+// extended by 017_add_anon_ownership). Exactly one of UserID / AnonIdentityID is
+// populated, so a check-in belongs to either a registered user or an anonymous
+// session and never to neither. Neither owner column is serialized back to the
+// client — ownership is derived from the authenticated identity and the
+// response carries only id, mood, and logged_at.
 type MoodLog struct {
-	ID       string    `json:"id"`
-	UserID   string    `json:"-"`
-	Mood     string    `json:"mood"`
-	LoggedAt time.Time `json:"logged_at"`
+	ID             string    `json:"id"`
+	UserID         string    `json:"-"`
+	AnonIdentityID string    `json:"-"`
+	Mood           string    `json:"mood"`
+	LoggedAt       time.Time `json:"logged_at"`
 }
 
 // IsValidMood reports whether mood is one of the documented values.

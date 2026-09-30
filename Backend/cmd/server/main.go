@@ -118,8 +118,8 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 			}
 		}
 
-		// Phase 4 wellness routes. All require a registered-user JWT; the
-		// identical profile/mood/dashboard routes reject anonymous tokens.
+		// Phase 4 wellness routes. The profile routes require a registered-user
+		// JWT; the mood and journal routes accept either credential (see below).
 		if tokenManager != nil && authHandler != nil {
 			users := v1.Group("/users")
 			{
@@ -127,31 +127,39 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 				users.PATCH("/me", middleware.AuthRequired(tokenManager), authHandler.UpdateProfile)
 			}
 		}
+		// Checking in is a normal action, not a gated one, so the mood routes
+		// accept either credential and scope the check-in to whichever identity
+		// authenticated. IdentityRequired never lets the two credentials be
+		// confused: a JWT yields a user, an anonymous token an anonymous session.
+		identity := middleware.IdentityRequired(tokenManager, anonService)
 		if tokenManager != nil && moodHandler != nil {
-			moods := v1.Group("/moods")
+			moods := v1.Group("/moods", identity)
 			{
-				moods.POST("", middleware.AuthRequired(tokenManager), moodHandler.Create)
-				moods.GET("", middleware.AuthRequired(tokenManager), moodHandler.List)
+				moods.POST("", moodHandler.Create)
+				moods.GET("", moodHandler.List)
 			}
 		}
 		if tokenManager != nil && dashboardHandler != nil {
+			// The dashboard is registered-only: it includes the account profile.
 			dashboard := v1.Group("/dashboard")
 			{
 				dashboard.GET("", middleware.AuthRequired(tokenManager), dashboardHandler.Get)
 			}
 		}
 		if tokenManager != nil && journalHandler != nil {
-			// All journal routes require a registered-user JWT; anonymous
-			// tokens are rejected by AuthRequired. Ownership never comes from
-			// the request: each handler derives the user from the context.
-			journalGroup := v1.Group("/journal")
+			// Journal routes accept either credential for the same reason as mood:
+			// writing an entry should not require registering. Ownership still
+			// never comes from the request — each handler reads it from the
+			// resolved identity in the context, and the ciphertext is bound to
+			// that owner.
+			journalGroup := v1.Group("/journal", identity)
 			{
-				journalGroup.POST("", middleware.AuthRequired(tokenManager), journalHandler.Create)
-				journalGroup.GET("", middleware.AuthRequired(tokenManager), journalHandler.List)
-				journalGroup.GET("/:id", middleware.AuthRequired(tokenManager), journalHandler.Get)
-				journalGroup.PATCH("/:id", middleware.AuthRequired(tokenManager), journalHandler.Update)
-				journalGroup.DELETE("/:id", middleware.AuthRequired(tokenManager), journalHandler.Delete)
-				journalGroup.POST("/:id/reflect", middleware.AuthRequired(tokenManager), journalHandler.Reflect)
+				journalGroup.POST("", journalHandler.Create)
+				journalGroup.GET("", journalHandler.List)
+				journalGroup.GET("/:id", journalHandler.Get)
+				journalGroup.PATCH("/:id", journalHandler.Update)
+				journalGroup.DELETE("/:id", journalHandler.Delete)
+				journalGroup.POST("/:id/reflect", journalHandler.Reflect)
 			}
 		}
 		if anonService != nil && circlesHandler != nil {
@@ -170,16 +178,18 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 				circlesGroup.POST("/:id/messages", circlesHandler.SendMessage)
 			}
 		}
-		if tokenManager != nil && therapistsHandler != nil {
+		if therapistsHandler != nil {
 			// Phase 6.2 therapist discovery. The directory is public catalog
-			// data, but browsing it is a registered-user feature: every route
-			// requires a valid JWT (AuthRequired). Anonymous tokens are
-			// rejected. Profiles expose only public fields, never personal or
-			// credential material.
+			// data with no owner and no private fields, so discovery is
+			// browsable by everyone — guests, anonymous sessions, and
+			// registered users alike. Therapist *communication* is the
+			// registered-only half of the feature: bookings stay behind
+			// AuthRequired just below. Profiles expose only public fields,
+			// never personal or credential material.
 			therapistsGroup := v1.Group("/therapists")
 			{
-				therapistsGroup.GET("", middleware.AuthRequired(tokenManager), therapistsHandler.List)
-				therapistsGroup.GET("/:id", middleware.AuthRequired(tokenManager), therapistsHandler.Get)
+				therapistsGroup.GET("", therapistsHandler.List)
+				therapistsGroup.GET("/:id", therapistsHandler.Get)
 			}
 		}
 		if tokenManager != nil && bookingsHandler != nil {
@@ -199,19 +209,21 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 				bookingsGroup.PATCH("/:id/cancel", bookingsHandler.Cancel)
 			}
 		}
-		if tokenManager != nil && breathingHandler != nil {
-			// Phase 6.4 breathing exercises. The catalog is shared public data,
-			// but browsing it — and recording or listing sessions — is a
-			// registered-user feature: every route requires a valid JWT
-			// (AuthRequired), and anonymous tokens are rejected. Session
-			// ownership is never taken from the request; each handler derives
-			// the user from the JWT context.
+		if breathingHandler != nil {
+			// Phase 6.4 breathing exercises. The exercise catalog is shared
+			// public data, so anyone may browse the techniques and run the
+			// exercise itself without an account. Recording a session is a normal
+			// action too, so those routes accept either credential and scope the
+			// history to whichever identity authenticated — finishing an exercise
+			// should not require registering.
 			breathingGroup := v1.Group("/breathing")
 			{
-				breathingGroup.GET("/exercises", middleware.AuthRequired(tokenManager), breathingHandler.ListExercises)
-				breathingGroup.GET("/exercises/:id", middleware.AuthRequired(tokenManager), breathingHandler.GetExercise)
-				breathingGroup.POST("/sessions", middleware.AuthRequired(tokenManager), breathingHandler.RecordSession)
-				breathingGroup.GET("/sessions", middleware.AuthRequired(tokenManager), breathingHandler.ListSessions)
+				breathingGroup.GET("/exercises", breathingHandler.ListExercises)
+				breathingGroup.GET("/exercises/:id", breathingHandler.GetExercise)
+				if tokenManager != nil {
+					breathingGroup.POST("/sessions", identity, breathingHandler.RecordSession)
+					breathingGroup.GET("/sessions", identity, breathingHandler.ListSessions)
+				}
 			}
 		}
 	}

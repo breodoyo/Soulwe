@@ -9,15 +9,14 @@ import (
 	"strings"
 	"time"
 
-	"Backend/internal/middleware"
-
 	"github.com/gin-gonic/gin"
 )
 
 // Handler owns the HTTP surface of the therapists domain. It validates input,
-// calls the service layer, and writes responses — never the database. Reading
-// the directory is a registered-user feature, so the authenticated JWT is
-// required; the directory itself is public and involves no ownership.
+// calls the service layer, and writes responses — never the database. The
+// directory is public catalog data with no owner, so reading it requires no
+// credentials at all; therapist communication (bookings) is the registered-only
+// half of the feature and lives in the bookings domain.
 type Handler struct {
 	svc Service
 }
@@ -35,11 +34,6 @@ var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[
 // directory newest first, honoring optional ?limit, ?before (cursor),
 // ?language, and ?specialty query parameters.
 func (h *Handler) List(c *gin.Context) {
-	if _, ok := middleware.UserIDFromContext(c); !ok {
-		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
-		return
-	}
-
 	limit, err := parseLimit(c)
 	if err != nil {
 		respondError(c, http.StatusBadRequest, "INVALID_INPUT",
@@ -71,11 +65,6 @@ func (h *Handler) List(c *gin.Context) {
 // Get handles GET /api/v1/therapists/:id. It returns the therapist's public
 // profile, or 404 for a missing one.
 func (h *Handler) Get(c *gin.Context) {
-	if _, ok := middleware.UserIDFromContext(c); !ok {
-		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
-		return
-	}
-
 	id := c.Param("id")
 	if !uuidPattern.MatchString(id) {
 		respondError(c, http.StatusBadRequest, "INVALID_INPUT",

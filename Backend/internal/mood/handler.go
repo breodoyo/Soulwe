@@ -23,15 +23,15 @@ func NewHandler(svc Service) *Handler {
 }
 
 // createRequest is the body of POST /api/v1/moods. Ownership is never taken
-// from the body: the authenticated user ID comes from the JWT context.
+// from the body: it comes from the authenticated identity context.
 type createRequest struct {
 	Mood string `json:"mood"`
 }
 
 // Create handles POST /api/v1/moods. It records a mood check-in for the
-// authenticated user.
+// authenticated owner, which may be a registered user or an anonymous session.
 func (h *Handler) Create(c *gin.Context) {
-	userID, ok := middleware.UserIDFromContext(c)
+	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
 		return
@@ -44,7 +44,7 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	log, err := h.svc.Create(c.Request.Context(), userID, req.Mood)
+	log, err := h.svc.Create(c.Request.Context(), owner, req.Mood)
 	switch {
 	case errors.Is(err, ErrInvalidMood):
 		respondError(c, http.StatusBadRequest, "INVALID_INPUT",
@@ -58,12 +58,12 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 }
 
-// List handles GET /api/v1/moods. It returns the authenticated user's mood
+// List handles GET /api/v1/moods. It returns the authenticated owner's mood
 // history, newest first, honoring an optional ?limit= query parameter. The
-// user ID always comes from the JWT context, so this can never list another
-// user's check-ins.
+// owner always comes from the identity context, so this can never list another
+// person's check-ins.
 func (h *Handler) List(c *gin.Context) {
-	userID, ok := middleware.UserIDFromContext(c)
+	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
 		return
@@ -76,7 +76,7 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	logs, err := h.svc.List(c.Request.Context(), userID, limit)
+	logs, err := h.svc.List(c.Request.Context(), owner, limit)
 	if err != nil {
 		slog.Error("mood list failed", slog.String("error", err.Error()))
 		respondError(c, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR",

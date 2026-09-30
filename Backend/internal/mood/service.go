@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"Backend/internal/middleware"
 )
 
 // List defaults and caps, matching the pagination conventions documented for
@@ -15,24 +17,27 @@ const (
 
 // Service is the mood-check-in business-logic boundary. Implementations own
 // mood validation and list-page clamping; they never construct SQL.
+//
+// Check-ins belong to an Owner, which is either a registered user or an
+// anonymous session — checking in on yourself must not require registering.
 type Service interface {
 	// Create validates the mood value and records a check-in for the given
-	// user. The user ID always comes from the authenticated JWT context, never
-	// from client input. Returns ErrInvalidMood for a value outside the
-	// product vocabulary.
-	Create(ctx context.Context, userID, mood string) (*MoodLog, error)
+	// owner. The owner always comes from the authenticated context, never from
+	// client input. Returns ErrInvalidMood for a value outside the product
+	// vocabulary.
+	Create(ctx context.Context, owner middleware.Owner, mood string) (*MoodLog, error)
 
-	// List returns the user's check-ins newest first, clamped to a sane page
-	// size. It returns an empty slice (not nil) when the user has none.
-	List(ctx context.Context, userID string, limit int) ([]MoodLog, error)
+	// List returns the owner's check-ins newest first, clamped to a sane page
+	// size. It returns an empty slice (not nil) when they have none.
+	List(ctx context.Context, owner middleware.Owner, limit int) ([]MoodLog, error)
 
-	// Latest returns the user's most recent check-in, or nil when they have
+	// Latest returns the owner's most recent check-in, or nil when they have
 	// none. Exposed to the dashboard so it can surface the latest mood without
 	// a dedicated /moods/latest endpoint.
-	Latest(ctx context.Context, userID string) (*MoodLog, error)
+	Latest(ctx context.Context, owner middleware.Owner) (*MoodLog, error)
 
-	// Count returns the total number of the user's check-ins.
-	Count(ctx context.Context, userID string) (int64, error)
+	// Count returns the total number of the owner's check-ins.
+	Count(ctx context.Context, owner middleware.Owner) (int64, error)
 }
 
 type service struct {
@@ -44,33 +49,44 @@ func NewService(logs Repository) *service {
 	return &service{logs: logs}
 }
 
-func (s *service) Create(ctx context.Context, userID, mood string) (*MoodLog, error) {
+func (s *service) Create(ctx context.Context, owner middleware.Owner, mood string) (*MoodLog, error) {
 	mood = strings.TrimSpace(mood)
 	if !IsValidMood(mood) {
 		return nil, ErrInvalidMood
 	}
+	// The owner is stamped onto the row as a single column, so an ambiguous
+	// owner (both identities set) would silently write as one of them. Reject
+	// it here rather than guessing which identity meant the request.
+	if _, ok := middleware.IdentityFromOwner(owner); !ok {
+		return nil, ErrInvalidOwner
+	}
 
-	log := &MoodLog{UserID: userID, Mood: mood}
+	log := &MoodLog{Mood: mood}
+	if owner.Registered() {
+		log.UserID = owner.UserID
+	} else {
+		log.AnonIdentityID = owner.AnonIdentityID
+	}
 	if err := s.logs.Create(ctx, log); err != nil {
 		return nil, fmt.Errorf("mood create: %w", err)
 	}
 	return log, nil
 }
 
-func (s *service) List(ctx context.Context, userID string, limit int) ([]MoodLog, error) {
-	logs, err := s.logs.ListByUserID(ctx, userID, clampLimit(limit))
+func (s *service) List(ctx context.Context, owner middleware.Owner, limit int) ([]MoodLog, error) {
+	logs, err := s.logs.ListByOwner(ctx, owner, clampLimit(limit))
 	if err != nil {
 		return nil, err
 	}
 	return logs, nil
 }
 
-func (s *service) Latest(ctx context.Context, userID string) (*MoodLog, error) {
-	return s.logs.LatestByUserID(ctx, userID)
+func (s *service) Latest(ctx context.Context, owner middleware.Owner) (*MoodLog, error) {
+	return s.logs.LatestByOwner(ctx, owner)
 }
 
-func (s *service) Count(ctx context.Context, userID string) (int64, error) {
-	return s.logs.CountByUserID(ctx, userID)
+func (s *service) Count(ctx context.Context, owner middleware.Owner) (int64, error) {
+	return s.logs.CountByOwner(ctx, owner)
 }
 
 // clampLimit applies the documented page-size defaults/ceiling to a raw

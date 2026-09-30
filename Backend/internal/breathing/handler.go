@@ -17,10 +17,11 @@ import (
 var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 // Handler owns the HTTP surface of the breathing domain. It validates input,
-// calls the service layer, and writes responses — never the database.
-// Discovery and session history are registered-user features, so the
-// authenticated JWT is required; session ownership is derived from the JWT
-// context and is never taken from the request body.
+// calls the service layer, and writes responses — never the database. The
+// exercise catalog is shared public data, so browsing techniques requires no
+// credentials. Recording and listing sessions are registered-user features, so
+// the authenticated JWT is required there; session ownership is derived from
+// the JWT context and is never taken from the request body.
 type Handler struct {
 	svc Service
 }
@@ -44,11 +45,6 @@ type recordSessionRequest struct {
 // ListExercises handles GET /breathing/exercises. It returns the curated
 // catalog in its defined order, honoring an optional ?limit= query parameter.
 func (h *Handler) ListExercises(c *gin.Context) {
-	if _, ok := middleware.UserIDFromContext(c); !ok {
-		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
-		return
-	}
-
 	limit, err := parseLimit(c)
 	if err != nil {
 		respondError(c, http.StatusBadRequest, "INVALID_INPUT",
@@ -69,11 +65,6 @@ func (h *Handler) ListExercises(c *gin.Context) {
 // GetExercise handles GET /breathing/exercises/:id. It returns one catalog
 // exercise, or 404 for a missing one.
 func (h *Handler) GetExercise(c *gin.Context) {
-	if _, ok := middleware.UserIDFromContext(c); !ok {
-		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
-		return
-	}
-
 	id := c.Param("id")
 	if !uuidPattern.MatchString(id) {
 		respondError(c, http.StatusBadRequest, "INVALID_INPUT",
@@ -97,7 +88,7 @@ func (h *Handler) GetExercise(c *gin.Context) {
 // RecordSession handles POST /breathing/sessions. It records a completed
 // exercise session for the authenticated user.
 func (h *Handler) RecordSession(c *gin.Context) {
-	userID, ok := middleware.UserIDFromContext(c)
+	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
 		return
@@ -129,7 +120,7 @@ func (h *Handler) RecordSession(c *gin.Context) {
 		completed = *req.Completed
 	}
 
-	session, err := h.svc.RecordSession(c.Request.Context(), userID, req.ExerciseID,
+	session, err := h.svc.RecordSession(c.Request.Context(), owner, req.ExerciseID,
 		req.Breaths, req.DurationS, completed)
 	switch {
 	case errors.Is(err, ErrExerciseNotFound):
@@ -144,11 +135,11 @@ func (h *Handler) RecordSession(c *gin.Context) {
 }
 
 // ListSessions handles GET /breathing/sessions. It returns the authenticated
-// user's breathing history, newest first, honoring an optional ?limit= query
-// parameter. The user ID always comes from the JWT context, so this can never
-// list another user's sessions.
+// owner's breathing history, newest first, honoring an optional ?limit= query
+// parameter. The owner always comes from the identity context, so this can
+// never list another identity's sessions.
 func (h *Handler) ListSessions(c *gin.Context) {
-	userID, ok := middleware.UserIDFromContext(c)
+	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
 		return
@@ -161,7 +152,7 @@ func (h *Handler) ListSessions(c *gin.Context) {
 		return
 	}
 
-	sessions, err := h.svc.ListSessions(c.Request.Context(), userID, limit)
+	sessions, err := h.svc.ListSessions(c.Request.Context(), owner, limit)
 	if err != nil {
 		slog.Error("breathing sessions list failed", slog.String("error", err.Error()))
 		respondError(c, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR",

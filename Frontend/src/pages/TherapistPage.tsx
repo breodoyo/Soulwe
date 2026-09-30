@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
+import { useAuth } from '@/auth/AuthContext'
+import { SignInPrompt } from '@/auth/RouteGuards'
 import { isApiError, type Booking, type Therapist } from '@/types'
 import styles from './TherapistPage.module.css'
 
@@ -72,6 +74,11 @@ function bookingErrorMessage(err: unknown): string {
 }
 
 export default function TherapistPage() {
+  const { status } = useAuth()
+  // Browsing the directory is public; only therapist communication (booking)
+  // needs a registered account, so that is what this flag gates.
+  const canBook = status === 'authenticated'
+
   const [filter, setFilter] = useState<Filter>('All')
   const [therapists, setTherapists] = useState<Therapist[] | null>(null)
   const [therapistsError, setTherapistsError] = useState<string | null>(null)
@@ -84,6 +91,9 @@ export default function TherapistPage() {
   const [bookingsTick, setBookingsTick] = useState(0)
 
   const [openBookingId, setOpenBookingId] = useState<string | null>(null)
+  // Set when a guest tries to book: the booking panel is replaced by an
+  // in-place sign-in prompt rather than a silent failure or a 401.
+  const [signInForId, setSignInForId] = useState<string | null>(null)
   const [slot, setSlot] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [bookingError, setBookingError] = useState<string | null>(null)
@@ -119,6 +129,13 @@ export default function TherapistPage() {
   }, [languageParam, loadTick])
 
   useEffect(() => {
+    // Bookings are the user's own data — never requested without a session,
+    // so a guest is not met with a 401 on every visit to this page.
+    if (!canBook) {
+      setBookings([])
+      setBookingsError(null)
+      return
+    }
     let cancelled = false
     setBookings(null)
     setBookingsError(null)
@@ -137,7 +154,7 @@ export default function TherapistPage() {
     return () => {
       cancelled = true
     }
-  }, [bookingsTick])
+  }, [bookingsTick, canBook])
 
   // "Online only" is applied client-side: the backend returns is_online_only
   // but provides no filter for it.
@@ -165,7 +182,7 @@ export default function TherapistPage() {
   }
 
   const handleBook = async (t: Therapist) => {
-    if (!slot || submitting) return
+    if (!canBook || !slot || submitting) return
     const sched = new Date(slot)
     if (Number.isNaN(sched.getTime()) || sched.getTime() <= Date.now()) {
       setBookingError('Please choose a date and time in the future.')
@@ -310,13 +327,33 @@ export default function TherapistPage() {
               <div className={styles.cardBottom}>
                 <button
                   className={[styles.bookBtn, successById[t.id] ? styles.bookBtnBooked : ''].join(' ')}
-                  onClick={() => setOpenBookingId(openBookingId === t.id ? null : t.id)}
+                  onClick={() => {
+                    if (!canBook) {
+                      setSignInForId(signInForId === t.id ? null : t.id)
+                      return
+                    }
+                    setSignInForId(null)
+                    setOpenBookingId(openBookingId === t.id ? null : t.id)
+                  }}
                   aria-label={`Book session with ${t.display_name}`}
-                  aria-expanded={openBookingId === t.id}
+                  aria-expanded={canBook ? openBookingId === t.id : signInForId === t.id}
                 >
                   {successById[t.id] ? 'Book another time' : 'Book session'}
                 </button>
               </div>
+
+              {signInForId === t.id && (
+                <SignInPrompt
+                  compact
+                  title="Sign in to book with this therapist"
+                  message={
+                    <>
+                      Booking a session is how you start talking to one, so it needs a
+                      free account. Keep browsing the directory either way.
+                    </>
+                  }
+                />
+              )}
 
               {successById[t.id] && (
                 <p className={styles.bookConfirm} role="status">
@@ -324,7 +361,7 @@ export default function TherapistPage() {
                 </p>
               )}
 
-              {openBookingId === t.id && (
+              {canBook && openBookingId === t.id && (
                 <div className={styles.bookPanel}>
                   <label className="sr-only" htmlFor={`slot-${t.id}`}>
                     Choose a time for your session with {t.display_name}
@@ -374,58 +411,61 @@ export default function TherapistPage() {
         )}
       </div>
 
-      {/* My bookings */}
-      <div className={styles.bookingsSection}>
-        <div className={styles.sectionHeader}>
-          <h2 className={styles.sectionTitle}>My bookings</h2>
-          {cancelError && <p className={styles.errorText} role="alert">{cancelError}</p>}
-        </div>
-
-        {bookings === null && !bookingsError && (
-          <p className={styles.status} role="status">Loading your bookings…</p>
-        )}
-
-        {bookingsError && (
-          <div className={styles.errorNote} role="alert">
-            <p>{bookingsError}</p>
-            <button className={styles.inlineBtn} onClick={() => setBookingsTick(n => n + 1)}>
-              Try again
-            </button>
+      {/* My bookings — the user's own data. Absent for a guest, since the
+          directory above is the point of this page and is fully browsable. */}
+      {canBook && (
+        <div className={styles.bookingsSection}>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>My bookings</h2>
+            {cancelError && <p className={styles.errorText} role="alert">{cancelError}</p>}
           </div>
-        )}
 
-        {bookings !== null && !bookingsError && bookings.length === 0 && (
-          <p className={styles.emptyNote}>You have no bookings yet. Book a session above.</p>
-        )}
+          {bookings === null && !bookingsError && (
+            <p className={styles.status} role="status">Loading your bookings…</p>
+          )}
 
-        {bookings !== null && !bookingsError && bookings.length > 0 && (
-          <div className={styles.bookingList}>
-            {bookings.map(b => (
-              <div key={b.id} className={styles.bookingRow}>
-                <div className={styles.bookingMain}>
-                  <p className={styles.bookingTherapist}>{b.display_name}</p>
-                  <p className={styles.bookingTime}>{formatDateTime(b.scheduled_at)}</p>
+          {bookingsError && (
+            <div className={styles.errorNote} role="alert">
+              <p>{bookingsError}</p>
+              <button className={styles.inlineBtn} onClick={() => setBookingsTick(n => n + 1)}>
+                Try again
+              </button>
+            </div>
+          )}
+
+          {bookings !== null && !bookingsError && bookings.length === 0 && (
+            <p className={styles.emptyNote}>You have no bookings yet. Book a session above.</p>
+          )}
+
+          {bookings !== null && !bookingsError && bookings.length > 0 && (
+            <div className={styles.bookingList}>
+              {bookings.map(b => (
+                <div key={b.id} className={styles.bookingRow}>
+                  <div className={styles.bookingMain}>
+                    <p className={styles.bookingTherapist}>{b.display_name}</p>
+                    <p className={styles.bookingTime}>{formatDateTime(b.scheduled_at)}</p>
+                  </div>
+                  <span className={[styles.statusChip, statusChipClass[b.status]].join(' ')}>
+                    {statusLabel[b.status]}
+                  </span>
+                  {b.status === 'pending' && (
+                    <button
+                      className={styles.cancelBtn}
+                      onClick={() => void handleCancel(b)}
+                      disabled={cancellingId === b.id}
+                      aria-label={`Cancel booking with ${b.display_name}`}
+                    >
+                      {cancelConfirmId === b.id
+                        ? (cancellingId === b.id ? 'Cancelling…' : 'Confirm cancel?')
+                        : 'Cancel'}
+                    </button>
+                  )}
                 </div>
-                <span className={[styles.statusChip, statusChipClass[b.status]].join(' ')}>
-                  {statusLabel[b.status]}
-                </span>
-                {b.status === 'pending' && (
-                  <button
-                    className={styles.cancelBtn}
-                    onClick={() => void handleCancel(b)}
-                    disabled={cancellingId === b.id}
-                    aria-label={`Cancel booking with ${b.display_name}`}
-                  >
-                    {cancelConfirmId === b.id
-                      ? (cancellingId === b.id ? 'Cancelling…' : 'Confirm cancel?')
-                      : 'Cancel'}
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

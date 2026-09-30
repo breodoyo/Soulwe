@@ -6,7 +6,13 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"Backend/internal/middleware"
 )
+
+// owner is a registered owner for the given id, keeping these tests readable
+// now that a recorded session may belong to a user OR an anonymous session.
+func owner(userID string) middleware.Owner { return middleware.Owner{UserID: userID} }
 
 // fakeRepository is an in-memory Repository used to unit-test the service
 // without a real PostgreSQL connection.
@@ -53,10 +59,10 @@ func (f *fakeRepository) CreateSession(_ context.Context, session *Session) erro
 	return nil
 }
 
-func (f *fakeRepository) ListSessionsByUserID(_ context.Context, userID string, limit int) ([]Session, error) {
+func (f *fakeRepository) ListSessionsByOwner(_ context.Context, owner middleware.Owner, limit int) ([]Session, error) {
 	result := make([]Session, 0)
 	for _, s := range f.sessions {
-		if s.UserID == userID {
+		if s.UserID == owner.UserID && s.AnonIdentityID == owner.AnonIdentityID {
 			result = append(result, s)
 		}
 	}
@@ -143,7 +149,7 @@ func TestServiceRecordSession(t *testing.T) {
 		repo := seedFake(t)
 		svc := NewService(repo)
 
-		session, err := svc.RecordSession(context.Background(), "user-1",
+		session, err := svc.RecordSession(context.Background(), owner("user-1"),
 			"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", 5, 95, true)
 		if err != nil {
 			t.Fatalf("RecordSession returned error: %v", err)
@@ -168,10 +174,27 @@ func TestServiceRecordSession(t *testing.T) {
 		}
 	})
 
+	t.Run("records a session for an anonymous session owner", func(t *testing.T) {
+		repo := seedFake(t)
+		anon := middleware.Owner{AnonIdentityID: "anon-1"}
+
+		session, err := NewService(repo).RecordSession(context.Background(), anon,
+			"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", 5, 95, true)
+		if err != nil {
+			t.Fatalf("RecordSession returned error: %v", err)
+		}
+		if session.AnonIdentityID != "anon-1" {
+			t.Errorf("expected the anonymous identity, got %q", session.AnonIdentityID)
+		}
+		if session.UserID != "" {
+			t.Errorf("an anonymous session must not carry a user id, got %q", session.UserID)
+		}
+	})
+
 	t.Run("rejects an unknown exercise", func(t *testing.T) {
 		repo := seedFake(t)
 		svc := NewService(repo)
-		if _, err := svc.RecordSession(context.Background(), "user-1",
+		if _, err := svc.RecordSession(context.Background(), owner("user-1"),
 			"00000000-0000-0000-0000-000000000000", 5, 95, true); !errors.Is(err, ErrExerciseNotFound) {
 			t.Fatalf("expected ErrExerciseNotFound, got %v", err)
 		}
@@ -183,7 +206,7 @@ func TestServiceRecordSession(t *testing.T) {
 	t.Run("repository failure is wrapped", func(t *testing.T) {
 		repo := seedFake(t)
 		repo.createErr = errors.New("connection lost")
-		if _, err := NewService(repo).RecordSession(context.Background(), "user-1",
+		if _, err := NewService(repo).RecordSession(context.Background(), owner("user-1"),
 			"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", 5, 95, true); err == nil {
 			t.Fatal("expected a wrapped repository error")
 		}
@@ -194,12 +217,12 @@ func TestServiceListSessions(t *testing.T) {
 	t.Run("defaults the limit for a valid user", func(t *testing.T) {
 		repo := seedFake(t)
 		svc := NewService(repo)
-		if _, err := svc.RecordSession(context.Background(), "user-1",
+		if _, err := svc.RecordSession(context.Background(), owner("user-1"),
 			"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", 5, 95, true); err != nil {
 			t.Fatalf("RecordSession returned error: %v", err)
 		}
 
-		sessions, err := svc.ListSessions(context.Background(), "user-1", 0)
+		sessions, err := svc.ListSessions(context.Background(), owner("user-1"), 0)
 		if err != nil {
 			t.Fatalf("ListSessions returned error: %v", err)
 		}
@@ -213,8 +236,45 @@ func TestServiceListSessions(t *testing.T) {
 		}
 	})
 
+	t.Run("never mixes an anonymous session's history into a user's", func(t *testing.T) {
+		repo := seedFake(t)
+		svc := NewService(repo)
+		anon := middleware.Owner{AnonIdentityID: "anon-1"}
+
+		if _, err := svc.RecordSession(context.Background(), owner("user-1"),
+			"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", 5, 95, true); err != nil {
+			t.Fatalf("user RecordSession returned error: %v", err)
+		}
+		if _, err := svc.RecordSession(context.Background(), anon,
+			"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", 5, 95, true); err != nil {
+			t.Fatalf("anonymous RecordSession returned error: %v", err)
+		}
+
+		userSessions, err := svc.ListSessions(context.Background(), owner("user-1"), 0)
+		if err != nil {
+			t.Fatalf("ListSessions returned error: %v", err)
+		}
+		if len(userSessions) != 1 {
+			t.Fatalf("expected only the user's own session, got %d", len(userSessions))
+		}
+		if userSessions[0].AnonIdentityID != "" {
+			t.Errorf("an anonymous session leaked into a user's history: %+v", userSessions[0])
+		}
+
+		anonSessions, err := svc.ListSessions(context.Background(), anon, 0)
+		if err != nil {
+			t.Fatalf("anonymous ListSessions returned error: %v", err)
+		}
+		if len(anonSessions) != 1 {
+			t.Fatalf("expected only the anonymous session's own history, got %d", len(anonSessions))
+		}
+		if anonSessions[0].UserID != "" {
+			t.Errorf("a user's session leaked into an anonymous history: %+v", anonSessions[0])
+		}
+	})
+
 	t.Run("returns an empty slice when the user has no sessions", func(t *testing.T) {
-		sessions, err := NewService(seedFake(t)).ListSessions(context.Background(), "nobody", 0)
+		sessions, err := NewService(seedFake(t)).ListSessions(context.Background(), owner("nobody"), 0)
 		if err != nil {
 			t.Fatalf("ListSessions returned error: %v", err)
 		}
@@ -227,7 +287,7 @@ func TestServiceListSessions(t *testing.T) {
 	})
 
 	t.Run("caps the limit at the maximum", func(t *testing.T) {
-		sessions, err := NewService(seedFake(t)).ListSessions(context.Background(), "user-1", 9999)
+		sessions, err := NewService(seedFake(t)).ListSessions(context.Background(), owner("user-1"), 9999)
 		if err != nil {
 			t.Fatalf("ListSessions returned error: %v", err)
 		}

@@ -88,8 +88,33 @@ function Breadcrumbs() {
   )
 }
 
+// The session badge is the app's answer to "am I anonymous right now?": a
+// guest always sees "Anonymous session" and a way in, a registered user sees
+// their own name and a way out. It is driven by the real auth status, so it can
+// never claim a signed-in visitor is browsing anonymously.
+function SessionBadge() {
+  const { status, user } = useAuth()
+
+  if (status === 'authenticated') {
+    return (
+      <span className={styles.memberBadge}>
+        <span className={styles.memberDot} aria-hidden="true" />
+        {user?.display_name ? `Signed in as ${user.display_name}` : 'Signed in'}
+      </span>
+    )
+  }
+
+  return (
+    <span className={styles.anonBadge} aria-label="You are browsing anonymously">
+      <span className={styles.anonDot} aria-hidden="true" />
+      Anonymous session
+    </span>
+  )
+}
+
 export default function AppShell() {
-  const { logout } = useAuth()
+  const { status, logout } = useAuth()
+  const isGuest = status !== 'authenticated'
 
   return (
     <div className={styles.shell}>
@@ -105,14 +130,18 @@ export default function AppShell() {
           <span className={styles.brandName}>Soulwe</span>
         </Link>
         <div className={styles.topnavActions}>
-          <span className={styles.anonBadge} aria-label="You are browsing anonymously">
-            <span className={styles.anonDot} aria-hidden="true" />
-            Anonymous
-          </span>
-          <button className={styles.logoutBtn} onClick={logout} aria-label="Log out">
-            <LogoutIcon />
-            <span>Log out</span>
-          </button>
+          <SessionBadge />
+          {isGuest ? (
+            <>
+              <Link className={styles.authLink} to="/login">Log in</Link>
+              <Link className={styles.authLink} to="/register">Register</Link>
+            </>
+          ) : (
+            <button className={styles.logoutBtn} onClick={logout} aria-label="Log out">
+              <LogoutIcon />
+              <span>Log out</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -154,13 +183,26 @@ export default function AppShell() {
           </NavLink>
         ))}
 
+        {/* Desktop sidebar session state — real, not a CSS pseudo-element */}
+        <div className={styles.sidebarSession}>
+          <SessionBadge />
+          {isGuest ? (
+            <div className={styles.sidebarAuthLinks}>
+              <Link className={styles.sidebarAuthLink} to="/login">Log in</Link>
+              <Link className={styles.sidebarAuthLink} to="/register">Register</Link>
+            </div>
+          ) : null}
+        </div>
+
         {/* Desktop sidebar logout */}
-        <button className={styles.sidebarLogout} onClick={logout} aria-label="Log out">
-          <span className={styles.tabIcon} aria-hidden="true">
-            <LogoutIcon />
-          </span>
-          <span className={styles.tabLabel}>Log out</span>
-        </button>
+        {!isGuest && (
+          <button className={styles.sidebarLogout} onClick={logout} aria-label="Log out">
+            <span className={styles.tabIcon} aria-hidden="true">
+              <LogoutIcon />
+            </span>
+            <span className={styles.tabLabel}>Log out</span>
+          </button>
+        )}
 
       </nav>
 

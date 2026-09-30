@@ -17,6 +17,16 @@ import (
 )
 
 const testUserID = "11111111-1111-1111-1111-111111111111"
+const testAnonID = "33333333-3333-3333-3333-333333333333"
+
+// The two owner shapes a request can arrive as: finishing a breathing
+// exercise should not require registering, so an anonymous session is a
+// first-class owner alongside a registered user.
+var (
+	registeredOwner = middleware.Owner{UserID: testUserID}
+	anonOwner       = middleware.Owner{AnonIdentityID: testAnonID}
+)
+
 const testExerciseID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
 // fakeService embeds the Service interface so handler tests only need to
@@ -25,8 +35,8 @@ type fakeService struct {
 	Service
 	listExercisesFunc func(ctx context.Context, limit int) ([]Exercise, error)
 	getExerciseFunc   func(ctx context.Context, exerciseID string) (*Exercise, error)
-	recordSessionFunc func(ctx context.Context, userID, exerciseID string, breaths, durationS int, completed bool) (*Session, error)
-	listSessionsFunc  func(ctx context.Context, userID string, limit int) ([]Session, error)
+	recordSessionFunc func(ctx context.Context, owner middleware.Owner, exerciseID string, breaths, durationS int, completed bool) (*Session, error)
+	listSessionsFunc  func(ctx context.Context, owner middleware.Owner, limit int) ([]Session, error)
 }
 
 func (f *fakeService) ListExercises(ctx context.Context, limit int) ([]Exercise, error) {
@@ -43,31 +53,33 @@ func (f *fakeService) GetExercise(ctx context.Context, exerciseID string) (*Exer
 	return f.getExerciseFunc(ctx, exerciseID)
 }
 
-func (f *fakeService) RecordSession(ctx context.Context, userID, exerciseID string, breaths, durationS int, completed bool) (*Session, error) {
+func (f *fakeService) RecordSession(ctx context.Context, owner middleware.Owner, exerciseID string, breaths, durationS int, completed bool) (*Session, error) {
 	if f.recordSessionFunc == nil {
 		return nil, errors.New("recordSessionFunc not configured")
 	}
-	return f.recordSessionFunc(ctx, userID, exerciseID, breaths, durationS, completed)
+	return f.recordSessionFunc(ctx, owner, exerciseID, breaths, durationS, completed)
 }
 
-func (f *fakeService) ListSessions(ctx context.Context, userID string, limit int) ([]Session, error) {
+func (f *fakeService) ListSessions(ctx context.Context, owner middleware.Owner, limit int) ([]Session, error) {
 	if f.listSessionsFunc == nil {
 		return nil, errors.New("listSessionsFunc not configured")
 	}
-	return f.listSessionsFunc(ctx, userID, limit)
+	return f.listSessionsFunc(ctx, owner, limit)
 }
 
-// requestRouter builds a router that simulates the AuthRequired middleware by
-// stamping UserIDKey into the Gin context, then serves the request. The route
+// requestRouter builds a router that simulates the IdentityRequired middleware by
+// stamping OwnerKey into the Gin context, then serves the request. The route
 // pattern (with :id placeholders) and the concrete request path are supplied
 // separately.
-func requestRouter(t *testing.T, method, routePattern, requestPath, body, userID string, handler func(c *gin.Context)) *httptest.ResponseRecorder {
+func requestRouter(t *testing.T, method, routePattern, requestPath, body string, owner middleware.Owner, handler func(c *gin.Context)) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
-		if userID != "" {
-			c.Set(middleware.UserIDKey, userID)
+		// An ill-formed owner is treated as "no identity", mirroring how the real
+		// middleware would simply not have set the key.
+		if _, ok := middleware.IdentityFromOwner(owner); ok {
+			c.Set(middleware.OwnerKey, owner)
 		}
 		c.Next()
 	})
@@ -121,6 +133,14 @@ func session() *Session {
 	}
 }
 
+func anonSession() *Session {
+	s := session()
+	s.ID = "55555555-5555-5555-5555-555555555555"
+	s.UserID = ""
+	s.AnonIdentityID = testAnonID
+	return s
+}
+
 func assertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, want string) {
 	t.Helper()
 	if !strings.Contains(rec.Body.String(), `"code":"`+want+`"`) {
@@ -146,7 +166,7 @@ func TestHandlerListExercises(t *testing.T) {
 			},
 		}
 		rec := requestRouter(t, http.MethodGet, "/api/v1/breathing/exercises",
-			"/api/v1/breathing/exercises?limit=10", "", testUserID, NewHandler(svc).ListExercises)
+			"/api/v1/breathing/exercises?limit=10", "", registeredOwner, NewHandler(svc).ListExercises)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -159,18 +179,25 @@ func TestHandlerListExercises(t *testing.T) {
 		}
 	})
 
-	t.Run("returns 401 when the user id is missing from context", func(t *testing.T) {
-		rec := requestRouter(t, http.MethodGet, "/api/v1/breathing/exercises",
-			"/api/v1/breathing/exercises", "", "", NewHandler(&fakeService{}).ListExercises)
-		if rec.Code != http.StatusUnauthorized {
-			t.Fatalf("expected 401, got %d", rec.Code)
+	t.Run("serves the catalog to an anonymous caller (browsing is public)", func(t *testing.T) {
+		svc := &fakeService{
+			listExercisesFunc: func(context.Context, int) ([]Exercise, error) {
+				return []Exercise{*exercise()}, nil
+			},
 		}
-		assertErrorCode(t, rec, "UNAUTHORIZED")
+		rec := requestRouter(t, http.MethodGet, "/api/v1/breathing/exercises",
+			"/api/v1/breathing/exercises", "", middleware.Owner{}, NewHandler(svc).ListExercises)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 without a user id in context, got %d: %s", rec.Code, rec.Body.String())
+		}
+		if !bytes.Contains(rec.Body.Bytes(), []byte(`"slug":"478"`)) {
+			t.Errorf("expected the public catalog for an anonymous caller: %s", rec.Body.String())
+		}
 	})
 
 	t.Run("returns 400 for a non-integer limit", func(t *testing.T) {
 		rec := requestRouter(t, http.MethodGet, "/api/v1/breathing/exercises",
-			"/api/v1/breathing/exercises?limit=abc", "", testUserID, NewHandler(&fakeService{}).ListExercises)
+			"/api/v1/breathing/exercises?limit=abc", "", registeredOwner, NewHandler(&fakeService{}).ListExercises)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", rec.Code)
 		}
@@ -184,7 +211,7 @@ func TestHandlerListExercises(t *testing.T) {
 			},
 		}
 		rec := requestRouter(t, http.MethodGet, "/api/v1/breathing/exercises",
-			"/api/v1/breathing/exercises", "", testUserID, NewHandler(svc).ListExercises)
+			"/api/v1/breathing/exercises", "", registeredOwner, NewHandler(svc).ListExercises)
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("expected 500, got %d", rec.Code)
 		}
@@ -206,7 +233,7 @@ func TestHandlerGetExercise(t *testing.T) {
 			},
 		}
 		rec := requestRouter(t, http.MethodGet, "/api/v1/breathing/exercises/:id",
-			"/api/v1/breathing/exercises/"+testExerciseID, "", testUserID, NewHandler(svc).GetExercise)
+			"/api/v1/breathing/exercises/"+testExerciseID, "", registeredOwner, NewHandler(svc).GetExercise)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -222,7 +249,7 @@ func TestHandlerGetExercise(t *testing.T) {
 			},
 		}
 		rec := requestRouter(t, http.MethodGet, "/api/v1/breathing/exercises/:id",
-			"/api/v1/breathing/exercises/00000000-0000-0000-0000-000000000000", "", testUserID, NewHandler(svc).GetExercise)
+			"/api/v1/breathing/exercises/00000000-0000-0000-0000-000000000000", "", registeredOwner, NewHandler(svc).GetExercise)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -231,29 +258,36 @@ func TestHandlerGetExercise(t *testing.T) {
 
 	t.Run("returns 400 for a malformed exercise id", func(t *testing.T) {
 		rec := requestRouter(t, http.MethodGet, "/api/v1/breathing/exercises/:id",
-			"/api/v1/breathing/exercises/not-a-uuid", "", testUserID, NewHandler(&fakeService{}).GetExercise)
+			"/api/v1/breathing/exercises/not-a-uuid", "", registeredOwner, NewHandler(&fakeService{}).GetExercise)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
 		}
 		assertErrorField(t, rec, "id")
 	})
 
-	t.Run("returns 401 when the user id is missing from context", func(t *testing.T) {
-		rec := requestRouter(t, http.MethodGet, "/api/v1/breathing/exercises/:id",
-			"/api/v1/breathing/exercises/"+testExerciseID, "", "", NewHandler(&fakeService{}).GetExercise)
-		if rec.Code != http.StatusUnauthorized {
-			t.Fatalf("expected 401, got %d", rec.Code)
+	t.Run("serves one exercise to an anonymous caller (browsing is public)", func(t *testing.T) {
+		svc := &fakeService{
+			getExerciseFunc: func(context.Context, string) (*Exercise, error) {
+				return exercise(), nil
+			},
 		}
-		assertErrorCode(t, rec, "UNAUTHORIZED")
+		rec := requestRouter(t, http.MethodGet, "/api/v1/breathing/exercises/:id",
+			"/api/v1/breathing/exercises/"+testExerciseID, "", middleware.Owner{}, NewHandler(svc).GetExercise)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 without a user id in context, got %d: %s", rec.Code, rec.Body.String())
+		}
+		if !bytes.Contains(rec.Body.Bytes(), []byte(`"exercise":{`)) {
+			t.Errorf("expected the public exercise for an anonymous caller: %s", rec.Body.String())
+		}
 	})
 }
 
 func TestHandlerRecordSession(t *testing.T) {
 	t.Run("returns 201 with the created session", func(t *testing.T) {
 		svc := &fakeService{
-			recordSessionFunc: func(_ context.Context, userID, exerciseID string, breaths, durationS int, completed bool) (*Session, error) {
-				if userID != testUserID {
-					t.Errorf("expected the authenticated user id, got %q", userID)
+			recordSessionFunc: func(_ context.Context, owner middleware.Owner, exerciseID string, breaths, durationS int, completed bool) (*Session, error) {
+				if owner.UserID != testUserID {
+					t.Errorf("expected the authenticated user id, got %q", owner.UserID)
 				}
 				if exerciseID != testExerciseID || breaths != 5 || durationS != 95 || !completed {
 					t.Errorf("session args not forwarded: exercise=%s breaths=%d duration=%d completed=%v",
@@ -265,7 +299,7 @@ func TestHandlerRecordSession(t *testing.T) {
 		rec := requestRouter(t, http.MethodPost, "/api/v1/breathing/sessions",
 			"/api/v1/breathing/sessions",
 			`{"exercise_id":"`+testExerciseID+`","breaths":5,"duration_s":95,"completed":true}`,
-			testUserID, NewHandler(svc).RecordSession)
+			registeredOwner, NewHandler(svc).RecordSession)
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -281,9 +315,36 @@ func TestHandlerRecordSession(t *testing.T) {
 		}
 	})
 
+	t.Run("records a session for an anonymous session owner", func(t *testing.T) {
+		svc := &fakeService{
+			recordSessionFunc: func(_ context.Context, owner middleware.Owner, _ string, _, _ int, _ bool) (*Session, error) {
+				if !owner.Anonymous() {
+					t.Errorf("expected an anonymous owner, got %+v", owner)
+				}
+				if owner.AnonIdentityID != testAnonID {
+					t.Errorf("expected anon identity %q, got %q", testAnonID, owner.AnonIdentityID)
+				}
+				if owner.UserID != "" {
+					t.Errorf("an anonymous owner must not carry a user id, got %q", owner.UserID)
+				}
+				return anonSession(), nil
+			},
+		}
+		rec := requestRouter(t, http.MethodPost, "/api/v1/breathing/sessions",
+			"/api/v1/breathing/sessions",
+			`{"exercise_id":"`+testExerciseID+`","breaths":5,"duration_s":95}`,
+			anonOwner, NewHandler(svc).RecordSession)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("expected 201 for an anonymous session, got %d: %s", rec.Code, rec.Body.String())
+		}
+		if bytes.Contains(rec.Body.Bytes(), []byte(testAnonID)) {
+			t.Errorf("anonymous identity must never be serialized to the client: %s", rec.Body.String())
+		}
+	})
+
 	t.Run("defaults completed to true when omitted", func(t *testing.T) {
 		svc := &fakeService{
-			recordSessionFunc: func(_ context.Context, _ string, _ string, _, _ int, completed bool) (*Session, error) {
+			recordSessionFunc: func(_ context.Context, _ middleware.Owner, _ string, _, _ int, completed bool) (*Session, error) {
 				if !completed {
 					t.Errorf("expected completed to default to true, got false")
 				}
@@ -293,7 +354,7 @@ func TestHandlerRecordSession(t *testing.T) {
 		rec := requestRouter(t, http.MethodPost, "/api/v1/breathing/sessions",
 			"/api/v1/breathing/sessions",
 			`{"exercise_id":"`+testExerciseID+`","breaths":5,"duration_s":95}`,
-			testUserID, NewHandler(svc).RecordSession)
+			registeredOwner, NewHandler(svc).RecordSession)
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -301,14 +362,14 @@ func TestHandlerRecordSession(t *testing.T) {
 
 	t.Run("returns 404 for an unknown exercise", func(t *testing.T) {
 		svc := &fakeService{
-			recordSessionFunc: func(context.Context, string, string, int, int, bool) (*Session, error) {
+			recordSessionFunc: func(context.Context, middleware.Owner, string, int, int, bool) (*Session, error) {
 				return nil, ErrExerciseNotFound
 			},
 		}
 		rec := requestRouter(t, http.MethodPost, "/api/v1/breathing/sessions",
 			"/api/v1/breathing/sessions",
 			`{"exercise_id":"00000000-0000-0000-0000-000000000000","breaths":5,"duration_s":95}`,
-			testUserID, NewHandler(svc).RecordSession)
+			registeredOwner, NewHandler(svc).RecordSession)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -319,7 +380,7 @@ func TestHandlerRecordSession(t *testing.T) {
 		rec := requestRouter(t, http.MethodPost, "/api/v1/breathing/sessions",
 			"/api/v1/breathing/sessions",
 			`{"exercise_id":"nope","breaths":5,"duration_s":95}`,
-			testUserID, NewHandler(&fakeService{}).RecordSession)
+			registeredOwner, NewHandler(&fakeService{}).RecordSession)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", rec.Code)
 		}
@@ -330,7 +391,7 @@ func TestHandlerRecordSession(t *testing.T) {
 		rec := requestRouter(t, http.MethodPost, "/api/v1/breathing/sessions",
 			"/api/v1/breathing/sessions",
 			`{"exercise_id":"`+testExerciseID+`","breaths":0,"duration_s":95}`,
-			testUserID, NewHandler(&fakeService{}).RecordSession)
+			registeredOwner, NewHandler(&fakeService{}).RecordSession)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", rec.Code)
 		}
@@ -341,7 +402,7 @@ func TestHandlerRecordSession(t *testing.T) {
 		rec := requestRouter(t, http.MethodPost, "/api/v1/breathing/sessions",
 			"/api/v1/breathing/sessions",
 			`{"exercise_id":"`+testExerciseID+`","breaths":5,"duration_s":-1}`,
-			testUserID, NewHandler(&fakeService{}).RecordSession)
+			registeredOwner, NewHandler(&fakeService{}).RecordSession)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", rec.Code)
 		}
@@ -351,18 +412,18 @@ func TestHandlerRecordSession(t *testing.T) {
 	t.Run("returns 400 for malformed JSON", func(t *testing.T) {
 		rec := requestRouter(t, http.MethodPost, "/api/v1/breathing/sessions",
 			"/api/v1/breathing/sessions", `{"exercise_id":`,
-			testUserID, NewHandler(&fakeService{}).RecordSession)
+			registeredOwner, NewHandler(&fakeService{}).RecordSession)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", rec.Code)
 		}
 		assertErrorCode(t, rec, "INVALID_INPUT")
 	})
 
-	t.Run("returns 401 when the user id is missing from context", func(t *testing.T) {
+	t.Run("returns 401 when no identity is present in context", func(t *testing.T) {
 		rec := requestRouter(t, http.MethodPost, "/api/v1/breathing/sessions",
 			"/api/v1/breathing/sessions",
 			`{"exercise_id":"`+testExerciseID+`","breaths":5,"duration_s":95}`,
-			"", NewHandler(&fakeService{}).RecordSession)
+			middleware.Owner{}, NewHandler(&fakeService{}).RecordSession)
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("expected 401, got %d", rec.Code)
 		}
@@ -371,14 +432,14 @@ func TestHandlerRecordSession(t *testing.T) {
 
 	t.Run("returns 500 without leaking internals on service failure", func(t *testing.T) {
 		svc := &fakeService{
-			recordSessionFunc: func(context.Context, string, string, int, int, bool) (*Session, error) {
+			recordSessionFunc: func(context.Context, middleware.Owner, string, int, int, bool) (*Session, error) {
 				return nil, errors.New("database connection lost")
 			},
 		}
 		rec := requestRouter(t, http.MethodPost, "/api/v1/breathing/sessions",
 			"/api/v1/breathing/sessions",
 			`{"exercise_id":"`+testExerciseID+`","breaths":5,"duration_s":95}`,
-			testUserID, NewHandler(svc).RecordSession)
+			registeredOwner, NewHandler(svc).RecordSession)
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("expected 500, got %d", rec.Code)
 		}
@@ -392,9 +453,9 @@ func TestHandlerRecordSession(t *testing.T) {
 func TestHandlerListSessions(t *testing.T) {
 	t.Run("returns 200 with the user's history", func(t *testing.T) {
 		svc := &fakeService{
-			listSessionsFunc: func(_ context.Context, userID string, limit int) ([]Session, error) {
-				if userID != testUserID {
-					t.Errorf("expected the authenticated user id, got %q", userID)
+			listSessionsFunc: func(_ context.Context, owner middleware.Owner, limit int) ([]Session, error) {
+				if owner.UserID != testUserID {
+					t.Errorf("expected the authenticated user id, got %q", owner.UserID)
 				}
 				if limit != 10 {
 					t.Errorf("expected limit 10 to reach the service, got %d", limit)
@@ -403,7 +464,7 @@ func TestHandlerListSessions(t *testing.T) {
 			},
 		}
 		rec := requestRouter(t, http.MethodGet, "/api/v1/breathing/sessions",
-			"/api/v1/breathing/sessions?limit=10", "", testUserID, NewHandler(svc).ListSessions)
+			"/api/v1/breathing/sessions?limit=10", "", registeredOwner, NewHandler(svc).ListSessions)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -418,12 +479,12 @@ func TestHandlerListSessions(t *testing.T) {
 
 	t.Run("returns 200 with an empty list when the user has no sessions", func(t *testing.T) {
 		svc := &fakeService{
-			listSessionsFunc: func(context.Context, string, int) ([]Session, error) {
+			listSessionsFunc: func(context.Context, middleware.Owner, int) ([]Session, error) {
 				return []Session{}, nil
 			},
 		}
 		rec := requestRouter(t, http.MethodGet, "/api/v1/breathing/sessions",
-			"/api/v1/breathing/sessions", "", testUserID, NewHandler(svc).ListSessions)
+			"/api/v1/breathing/sessions", "", registeredOwner, NewHandler(svc).ListSessions)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -434,7 +495,7 @@ func TestHandlerListSessions(t *testing.T) {
 
 	t.Run("returns 400 for a non-integer limit", func(t *testing.T) {
 		rec := requestRouter(t, http.MethodGet, "/api/v1/breathing/sessions",
-			"/api/v1/breathing/sessions?limit=abc", "", testUserID, NewHandler(&fakeService{}).ListSessions)
+			"/api/v1/breathing/sessions?limit=abc", "", registeredOwner, NewHandler(&fakeService{}).ListSessions)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", rec.Code)
 		}
@@ -443,7 +504,7 @@ func TestHandlerListSessions(t *testing.T) {
 
 	t.Run("returns 401 when the user id is missing from context", func(t *testing.T) {
 		rec := requestRouter(t, http.MethodGet, "/api/v1/breathing/sessions",
-			"/api/v1/breathing/sessions", "", "", NewHandler(&fakeService{}).ListSessions)
+			"/api/v1/breathing/sessions", "", middleware.Owner{}, NewHandler(&fakeService{}).ListSessions)
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("expected 401, got %d", rec.Code)
 		}

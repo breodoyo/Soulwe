@@ -61,11 +61,13 @@ func TestMigrationsRoundTrip(t *testing.T) {
 		"journal_entries",
 		"mood_logs",
 		"circles",
+		"circle_members",
 		"circle_messages",
 		"message_flags",
 		"therapists",
 		"therapist_languages",
 		"breathing_sessions",
+		"bookings",
 	}
 	for _, table := range expectedTables {
 		var exists bool

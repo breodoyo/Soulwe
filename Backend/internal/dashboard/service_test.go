@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"Backend/internal/middleware"
 	"Backend/internal/mood"
 	"Backend/internal/user"
 )
@@ -25,21 +26,21 @@ func (f *fakeUserService) GetProfile(ctx context.Context, userID string) (*user.
 // fakeMoodService stubs only the mood.Service methods the dashboard uses.
 type fakeMoodService struct {
 	mood.Service
-	latestFunc func(ctx context.Context, userID string) (*mood.MoodLog, error)
-	listFunc   func(ctx context.Context, userID string, limit int) ([]mood.MoodLog, error)
-	countFunc  func(ctx context.Context, userID string) (int64, error)
+	latestFunc func(ctx context.Context, owner middleware.Owner) (*mood.MoodLog, error)
+	listFunc   func(ctx context.Context, owner middleware.Owner, limit int) ([]mood.MoodLog, error)
+	countFunc  func(ctx context.Context, owner middleware.Owner) (int64, error)
 }
 
-func (f *fakeMoodService) Latest(ctx context.Context, userID string) (*mood.MoodLog, error) {
-	return f.latestFunc(ctx, userID)
+func (f *fakeMoodService) Latest(ctx context.Context, owner middleware.Owner) (*mood.MoodLog, error) {
+	return f.latestFunc(ctx, owner)
 }
 
-func (f *fakeMoodService) List(ctx context.Context, userID string, limit int) ([]mood.MoodLog, error) {
-	return f.listFunc(ctx, userID, limit)
+func (f *fakeMoodService) List(ctx context.Context, owner middleware.Owner, limit int) ([]mood.MoodLog, error) {
+	return f.listFunc(ctx, owner, limit)
 }
 
-func (f *fakeMoodService) Count(ctx context.Context, userID string) (int64, error) {
-	return f.countFunc(ctx, userID)
+func (f *fakeMoodService) Count(ctx context.Context, owner middleware.Owner) (int64, error) {
+	return f.countFunc(ctx, owner)
 }
 
 func testUser() *user.User {
@@ -68,14 +69,14 @@ func TestServiceGet(t *testing.T) {
 		}
 		recent := []mood.MoodLog{testMood("Grateful"), testMood("Better")}
 		moods := &fakeMoodService{
-			latestFunc: func(context.Context, string) (*mood.MoodLog, error) { return &recent[0], nil },
-			listFunc: func(_ context.Context, userID string, limit int) ([]mood.MoodLog, error) {
+			latestFunc: func(context.Context, middleware.Owner) (*mood.MoodLog, error) { return &recent[0], nil },
+			listFunc: func(_ context.Context, owner middleware.Owner, limit int) ([]mood.MoodLog, error) {
 				if limit != RecentMoodLimit {
 					t.Errorf("expected recent mood limit %d, got %d", RecentMoodLimit, limit)
 				}
 				return recent, nil
 			},
-			countFunc: func(context.Context, string) (int64, error) { return 2, nil },
+			countFunc: func(context.Context, middleware.Owner) (int64, error) { return 2, nil },
 		}
 
 		dash, err := NewService(users, moods).Get(context.Background(), testUserID)
@@ -101,11 +102,11 @@ func TestServiceGet(t *testing.T) {
 			getProfileFunc: func(context.Context, string) (*user.User, error) { return testUser(), nil },
 		}
 		moods := &fakeMoodService{
-			latestFunc: func(context.Context, string) (*mood.MoodLog, error) { return nil, nil },
-			listFunc: func(context.Context, string, int) ([]mood.MoodLog, error) {
+			latestFunc: func(context.Context, middleware.Owner) (*mood.MoodLog, error) { return nil, nil },
+			listFunc: func(context.Context, middleware.Owner, int) ([]mood.MoodLog, error) {
 				return []mood.MoodLog{}, nil
 			},
-			countFunc: func(context.Context, string) (int64, error) { return 0, nil },
+			countFunc: func(context.Context, middleware.Owner) (int64, error) { return 0, nil },
 		}
 
 		dash, err := NewService(users, moods).Get(context.Background(), testUserID)
@@ -144,7 +145,7 @@ func TestServiceGet(t *testing.T) {
 			getProfileFunc: func(context.Context, string) (*user.User, error) { return testUser(), nil },
 		}
 		moods := &fakeMoodService{
-			latestFunc: func(context.Context, string) (*mood.MoodLog, error) {
+			latestFunc: func(context.Context, middleware.Owner) (*mood.MoodLog, error) {
 				return nil, errors.New("connection lost")
 			},
 		}
@@ -158,27 +159,27 @@ func TestServiceGet(t *testing.T) {
 		users := &fakeUserService{
 			getProfileFunc: func(_ context.Context, userID string) (*user.User, error) {
 				if userID != testUserID {
-					t.Errorf("expected authenticated user id, got %q", userID)
+					t.Errorf("profile: expected authenticated user id, got %q", userID)
 				}
 				return testUser(), nil
 			},
 		}
 		moods := &fakeMoodService{
-			latestFunc: func(_ context.Context, userID string) (*mood.MoodLog, error) {
-				if userID != testUserID {
-					t.Errorf("latest: expected authenticated user id, got %q", userID)
+			latestFunc: func(_ context.Context, owner middleware.Owner) (*mood.MoodLog, error) {
+				if owner.UserID != testUserID {
+					t.Errorf("latest expected authenticated user id, got %q", owner.UserID)
 				}
 				return nil, nil
 			},
-			listFunc: func(_ context.Context, userID string, limit int) ([]mood.MoodLog, error) {
-				if userID != testUserID {
-					t.Errorf("list: expected authenticated user id, got %q", userID)
+			listFunc: func(_ context.Context, owner middleware.Owner, limit int) ([]mood.MoodLog, error) {
+				if owner.UserID != testUserID {
+					t.Errorf("list expected authenticated user id, got %q", owner.UserID)
 				}
 				return []mood.MoodLog{}, nil
 			},
-			countFunc: func(_ context.Context, userID string) (int64, error) {
-				if userID != testUserID {
-					t.Errorf("count: expected authenticated user id, got %q", userID)
+			countFunc: func(_ context.Context, owner middleware.Owner) (int64, error) {
+				if owner.UserID != testUserID {
+					t.Errorf("count expected authenticated user id, got %q", owner.UserID)
 				}
 				return 0, nil
 			},

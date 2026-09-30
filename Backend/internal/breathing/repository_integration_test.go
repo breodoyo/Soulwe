@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"Backend/internal/middleware"
 	"Backend/internal/user"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,6 +19,11 @@ import (
 const missingID = "00000000-0000-0000-0000-000000000000"
 
 func strPtr(s string) *string { return &s }
+
+// ownerFor is a registered owner for the given id, keeping these tests
+// readable now that a recorded session may belong to a user OR an anonymous
+// session.
+func ownerFor(userID string) middleware.Owner { return middleware.Owner{UserID: userID} }
 
 // TestPostgresRepositoryIntegration exercises the breathing repository against
 // a running PostgreSQL. It is excluded from the default build via the
@@ -171,16 +177,16 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		if fkCount != 1 {
 			t.Errorf("expected breathing_sessions to carry an exercise foreign key, got %d", fkCount)
 		}
-		sessionLines, err := repo.ListSessionsByUserID(ctx, ownerID, 100)
+		sessionLines, err := repo.ListSessionsByOwner(ctx, ownerFor(ownerID), 100)
 		if err != nil {
-			t.Fatalf("ListSessionsByUserID returned error: %v", err)
+			t.Fatalf("ListSessionsByOwner returned error: %v", err)
 		}
 		if len(sessionLines) != 1 {
 			t.Errorf("the rejected insert must not persist; expected 1 session, got %d", len(sessionLines))
 		}
 	})
 
-	t.Run("ListSessionsByUserID returns the user's sessions, newest first", func(t *testing.T) {
+	t.Run("ListSessionsByOwner returns the user's sessions, newest first", func(t *testing.T) {
 		for i := 0; i < 3; i++ {
 			s := &Session{
 				UserID:     ownerID,
@@ -196,9 +202,9 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 			time.Sleep(2 * time.Millisecond) // keep created_at strictly increasing
 		}
 
-		sessions, err := repo.ListSessionsByUserID(ctx, ownerID, 100)
+		sessions, err := repo.ListSessionsByOwner(ctx, ownerFor(ownerID), 100)
 		if err != nil {
-			t.Fatalf("ListSessionsByUserID returned error: %v", err)
+			t.Fatalf("ListSessionsByOwner returned error: %v", err)
 		}
 		if len(sessions) != 4 {
 			t.Fatalf("expected 4 sessions (1 + 3), got %d", len(sessions))
@@ -219,7 +225,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("ListSessionsByUserID never returns another user's sessions", func(t *testing.T) {
+	t.Run("ListSessionsByOwner never returns another user's sessions", func(t *testing.T) {
 		otherID := seedUser()
 		s := &Session{
 			UserID:     otherID,
@@ -233,9 +239,9 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 			t.Fatalf("CreateSession returned error: %v", err)
 		}
 
-		sessions, err := repo.ListSessionsByUserID(ctx, ownerID, 100)
+		sessions, err := repo.ListSessionsByOwner(ctx, ownerFor(ownerID), 100)
 		if err != nil {
-			t.Fatalf("ListSessionsByUserID returned error: %v", err)
+			t.Fatalf("ListSessionsByOwner returned error: %v", err)
 		}
 		for _, sess := range sessions {
 			if sess.UserID != ownerID {
@@ -244,20 +250,20 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("ListSessionsByUserID respects the limit", func(t *testing.T) {
-		sessions, err := repo.ListSessionsByUserID(ctx, ownerID, 2)
+	t.Run("ListSessionsByOwner respects the limit", func(t *testing.T) {
+		sessions, err := repo.ListSessionsByOwner(ctx, ownerFor(ownerID), 2)
 		if err != nil {
-			t.Fatalf("ListSessionsByUserID returned error: %v", err)
+			t.Fatalf("ListSessionsByOwner returned error: %v", err)
 		}
 		if len(sessions) != 2 {
 			t.Errorf("expected 2 sessions, got %d", len(sessions))
 		}
 	})
 
-	t.Run("ListSessionsByUserID returns an empty slice for a user with none", func(t *testing.T) {
-		sessions, err := repo.ListSessionsByUserID(ctx, missingID, 100)
+	t.Run("ListSessionsByOwner returns an empty slice for a user with none", func(t *testing.T) {
+		sessions, err := repo.ListSessionsByOwner(ctx, ownerFor(missingID), 100)
 		if err != nil {
-			t.Fatalf("ListSessionsByUserID returned error: %v", err)
+			t.Fatalf("ListSessionsByOwner returned error: %v", err)
 		}
 		if sessions == nil {
 			t.Fatal("expected a non-nil empty slice")
@@ -284,9 +290,9 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 			t.Fatalf("failed to DELETE the ghost user: %v", err)
 		}
 
-		sessions, err := repo.ListSessionsByUserID(ctx, ghostID, 100)
+		sessions, err := repo.ListSessionsByOwner(ctx, ownerFor(ghostID), 100)
 		if err != nil {
-			t.Fatalf("ListSessionsByUserID returned error: %v", err)
+			t.Fatalf("ListSessionsByOwner returned error: %v", err)
 		}
 		if len(sessions) != 0 {
 			t.Errorf("expected the ghost's sessions to cascade-delete, got %d", len(sessions))

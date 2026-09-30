@@ -137,6 +137,15 @@
 .savingLine { color: var(--muted); }
 .saveLine { background: var(--teal-light); color: var(--teal-deep); }
 .saveError { background: var(--sun-light); color: var(--sun-deep); }
+.signInLink { color: var(--sun-deep); font-weight: 600; }
+
+/* ── Guest notice ── */
+.guestNote {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  text-align: center;
+  padding: var(--space-2) var(--space-4);
+}
 
 /* ── Technique list ── */
 .techniqueList {

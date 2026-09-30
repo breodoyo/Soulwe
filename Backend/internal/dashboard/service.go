@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"Backend/internal/middleware"
 	"Backend/internal/mood"
 	"Backend/internal/user"
 )
@@ -47,17 +48,23 @@ func (s *service) Get(ctx context.Context, userID string) (*Dashboard, error) {
 		return nil, err
 	}
 
-	latest, err := s.moods.Latest(ctx, userID)
+	// The dashboard is a registered-only surface (it includes the account
+	// profile), so the mood queries are scoped to this user specifically. An
+	// anonymous session must never see another identity's check-ins through
+	// the aggregation path.
+	owner := middleware.Owner{UserID: userID}
+
+	latest, err := s.moods.Latest(ctx, owner)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: latest mood: %w", err)
 	}
 
-	recent, err := s.moods.List(ctx, userID, RecentMoodLimit)
+	recent, err := s.moods.List(ctx, owner, RecentMoodLimit)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: recent moods: %w", err)
 	}
 
-	count, err := s.moods.Count(ctx, userID)
+	count, err := s.moods.Count(ctx, owner)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: mood count: %w", err)
 	}

@@ -333,11 +333,11 @@ type stubMoodService struct {
 	err       error
 }
 
-func (s *stubMoodService) Create(context.Context, string, string) (*mood.MoodLog, error) {
+func (s *stubMoodService) Create(context.Context, middleware.Owner, string) (*mood.MoodLog, error) {
 	return s.createLog, s.err
 }
 
-func (s *stubMoodService) List(context.Context, string, int) ([]mood.MoodLog, error) {
+func (s *stubMoodService) List(context.Context, middleware.Owner, int) ([]mood.MoodLog, error) {
 	return s.listLogs, s.err
 }
 
@@ -362,27 +362,27 @@ type stubJournalService struct {
 	err   error
 }
 
-func (s *stubJournalService) Create(context.Context, string, string, []string, *string) (*journal.JournalEntry, error) {
+func (s *stubJournalService) Create(context.Context, middleware.Owner, string, []string, *string) (*journal.JournalEntry, error) {
 	return s.entry, s.err
 }
 
-func (s *stubJournalService) List(context.Context, string, int, *time.Time) ([]journal.JournalEntry, error) {
+func (s *stubJournalService) List(context.Context, middleware.Owner, int, *time.Time) ([]journal.JournalEntry, error) {
 	return s.list, s.err
 }
 
-func (s *stubJournalService) Get(context.Context, string, string) (*journal.JournalEntry, error) {
+func (s *stubJournalService) Get(context.Context, middleware.Owner, string) (*journal.JournalEntry, error) {
 	return s.entry, s.err
 }
 
-func (s *stubJournalService) Update(context.Context, string, string, journal.Update) (*journal.JournalEntry, error) {
+func (s *stubJournalService) Update(context.Context, middleware.Owner, string, journal.Update) (*journal.JournalEntry, error) {
 	return s.entry, s.err
 }
 
-func (s *stubJournalService) Delete(context.Context, string, string) error {
+func (s *stubJournalService) Delete(context.Context, middleware.Owner, string) error {
 	return s.err
 }
 
-func (s *stubJournalService) Reflect(context.Context, string, string) (*journal.JournalEntry, error) {
+func (s *stubJournalService) Reflect(context.Context, middleware.Owner, string) (*journal.JournalEntry, error) {
 	return s.entry, s.err
 }
 
@@ -487,11 +487,11 @@ func (s *stubBreathingService) GetExercise(context.Context, string) (*breathing.
 	return s.exercise, s.err
 }
 
-func (s *stubBreathingService) RecordSession(context.Context, string, string, int, int, bool) (*breathing.Session, error) {
+func (s *stubBreathingService) RecordSession(context.Context, middleware.Owner, string, int, int, bool) (*breathing.Session, error) {
 	return s.session, s.err
 }
 
-func (s *stubBreathingService) ListSessions(context.Context, string, int) ([]breathing.Session, error) {
+func (s *stubBreathingService) ListSessions(context.Context, middleware.Owner, int) ([]breathing.Session, error) {
 	return s.sessionList, s.err
 }
 
@@ -517,12 +517,16 @@ func TestPhase5JournalRoutes(t *testing.T) {
 		CreatedAt:    time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC),
 	}
 	journalSvc := &stubJournalService{entry: jrnlEntry, list: []journal.JournalEntry{*jrnlEntry}}
+	// Writing an entry must not require registering, so the journal routes are
+	// wired to an anonymous verifier and exercised with both credentials.
+	const rawAnonToken = "raw-anonymous-token-phase-5"
+	anonSvc := newFakeAnonService(rawAnonToken, "33333333-3333-3333-3333-333333333333")
 
 	router := setupRouter(&config.Config{
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, nil, user.NewHandler(nil), tokenManager, nil, nil, nil, nil, journal.NewHandler(journalSvc), nil, nil, nil, nil)
+	}, nil, user.NewHandler(nil), tokenManager, nil, anonSvc, nil, nil, journal.NewHandler(journalSvc), nil, nil, nil, nil)
 
 	journalCases := []struct {
 		name   string
@@ -543,8 +547,6 @@ func TestPhase5JournalRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SignAccessToken returned error: %v", err)
 	}
-	const rawAnonToken = "raw-anonymous-token-phase-5"
-
 	t.Run("routes reject missing tokens", func(t *testing.T) {
 		for _, tc := range journalCases {
 			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
@@ -556,14 +558,14 @@ func TestPhase5JournalRoutes(t *testing.T) {
 		}
 	})
 
-	t.Run("routes reject anonymous-format tokens", func(t *testing.T) {
+	t.Run("routes reject unknown tokens", func(t *testing.T) {
 		for _, tc := range journalCases {
 			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
-			req.Header.Set("Authorization", "Bearer "+rawAnonToken)
+			req.Header.Set("Authorization", "Bearer not-a-real-token")
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 			if w.Code != http.StatusUnauthorized {
-				t.Errorf("%s: expected 401 for an anonymous token, got %d: %s", tc.name, w.Code, w.Body.String())
+				t.Errorf("%s: expected 401 for an unknown token, got %d: %s", tc.name, w.Code, w.Body.String())
 			}
 		}
 	})
@@ -583,6 +585,21 @@ func TestPhase5JournalRoutes(t *testing.T) {
 		}
 	})
 
+	t.Run("an anonymous session reaches every journal route", func(t *testing.T) {
+		for _, tc := range journalCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			if tc.body != "" {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			req.Header.Set("Authorization", "Bearer "+rawAnonToken)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != tc.want {
+				t.Errorf("%s: expected %d for an anonymous session, got %d: %s", tc.name, tc.want, w.Code, w.Body.String())
+			}
+		}
+	})
+
 	t.Run("journal responses keep content and ownership off the wire", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, "/api/v1/journal/"+entryID, nil)
 		req.Header.Set("Authorization", "Bearer "+jwt)
@@ -592,7 +609,7 @@ func TestPhase5JournalRoutes(t *testing.T) {
 			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 		}
 		body := w.Body.String()
-		for _, leak := range []string{"content_enc", "content_iv", "user_id"} {
+		for _, leak := range []string{"content_enc", "content_iv", "user_id", "anon_identity_id"} {
 			if bytes.Contains(w.Body.Bytes(), []byte(leak)) {
 				t.Errorf("response must never include %s: %s", leak, body)
 			}
@@ -617,10 +634,10 @@ func TestPhase5JournalRoutes(t *testing.T) {
 	})
 }
 
-// TestPhase4WellnessRoutes verifies the Phase 4 wiring: the profile, mood, and
-// dashboard routes exist behind the registered-user AuthRequired middleware,
-// reject missing and anonymous-format tokens, accept a valid registered JWT,
-// and are absent when the stacks are not wired.
+// TestPhase4WellnessRoutes verifies the Phase 4 wiring: the profile and
+// dashboard routes exist behind the registered-user AuthRequired middleware and
+// reject anonymous tokens, the mood routes accept either credential, and all of
+// them are absent when the stacks are not wired.
 func TestPhase4WellnessRoutes(t *testing.T) {
 	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
 	if err != nil {
@@ -662,12 +679,16 @@ func TestPhase4WellnessRoutes(t *testing.T) {
 		},
 	}
 
+	// Checking in should never require registering, so the mood routes accept an
+	// anonymous session while the profile and dashboard stay registered-only.
+	anonSvc := newFakeAnonService(rawAnonToken, "33333333-3333-3333-3333-333333333333")
+
 	router := setupRouter(&config.Config{
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
 	}, nil,
-		user.NewHandler(userSvc), tokenManager, nil, nil,
+		user.NewHandler(userSvc), tokenManager, nil, anonSvc,
 		mood.NewHandler(moodSvc), dashboard.NewHandler(dashSvc), nil, nil, nil, nil, nil)
 
 	jwt, err := tokenManager.SignAccessToken(registeredID)
@@ -687,6 +708,13 @@ func TestPhase4WellnessRoutes(t *testing.T) {
 		{"mood list", http.MethodGet, "/api/v1/moods", ""},
 		{"dashboard", http.MethodGet, "/api/v1/dashboard", ""},
 	}
+	// The profile and dashboard describe an account, so an anonymous session
+	// can never stand in for one. The mood routes are a normal action instead.
+	accountCases := []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/users/me"},
+		{http.MethodPatch, "/api/v1/users/me"},
+		{http.MethodGet, "/api/v1/dashboard"},
+	}
 
 	t.Run("routes reject missing tokens", func(t *testing.T) {
 		for _, tc := range registerCases {
@@ -699,15 +727,38 @@ func TestPhase4WellnessRoutes(t *testing.T) {
 		}
 	})
 
-	t.Run("routes reject anonymous-format tokens", func(t *testing.T) {
-		for _, tc := range registerCases {
-			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+	t.Run("account routes reject anonymous-format tokens", func(t *testing.T) {
+		for _, tc := range accountCases {
+			req, _ := http.NewRequest(tc.method, tc.path, nil)
+			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", "Bearer "+rawAnonToken)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 			if w.Code != http.StatusUnauthorized {
 				t.Errorf("%s %s: expected 401 for an anonymous token, got %d: %s", tc.method, tc.path, w.Code, w.Body.String())
 			}
+		}
+	})
+
+	t.Run("an anonymous session can check in and read its history", func(t *testing.T) {
+		create, _ := http.NewRequest(http.MethodPost, "/api/v1/moods", strings.NewReader(`{"mood":"Better"}`))
+		create.Header.Set("Content-Type", "application/json")
+		create.Header.Set("Authorization", "Bearer "+rawAnonToken)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, create)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("expected 201 for an anonymous check-in, got %d: %s", w.Code, w.Body.String())
+		}
+
+		list, _ := http.NewRequest(http.MethodGet, "/api/v1/moods", nil)
+		list.Header.Set("Authorization", "Bearer "+rawAnonToken)
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, list)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200 for an anonymous history read, got %d: %s", w.Code, w.Body.String())
+		}
+		if !bytes.Contains(w.Body.Bytes(), []byte(`"moods":[`)) {
+			t.Errorf("expected a moods array in the response: %s", w.Body.String())
 		}
 	})
 
@@ -983,10 +1034,11 @@ func TestPhase6CircleRoutes(t *testing.T) {
 	})
 }
 
-// TestPhase6TherapistDiscoveryRoutes verifies the Phase 6.2 wiring: both
-// therapist routes exist behind the registered-user AuthRequired middleware,
-// reject missing and anonymous tokens, accept a valid registered JWT, only
-// expose public profile fields, and are absent when the stack is not wired.
+// TestPhase6TherapistDiscoveryRoutes verifies the Phase 6.2 wiring: therapist
+// discovery is public, so both routes serve the directory with no credential
+// at all (and with an anonymous-format token, which is simply ignored), accept
+// a valid registered JWT unchanged, only expose public profile fields, and are
+// absent when the stack is not wired.
 func TestPhase6TherapistDiscoveryRoutes(t *testing.T) {
 	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
 	if err != nil {
@@ -1030,25 +1082,25 @@ func TestPhase6TherapistDiscoveryRoutes(t *testing.T) {
 		{"profile", "/api/v1/therapists/" + therapistID},
 	}
 
-	t.Run("routes reject missing tokens", func(t *testing.T) {
+	t.Run("discovery is browsable without any credential", func(t *testing.T) {
 		for _, tc := range therapistCases {
 			req, _ := http.NewRequest(http.MethodGet, tc.path, nil)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
-			if w.Code != http.StatusUnauthorized {
-				t.Errorf("%s: expected 401 without a token, got %d: %s", tc.name, w.Code, w.Body.String())
+			if w.Code != http.StatusOK {
+				t.Errorf("%s: expected 200 without a token, got %d: %s", tc.name, w.Code, w.Body.String())
 			}
 		}
 	})
 
-	t.Run("routes reject anonymous-format tokens", func(t *testing.T) {
+	t.Run("an anonymous token does not block public discovery", func(t *testing.T) {
 		for _, tc := range therapistCases {
 			req, _ := http.NewRequest(http.MethodGet, tc.path, nil)
 			req.Header.Set("Authorization", "Bearer "+anonToken)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
-			if w.Code != http.StatusUnauthorized {
-				t.Errorf("%s: expected 401 for an anonymous token, got %d: %s", tc.name, w.Code, w.Body.String())
+			if w.Code != http.StatusOK {
+				t.Errorf("%s: expected 200 for an anonymous token, got %d: %s", tc.name, w.Code, w.Body.String())
 			}
 		}
 	})
@@ -1094,7 +1146,7 @@ func TestPhase6TherapistDiscoveryRoutes(t *testing.T) {
 		}
 	})
 
-	t.Run("anonymous tokens still reach registered-only auth flows but not therapists", func(t *testing.T) {
+	t.Run("therapist routes are absent without the therapists stack", func(t *testing.T) {
 		sparseRouter := setupRouter(&config.Config{
 			Env:         "test",
 			GinMode:     "test",
@@ -1254,10 +1306,11 @@ func TestPhase6BookingRoutes(t *testing.T) {
 	})
 }
 
-// TestPhase6BreathingRoutes verifies the Phase 6.4 wiring: all breathing
-// routes live behind the registered-user AuthRequired middleware, reject
-// missing and anonymous tokens, accept a valid registered JWT, and are absent
-// when the breathing stack is not wired (404, not a handler decision).
+// TestPhase6BreathingRoutes verifies the Phase 6.4 wiring: the exercise catalog
+// is public and browsable without a credential, while recording and listing
+// sessions stay behind the registered-user AuthRequired middleware and reject
+// missing and anonymous tokens. All routes are absent when the breathing stack
+// is not wired (404, not a handler decision).
 func TestPhase6BreathingRoutes(t *testing.T) {
 	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
 	if err != nil {
@@ -1299,25 +1352,56 @@ func TestPhase6BreathingRoutes(t *testing.T) {
 		session:      session,
 		sessionList:  []breathing.Session{*session},
 	}
+	// Finishing an exercise should not require registering, so the session
+	// routes accept an anonymous session like the journal and mood routes.
+	anonSvc := newFakeAnonService(anonToken, "33333333-3333-3333-3333-333333333333")
 
 	router := setupRouter(&config.Config{
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, nil, nil, tokenManager, nil, nil, nil, nil, nil, nil, nil, nil, breathing.NewHandler(breathingSvc))
+	}, nil, nil, tokenManager, nil, anonSvc, nil, nil, nil, nil, nil, nil, breathing.NewHandler(breathingSvc))
 
-	breathingCases := []struct {
+	publicBreathingCases := []struct {
 		name, method, path, body string
 	}{
 		{"list exercises", http.MethodGet, "/api/v1/breathing/exercises", ""},
 		{"get exercise", http.MethodGet, "/api/v1/breathing/exercises/" + exerciseID, ""},
+	}
+
+	protectedBreathingCases := []struct {
+		name, method, path, body string
+	}{
 		{"record session", http.MethodPost, "/api/v1/breathing/sessions",
 			`{"exercise_id":"` + exerciseID + `","breaths":5,"duration_s":95,"completed":true}`},
 		{"list sessions", http.MethodGet, "/api/v1/breathing/sessions", ""},
 	}
 
-	t.Run("routes reject missing tokens", func(t *testing.T) {
-		for _, tc := range breathingCases {
+	t.Run("the exercise catalog is browsable without any credential", func(t *testing.T) {
+		for _, tc := range publicBreathingCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Errorf("%s: expected 200 without a token, got %d: %s", tc.name, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("an anonymous token does not block the public catalog", func(t *testing.T) {
+		for _, tc := range publicBreathingCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer "+anonToken)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Errorf("%s: expected 200 for an anonymous token, got %d: %s", tc.name, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("session routes reject missing tokens", func(t *testing.T) {
+		for _, tc := range protectedBreathingCases {
 			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
@@ -1327,15 +1411,38 @@ func TestPhase6BreathingRoutes(t *testing.T) {
 		}
 	})
 
-	t.Run("routes reject anonymous-format tokens", func(t *testing.T) {
-		for _, tc := range breathingCases {
+	t.Run("session routes reject anonymous-format tokens", func(t *testing.T) {
+		for _, tc := range protectedBreathingCases {
 			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
-			req.Header.Set("Authorization", "Bearer "+anonToken)
+			req.Header.Set("Authorization", "Bearer not-a-real-token")
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 			if w.Code != http.StatusUnauthorized {
-				t.Errorf("%s: expected 401 for an anonymous token, got %d: %s", tc.name, w.Code, w.Body.String())
+				t.Errorf("%s: expected 401 for an unknown token, got %d: %s", tc.name, w.Code, w.Body.String())
 			}
+		}
+	})
+
+	t.Run("an anonymous session records and reads its own history", func(t *testing.T) {
+		record, _ := http.NewRequest(http.MethodPost, "/api/v1/breathing/sessions",
+			strings.NewReader(`{"exercise_id":"`+exerciseID+`","breaths":5,"duration_s":95,"completed":true}`))
+		record.Header.Set("Content-Type", "application/json")
+		record.Header.Set("Authorization", "Bearer "+anonToken)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, record)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("expected 201 for an anonymous session record, got %d: %s", w.Code, w.Body.String())
+		}
+
+		list, _ := http.NewRequest(http.MethodGet, "/api/v1/breathing/sessions", nil)
+		list.Header.Set("Authorization", "Bearer "+anonToken)
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, list)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200 for an anonymous history read, got %d: %s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"sessions":[`) {
+			t.Errorf("expected a sessions array in the response: %s", w.Body.String())
 		}
 	})
 
@@ -1344,7 +1451,9 @@ func TestPhase6BreathingRoutes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("SignAccessToken returned error: %v", err)
 		}
-		for _, tc := range breathingCases {
+		for _, tc := range append(append([]struct {
+			name, method, path, body string
+		}{}, publicBreathingCases...), protectedBreathingCases...) {
 			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
 			if tc.method == http.MethodPost {
 				req.Header.Set("Content-Type", "application/json")
@@ -1396,7 +1505,9 @@ func TestPhase6BreathingRoutes(t *testing.T) {
 	})
 
 	t.Run("breathing routes are absent without the breathing stack", func(t *testing.T) {
-		for _, tc := range breathingCases {
+		for _, tc := range append(append([]struct {
+			name, method, path, body string
+		}{}, publicBreathingCases...), protectedBreathingCases...) {
 			// Spare router without the breathing handler.
 			sparseRouter := setupRouter(&config.Config{
 				Env:         "test",

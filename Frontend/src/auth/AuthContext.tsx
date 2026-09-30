@@ -3,7 +3,12 @@
 // The provider owns the auth status machine:
 //   loading        → restoring the session, nothing renders yet
 //   authenticated  → a valid session exists (user is populated)
-//   unauthenticated→ no session; protected routes redirect to /login
+//   unauthenticated→ no account session. Soulwe is still fully usable: the
+//                    personal features (journal, check-ins, breathing history)
+//                    run against an anonymous session that this provider
+//                    bootstraps, and pages that need an account (booking a
+//                    therapist, the profile) ask for a sign-in in place rather
+//                    than redirecting.
 //
 // Registration creates an account but returns no token (the backend contract),
 // so it does not change the auth status. Logging in stores the token, and
@@ -21,7 +26,7 @@ import {
 } from 'react'
 import type { User } from '@/types'
 import { isApiError } from '@/types'
-import { api, clearAuth, getAccessToken, setUnauthorizedHandler } from '@/lib/api'
+import { api, clearAuth, ensureAnonSession, getAccessToken, setUnauthorizedHandler } from '@/lib/api'
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated'
 
@@ -75,6 +80,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
     return () => setUnauthorizedHandler(null)
   }, [])
+
+  // Signing out must not strand an anonymous session: the personal features
+  // keep working exactly as they did before the user logged in, under the
+  // anonymous session already in localStorage.
+  useEffect(() => {
+    if (status !== 'unauthenticated') return
+    void ensureAnonSession().catch(() => {
+      // Best-effort only. If the server is unreachable, the individual personal
+      // request will surface the real error where it actually matters, and
+      // ensureAnonSession is single-flight, so no storm of retries is spawned.
+    })
+  }, [status])
 
   const login = useCallback(async (email: string, password: string): Promise<User> => {
     const data = await api.auth.login(email, password)

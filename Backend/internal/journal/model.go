@@ -52,7 +52,8 @@ var (
 )
 
 // JournalEntry mirrors the journal_entries table
-// (db/migrations/003_create_journal_entries.up.sql).
+// (db/migrations/003_create_journal_entries.up.sql, extended by
+// 017_add_anon_ownership).
 //
 // Content shipping between the service and the wire:
 //   - Content is only populated after a server-side decryption (detail,
@@ -60,22 +61,26 @@ var (
 //     never carry it — the `omitempty` tag keeps plaintext off the wire.
 //   - ContentEnc/ContentIV are the AES-256-GCM ciphertext and its fresh
 //     nonce; they are stored in the database and never serialized.
-//   - UserID is always derived from the authenticated JWT, never from a
-//     request body, and is never serialized.
+//   - UserID and AnonIdentityID are always derived from the authenticated
+//     identity, never from a request body, and are never serialized. Exactly
+//     one of them is set, matching the schema's one-owner CHECK. Writing a
+//     journal entry must not require registering, so both kinds of owner are
+//     first-class.
 //
 // The schema has no journal-type column: the product defines a single
 // regular journal entry. No artificial "type" vocabulary is introduced.
 type JournalEntry struct {
-	ID           string    `json:"id"`
-	UserID       string    `json:"-"`
-	Content      string    `json:"content,omitempty"`
-	ContentEnc   []byte    `json:"-"`
-	ContentIV    []byte    `json:"-"`
-	MoodTags     []string  `json:"mood_tags"`
-	PromptUsed   *string   `json:"prompt_used"`
-	AIReflection *string   `json:"ai_reflection"`
-	WordCount    int       `json:"word_count"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID             string    `json:"id"`
+	UserID         string    `json:"-"`
+	AnonIdentityID string    `json:"-"`
+	Content        string    `json:"content,omitempty"`
+	ContentEnc     []byte    `json:"-"`
+	ContentIV      []byte    `json:"-"`
+	MoodTags       []string  `json:"mood_tags"`
+	PromptUsed     *string   `json:"prompt_used"`
+	AIReflection   *string   `json:"ai_reflection"`
+	WordCount      int       `json:"word_count"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 // ReflectionGenerator turns journal content into a short server-side

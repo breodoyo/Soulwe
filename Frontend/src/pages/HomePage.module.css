@@ -57,6 +57,26 @@
   margin-bottom: var(--space-4);
 }
 
+/* Optional, never a gate: a quiet inline link into a voluntary sign-in. */
+.greetLink {
+  color: rgba(250, 246, 241, 0.85);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.greetLink:hover {
+  color: #FCF6F1;
+}
+
+/* One quiet line acknowledging the anonymous session. Not a prompt to
+   register, and it does not interrupt anything. */
+.guestNote {
+  font-size: var(--text-xs);
+  color: rgba(250, 246, 241, 0.45);
+  line-height: 1.6;
+  max-width: 46rem;
+}
+
 /* ── Mood picker ── */
 .moodRow {
   display: flex;

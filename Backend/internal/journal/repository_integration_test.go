@@ -12,10 +12,16 @@ import (
 	"time"
 
 	"Backend/internal/cipher"
+	"Backend/internal/middleware"
 	"Backend/internal/user"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// ownerFor is a registered owner for the given id, keeping these tests
+// readable now that a journal entry may belong to a user OR an anonymous
+// session.
+func ownerFor(userID string) middleware.Owner { return middleware.Owner{UserID: userID} }
 
 // integrationKey is a fixed 32-byte key used only by these tests. Production
 // keys come from JOURNAL_ENCRYPTION_KEY and are never present in code.
@@ -124,7 +130,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 			t.Error("plaintext appears inside the stored ciphertext")
 		}
 
-		got, err := repo.GetByID(ctx, ownerID, entry.ID)
+		got, err := repo.GetByID(ctx, ownerFor(ownerID), entry.ID)
 		if err != nil {
 			t.Fatalf("GetByID returned error: %v", err)
 		}
@@ -152,10 +158,10 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 			t.Fatalf("Create returned error: %v", err)
 		}
 
-		if _, err := repo.GetByID(ctx, otherID, entry.ID); !errors.Is(err, ErrJournalEntryNotFound) {
+		if _, err := repo.GetByID(ctx, ownerFor(otherID), entry.ID); !errors.Is(err, ErrJournalEntryNotFound) {
 			t.Errorf("expected ErrJournalEntryNotFound for another user, got %v", err)
 		}
-		owned, err := repo.GetByID(ctx, ownerID, entry.ID)
+		owned, err := repo.GetByID(ctx, ownerFor(ownerID), entry.ID)
 		if err != nil {
 			t.Fatalf("owner GetByID: %v", err)
 		}
@@ -168,7 +174,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("ListByUserID returns the user's entries newest first", func(t *testing.T) {
+	t.Run("ListByOwner returns the user's entries newest first", func(t *testing.T) {
 		titles := []string{"first", "second", "third", "fourth", "fifth"}
 		for i, title := range titles {
 			if err := repo.Create(ctx, newEntry(title+" entry.", []string{"Calm"})); err != nil {
@@ -180,9 +186,9 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 			}
 		}
 
-		entries, err := repo.ListByUserID(ctx, ownerID, 100, nil)
+		entries, err := repo.ListByOwner(ctx, ownerFor(ownerID), 100, nil)
 		if err != nil {
-			t.Fatalf("ListByUserID returned error: %v", err)
+			t.Fatalf("ListByOwner returned error: %v", err)
 		}
 		if len(entries) < 5 {
 			t.Fatalf("expected at least 5 entries, got %d", len(entries))
@@ -194,9 +200,9 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 			}
 		}
 
-		limited, err := repo.ListByUserID(ctx, ownerID, 3, nil)
+		limited, err := repo.ListByOwner(ctx, ownerFor(ownerID), 3, nil)
 		if err != nil {
-			t.Fatalf("ListByUserID(limit) returned error: %v", err)
+			t.Fatalf("ListByOwner(limit) returned error: %v", err)
 		}
 		if len(limited) != 3 {
 			t.Errorf("expected 3 entries, got %d", len(limited))
@@ -204,16 +210,16 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	})
 
 	t.Run("before cursor resumes from an earlier created_at", func(t *testing.T) {
-		entries, err := repo.ListByUserID(ctx, ownerID, 2, nil)
+		entries, err := repo.ListByOwner(ctx, ownerFor(ownerID), 2, nil)
 		if err != nil {
-			t.Fatalf("ListByUserID returned error: %v", err)
+			t.Fatalf("ListByOwner returned error: %v", err)
 		}
 		if len(entries) != 2 {
 			t.Fatalf("expected 2 entries to page over, got %d", len(entries))
 		}
-		nextPage, err := repo.ListByUserID(ctx, ownerID, 2, &entries[1].CreatedAt)
+		nextPage, err := repo.ListByOwner(ctx, ownerFor(ownerID), 2, &entries[1].CreatedAt)
 		if err != nil {
-			t.Fatalf("paged ListByUserID returned error: %v", err)
+			t.Fatalf("paged ListByOwner returned error: %v", err)
 		}
 		if len(nextPage) == 0 {
 			t.Fatal("expected a second page of entries")
@@ -234,7 +240,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 
 		changed := *newEntry("revised words.", []string{"New"})
 		changed.AIReflection = nil
-		if err := repo.Update(ctx, ownerID, entry.ID, &changed, true); err != nil {
+		if err := repo.Update(ctx, ownerFor(ownerID), entry.ID, &changed, true); err != nil {
 			t.Fatalf("Update content: %v", err)
 		}
 		if changed.AIReflection != nil {
@@ -252,12 +258,12 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		}
 
 		// Metadata-only change: content and any stored reflection survive.
-		if err := repo.UpdateReflection(ctx, ownerID, entry.ID, "keep me"); err != nil {
+		if err := repo.UpdateReflection(ctx, ownerFor(ownerID), entry.ID, "keep me"); err != nil {
 			t.Fatalf("UpdateReflection: %v", err)
 		}
 		meta := changed
 		meta.MoodTags = []string{"Calm"}
-		if err := repo.Update(ctx, ownerID, entry.ID, &meta, false); err != nil {
+		if err := repo.Update(ctx, ownerFor(ownerID), entry.ID, &meta, false); err != nil {
 			t.Fatalf("Update metadata: %v", err)
 		}
 		if meta.AIReflection == nil || *meta.AIReflection != "keep me" {
@@ -268,10 +274,10 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 			t.Errorf("content must be untouched by a metadata-only update, got %q", plainAfter)
 		}
 
-		if err := repo.Update(ctx, otherID, entry.ID, &changed, true); !errors.Is(err, ErrJournalEntryNotFound) {
+		if err := repo.Update(ctx, ownerFor(otherID), entry.ID, &changed, true); !errors.Is(err, ErrJournalEntryNotFound) {
 			t.Errorf("expected ErrJournalEntryNotFound updating another user's entry, got %v", err)
 		}
-		if err := repo.UpdateReflection(ctx, otherID, entry.ID, "theft"); !errors.Is(err, ErrJournalEntryNotFound) {
+		if err := repo.UpdateReflection(ctx, ownerFor(otherID), entry.ID, "theft"); !errors.Is(err, ErrJournalEntryNotFound) {
 			t.Errorf("expected ErrJournalEntryNotFound reflecting another user's entry, got %v", err)
 		}
 	})
@@ -282,13 +288,13 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 			t.Fatalf("Create returned error: %v", err)
 		}
 
-		if err := repo.Delete(ctx, otherID, entry.ID); !errors.Is(err, ErrJournalEntryNotFound) {
+		if err := repo.Delete(ctx, ownerFor(otherID), entry.ID); !errors.Is(err, ErrJournalEntryNotFound) {
 			t.Errorf("expected ErrJournalEntryNotFound deleting another user's entry, got %v", err)
 		}
-		if err := repo.Delete(ctx, ownerID, entry.ID); err != nil {
+		if err := repo.Delete(ctx, ownerFor(ownerID), entry.ID); err != nil {
 			t.Fatalf("owner Delete: %v", err)
 		}
-		if _, err := repo.GetByID(ctx, ownerID, entry.ID); !errors.Is(err, ErrJournalEntryNotFound) {
+		if _, err := repo.GetByID(ctx, ownerFor(ownerID), entry.ID); !errors.Is(err, ErrJournalEntryNotFound) {
 			t.Errorf("expected the deleted entry to be gone, got %v", err)
 		}
 	})
@@ -313,9 +319,9 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 			t.Fatalf("failed to DELETE the ghost user: %v", err)
 		}
 
-		ghostEntries, err := repo.ListByUserID(ctx, ghostID, 100, nil)
+		ghostEntries, err := repo.ListByOwner(ctx, ownerFor(ghostID), 100, nil)
 		if err != nil {
-			t.Fatalf("ListByUserID for ghost: %v", err)
+			t.Fatalf("ListByOwner for ghost: %v", err)
 		}
 		if len(ghostEntries) != 0 {
 			t.Errorf("expected the ghost's entries to cascade-delete, got %d", len(ghostEntries))

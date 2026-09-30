@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"Backend/internal/middleware"
 )
 
 // Service is the breathing business-logic boundary. Implementations own
@@ -18,16 +20,17 @@ type Service interface {
 	// GetExercise returns one catalog exercise, or ErrExerciseNotFound.
 	GetExercise(ctx context.Context, exerciseID string) (*Exercise, error)
 
-	// RecordSession records a completed breathing session for the given user.
-	// The exercise must exist (ErrExerciseNotFound otherwise); its technique
-	// and name are stamped onto the session. The user ID always comes from the
-	// authenticated JWT context, never from client input.
-	RecordSession(ctx context.Context, userID, exerciseID string, breaths, durationS int, completed bool) (*Session, error)
+	// RecordSession records a completed breathing session for the given owner,
+	// which may be a registered user or an anonymous session. The exercise
+	// must exist (ErrExerciseNotFound otherwise); its technique and name are
+	// stamped onto the session. The owner always comes from the authenticated
+	// identity context, never from client input.
+	RecordSession(ctx context.Context, owner middleware.Owner, exerciseID string, breaths, durationS int, completed bool) (*Session, error)
 
-	// ListSessions returns the user's breathing history newest first, clamped
-	// to a sane page size. It returns an empty slice (not nil) when the user
+	// ListSessions returns the owner's breathing history newest first, clamped
+	// to a sane page size. It returns an empty slice (not nil) when the owner
 	// has none.
-	ListSessions(ctx context.Context, userID string, limit int) ([]Session, error)
+	ListSessions(ctx context.Context, owner middleware.Owner, limit int) ([]Session, error)
 }
 
 type service struct {
@@ -51,7 +54,14 @@ func (s *service) GetExercise(ctx context.Context, exerciseID string) (*Exercise
 	return s.repo.GetExercise(ctx, exerciseID)
 }
 
-func (s *service) RecordSession(ctx context.Context, userID, exerciseID string, breaths, durationS int, completed bool) (*Session, error) {
+func (s *service) RecordSession(ctx context.Context, owner middleware.Owner, exerciseID string, breaths, durationS int, completed bool) (*Session, error) {
+	// The owner is stamped onto the row as a single column, so an ambiguous
+	// owner (both identities set) would silently write as one of them. Reject
+	// it here rather than guessing which identity meant the request.
+	if _, ok := middleware.IdentityFromOwner(owner); !ok {
+		return nil, ErrInvalidOwner
+	}
+
 	exercise, err := s.repo.GetExercise(ctx, exerciseID)
 	if err != nil {
 		if errors.Is(err, ErrExerciseNotFound) {
@@ -62,7 +72,6 @@ func (s *service) RecordSession(ctx context.Context, userID, exerciseID string, 
 
 	name := exercise.Name
 	session := &Session{
-		UserID:     userID,
 		ExerciseID: stringPtr(exercise.ID),
 		Technique:  exercise.Technique,
 		Name:       &name,
@@ -70,14 +79,19 @@ func (s *service) RecordSession(ctx context.Context, userID, exerciseID string, 
 		DurationS:  durationS,
 		Completed:  completed,
 	}
+	if owner.Registered() {
+		session.UserID = owner.UserID
+	} else {
+		session.AnonIdentityID = owner.AnonIdentityID
+	}
 	if err := s.repo.CreateSession(ctx, session); err != nil {
 		return nil, fmt.Errorf("breathing record session: %w", err)
 	}
 	return session, nil
 }
 
-func (s *service) ListSessions(ctx context.Context, userID string, limit int) ([]Session, error) {
-	sessions, err := s.repo.ListSessionsByUserID(ctx, userID, ClampLimit(limit))
+func (s *service) ListSessions(ctx context.Context, owner middleware.Owner, limit int) ([]Session, error) {
+	sessions, err := s.repo.ListSessionsByOwner(ctx, owner, ClampLimit(limit))
 	if err != nil {
 		return nil, err
 	}

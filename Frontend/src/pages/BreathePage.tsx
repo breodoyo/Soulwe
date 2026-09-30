@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { isApiError, type BreathingExercise, type BreathingSession } from '@/types'
 import { api } from '@/lib/api'
+import { useAuth } from '@/auth/AuthContext'
 import styles from './BreathePage.module.css'
 
 interface Phase { label: string; duration: number; instruction: string }
@@ -75,6 +77,12 @@ function speak(text: string) {
 }
 
 export default function BreathePage() {
+  const { status } = useAuth()
+  // The exercise is public and so is saving it: a guest's history belongs to
+  // their anonymous session. Only the note about where that history is kept
+  // depends on having an account.
+  const hasAccount = status === 'authenticated'
+
   const [exercises, setExercises]       = useState<BreathingConfig[] | null>(null)
   const [exercisesError, setExercisesError] = useState<string | null>(null)
   const [reloadTick, setReloadTick]     = useState(0)
@@ -155,6 +163,8 @@ export default function BreathePage() {
   // A session is only recorded on the user's explicit Stop — the backend's
   // POST /breathing/sessions records a completed session. Runs finished with
   // zero breaths (or abandoned by switching technique) are not recorded.
+  // A guest's session belongs to their anonymous session, so this is never
+  // skipped for want of an account.
   const recordSession = async () => {
     const exerciseId = configRef.current?.id
     if (!exerciseId || breathCount < 1) return
@@ -239,6 +249,19 @@ export default function BreathePage() {
           {voiceOn ? '🔊 Voice on' : '🔇 Voice off'}
         </button>
       </div>
+
+      {/* Not a gate: a guest runs and saves exactly as an account holder does,
+          with the history kept against their anonymous session. */}
+      {!hasAccount && (
+        <p className={styles.guestNote}>
+          Breathing is open to everyone — run as many as you like. Your sessions are
+          saved to this browser;{' '}
+          <Link className={styles.signInLink} to="/register" state={{ from: '/breathe' }}>
+            a free account
+          </Link>{' '}
+          only makes the history follow you to another device.
+        </p>
+      )}
 
       {/* Load states */}
       {!config && !exercisesError && exercises === null && (

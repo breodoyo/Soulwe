@@ -1,5 +1,5 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import styles from './LandingPage.module.css'
 
 const features = [
@@ -74,6 +74,8 @@ export default function LandingPage() {
           <a href="#features"   className={styles.navLink}>Features</a>
           <a href="#circles"    className={styles.navLink}>Circles</a>
           <a href="#therapists" className={styles.navLink}>Therapists</a>
+          {/* Signing in is always a choice, never a gate on browsing. */}
+          <Link to="/login" className={styles.navLink}>Log in</Link>
         </div>
         <button className={styles.navCta} onClick={() => navigate('/home')}>
           Start your journey

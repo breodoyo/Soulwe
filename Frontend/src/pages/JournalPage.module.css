@@ -387,6 +387,35 @@
   padding: var(--space-4) 0;
 }
 
+/* A page whose content is entirely the user's own data shows a plain empty
+   state for a guest. It is not a gate: the page opens, navigation is intact,
+   and the sign-in is offered as an ordinary inline link. */
+.emptyState {
+  padding: var(--space-5) 0;
+  max-width: 46ch;
+}
+
+.emptyTitle {
+  font-size: var(--text-sm);
+  color: var(--ink);
+  margin-bottom: var(--space-2);
+}
+
+.emptyBody {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  line-height: 1.6;
+  margin-bottom: var(--space-3);
+}
+
+.link {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link:hover { opacity: 0.8; }
+
 /* ── Notices ── */
 .noticeError,
 .noticeSuccess,

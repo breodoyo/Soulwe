@@ -31,3 +31,106 @@
   0%, 100% { transform: scale(1); opacity: 1; }
   50%       { transform: scale(0.92); opacity: 0.7; }
 }
+
+/* ── In-page sign-in prompt ── */
+
+.prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  background: var(--bg-mid);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+}
+
+.promptEyebrow {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--teal);
+  font-weight: 600;
+}
+
+.promptTitle {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  color: var(--ink);
+  line-height: 1.2;
+}
+
+.promptBody {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  line-height: 1.6;
+  max-width: 46ch;
+}
+
+.promptActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+}
+
+.promptPrimary,
+.promptSecondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background var(--duration-base) var(--ease),
+    color var(--duration-base) var(--ease),
+    border-color var(--duration-base) var(--ease);
+}
+
+.promptPrimary {
+  background: var(--sun);
+  color: #fff;
+}
+
+.promptPrimary:hover { background: var(--sun-deep); }
+
+.promptSecondary {
+  background: transparent;
+  color: var(--sun-deep);
+  border: 1px solid var(--border);
+}
+
+.promptSecondary:hover { background: var(--sun-light); }
+
+.promptNote {
+  font-size: var(--text-xs);
+  color: var(--subtle);
+}
+
+/* Compact form, for the point where a protected *action* is attempted. The
+   sign-in is about that one action, so it reads as a small aside rather than
+   a wall the visitor has to get past to keep browsing. */
+.promptCompact {
+  padding: var(--space-4);
+  gap: var(--space-2);
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--border);
+  border-radius: var(--radius-md);
+}
+
+.promptCompact .promptEyebrow { font-size: 0.625rem; }
+.promptCompact .promptTitle  { font-size: var(--text-base); }
+.promptCompact .promptBody   { font-size: var(--text-xs); }
+
+.promptCompact .promptPrimary,
+.promptCompact .promptSecondary {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-xs);
+}
+
+/* "Keep browsing" is implied by the compact framing. */
+.promptCompact .promptNote { display: none; }

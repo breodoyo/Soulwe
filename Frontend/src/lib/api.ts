@@ -101,6 +101,56 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
   unauthorizedHandler = handler
 }
 
+// ── Anonymous session bootstrap ──────────────────────────────────────────────
+
+// ensureAnonSession guarantees that a usable anonymous session exists, minting
+// one the first time and revalidating a stored token against the server.
+//
+// This is the single place an anonymous identity is created. It is called by
+// the personal-feature requests that accept either credential, so a guest who
+// writes their first journal entry, checks in, or finishes a breathing exercise
+// never has to register first.
+//
+// The in-flight promise is shared so that React's StrictMode double-invoke, and
+// several components starting at once, produce exactly one session instead of
+// racing to mint several.
+let anonSessionInFlight: Promise<void> | null = null
+
+export async function ensureAnonSession(): Promise<void> {
+  if (anonSessionInFlight) return anonSessionInFlight
+
+  const run = (async () => {
+    const existing = getAnonToken()
+    if (existing) {
+      try {
+        await request<AnonymousMeResponse>('/auth/anonymous/me', { auth: 'anonymous' })
+        return
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) {
+          // The stored session is gone server-side; mint a replacement.
+          clearAnonToken()
+        } else {
+          // A network or server fault must not discard a token that may still
+          // be perfectly good — the caller's error is the honest signal.
+          throw err
+        }
+      }
+    }
+    const { anonymous_token } = await request<AnonymousSessionResponse>('/auth/anonymous', {
+      method: 'POST',
+      auth: false,
+    })
+    setAnonToken(anonymous_token)
+  })()
+
+  anonSessionInFlight = run
+  try {
+    return await run
+  } finally {
+    anonSessionInFlight = null
+  }
+}
+
 // ── Request options ──────────────────────────────────────────────────────────
 
 interface RequestOptions {
@@ -109,20 +159,55 @@ interface RequestOptions {
   // Which credential, if any, the request carries:
   //   auth: true         → the registered JWT (default)
   //   auth: 'anonymous'  → the anonymous sessions token (circles, anonymous/me)
+  //   auth: 'either'     → the registered JWT if there is one, otherwise an
+  //                        anonymous session (mints one if needed). Used by the
+  //                        personal features that must work signed out.
   //   auth: false        → public endpoints (register, login, anonymous create)
-  auth?: boolean | 'anonymous'
+  auth?: boolean | 'anonymous' | 'either'
+}
+
+// Chooses the credential for auth: 'either' — the registered JWT wins, so a
+// signed-in user's data stays in their account and is never mixed with an
+// anonymous session's rows. Only when there is no registered token does the
+// request fall back to (and if necessary mint) an anonymous session.
+async function attachEitherCredential(
+  headers: Record<string, string>,
+): Promise<'registered' | 'anonymous' | 'none'> {
+  const accessToken = getAccessToken()
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`
+    return 'registered'
+  }
+  await ensureAnonSession()
+  const anonToken = getAnonToken()
+  if (anonToken) {
+    headers['Authorization'] = `Bearer ${anonToken}`
+    return 'anonymous'
+  }
+  return 'none'
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, auth = true } = options
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  // Which credential actually went out, so a 401 is handled against the token
+  // that was sent rather than against whatever happens to be stored. A public
+  // request (auth: false) sent nothing and is left alone entirely.
+  let sent: 'registered' | 'anonymous' | 'none' = auth === false ? 'none' : 'registered'
   if (auth === 'anonymous') {
+    sent = 'none'
     const token = getAnonToken()
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+      sent = 'anonymous'
+    }
+  } else if (auth === 'either') {
+    sent = await attachEitherCredential(headers)
   } else if (auth === true) {
     const token = getAccessToken()
     if (token) headers['Authorization'] = `Bearer ${token}`
+    else sent = 'none'
   }
 
   let response: Response
@@ -141,12 +226,21 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 
   // Expired or invalid credentials on a registered request: clear the stored
-  // token and bounce through the normal auth flow. Anonymous requests never
-  // touch the registered JWT — they just surface the 401 for the caller to
-  // renew its anonymous session.
-  if (response.status === 401 && auth === true) {
+  // token and bounce through the normal auth flow. This covers auth: true and
+  // an auth: 'either' request that actually carried the registered JWT — an
+  // expired account token must not leave the app looking signed in.
+  if (response.status === 401 && sent === 'registered') {
     clearAuth()
     unauthorizedHandler?.()
+    throw await readError(response)
+  }
+
+  // A request that went out under an anonymous session came back unauthorized:
+  // that session is gone or was never minted. Drop the stored token so the next
+  // attempt starts a fresh one, and deliberately do NOT clear the registered
+  // session — there was not one involved.
+  if (response.status === 401 && sent === 'anonymous') {
+    clearAnonToken()
     throw await readError(response)
   }
 
@@ -238,60 +332,74 @@ export const api = {
   },
 
   moods: {
-    // GET /moods — the user's check-ins, newest first. `limit` is optional
+    // GET /moods — the caller's check-ins, newest first. Works signed out: a
+    // guest's check-ins belong to their anonymous session. `limit` is optional
     // (backend default 20 / max 50).
     list: (params?: { limit?: number }): Promise<MoodsResponse> => {
       const query = params?.limit ? `?limit=${params.limit}` : ''
-      return request<MoodsResponse>(`/moods${query}`)
+      return request<MoodsResponse>(`/moods${query}`, { auth: 'either' })
     },
 
-    // POST /moods — records a mood check-in.
+    // POST /moods — records a mood check-in. Checking in on yourself is a
+    // normal action, so it does not require an account.
     create: (payload: CreateMoodPayload): Promise<MoodLog> =>
-      request<MoodLog>('/moods', { method: 'POST', body: payload }),
+      request<MoodLog>('/moods', { method: 'POST', body: payload, auth: 'either' }),
   },
 
   dashboard: {
     // GET /dashboard — the user's wellness snapshot (profile, latest + recent
-    // moods, and total check-in count).
+    // moods, and total check-in count). Registered users only: it is built
+    // around an account profile.
     get: (): Promise<DashboardResponse> => request<DashboardResponse>('/dashboard'),
   },
 
   journal: {
-    // GET /journal — the user's entries, newest first. `limit` (default 20,
-    // max 50) and `before` (created_at cursor, exclusive) are optional.
+    // GET /journal — the caller's entries, newest first. Works signed out: a
+    // guest's entries belong to their anonymous session and are encrypted under
+    // it. `limit` (default 20, max 50) and `before` (created_at cursor,
+    // exclusive) are optional.
     list: (params?: { limit?: number; before?: string }): Promise<JournalListResponse> => {
       const query = new URLSearchParams()
       if (params?.limit) query.set('limit', String(params.limit))
       if (params?.before) query.set('before', params.before)
       const qs = query.toString()
-      return request<JournalListResponse>(`/journal${qs ? `?${qs}` : ''}`)
+      return request<JournalListResponse>(`/journal${qs ? `?${qs}` : ''}`, { auth: 'either' })
     },
 
     // GET /journal/:id — a single entry including its decrypted content.
     get: (id: string): Promise<JournalEntryResponse> =>
-      request<JournalEntryResponse>(`/journal/${encodeURIComponent(id)}`),
+      request<JournalEntryResponse>(`/journal/${encodeURIComponent(id)}`, { auth: 'either' }),
 
     // POST /journal — saves an entry; the server attempts an AI reflection
     // on create (best-effort, ai_reflection may be null).
     create: (payload: CreateJournalPayload): Promise<JournalEntryResponse> =>
-      request<JournalEntryResponse>('/journal', { method: 'POST', body: payload }),
+      request<JournalEntryResponse>('/journal', {
+        method: 'POST',
+        body: payload,
+        auth: 'either',
+      }),
 
     // PATCH /journal/:id — updates content/mood_tags/prompt_used.
     update: (id: string, payload: UpdateJournalPayload): Promise<JournalEntryResponse> =>
       request<JournalEntryResponse>(`/journal/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         body: payload,
+        auth: 'either',
       }),
 
     // DELETE /journal/:id — permanent, returns 204.
     delete: (id: string): Promise<void> =>
-      request<void>(`/journal/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+      request<void>(`/journal/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        auth: 'either',
+      }),
 
     // POST /journal/:id/reflect — generates and stores a fresh AI reflection.
     // May throw a 503 ApiError (code AI_REFLECTION_UNAVAILABLE).
     reflect: (id: string): Promise<JournalEntryResponse> =>
       request<JournalEntryResponse>(`/journal/${encodeURIComponent(id)}/reflect`, {
         method: 'POST',
+        auth: 'either',
       }),
   },
 
@@ -361,21 +469,23 @@ export const api = {
   },
 
   therapists: {
-    // GET /therapists — the public directory, newest first. language and
-    // specialty are case-insensitive substring filters applied server-side
-    // only when non-empty; before/cursor resume pagination.
+    // GET /therapists — the public directory, newest first. Discovery is
+    // browsable without an account, so this call carries no credential.
+    // language and specialty are case-insensitive substring filters applied
+    // server-side only when non-empty; before/cursor resume pagination.
     list: (params?: { language?: string; specialty?: string; before?: string }): Promise<TherapistsResponse> => {
       const query = new URLSearchParams()
       if (params?.language) query.set('language', params.language)
       if (params?.specialty) query.set('specialty', params.specialty)
       if (params?.before) query.set('before', params.before)
       const qs = query.toString()
-      return request<TherapistsResponse>(`/therapists${qs ? `?${qs}` : ''}`)
+      return request<TherapistsResponse>(`/therapists${qs ? `?${qs}` : ''}`, { auth: false })
     },
 
-    // GET /therapists/:id — one therapist's public profile.
+    // GET /therapists/:id — one therapist's public profile. Also public:
+    // looking at a therapist is free, only talking to one needs an account.
     get: (id: string): Promise<TherapistResponse> =>
-      request<TherapistResponse>(`/therapists/${encodeURIComponent(id)}`),
+      request<TherapistResponse>(`/therapists/${encodeURIComponent(id)}`, { auth: false }),
   },
 
   bookings: {
@@ -403,38 +513,45 @@ export const api = {
   },
 
   breathe: {
-    // GET /breathing/exercises — the curated catalog, defined order. Optional
-    // `limit` (default 20, max 50) only trims the tail; there is no cursor.
+    // GET /breathing/exercises — the curated catalog, defined order. Public:
+    // the breathing exercise itself works for guests, so no credential is
+    // sent. Optional `limit` (default 20, max 50) only trims the tail; there
+    // is no cursor.
     exercises: (params?: { limit?: number }): Promise<BreathingExercisesResponse> => {
       const query = new URLSearchParams()
       if (params?.limit) query.set('limit', String(params.limit))
       const qs = query.toString()
       return request<BreathingExercisesResponse>(
         `/breathing/exercises${qs ? `?${qs}` : ''}`,
+        { auth: false },
       )
     },
 
-    // GET /breathing/exercises/:id — 404 if the exercise doesn't exist.
+    // GET /breathing/exercises/:id — 404 if the exercise doesn't exist. Public.
     exercise: (id: string): Promise<BreathingExerciseResponse> =>
-      request<BreathingExerciseResponse>(`/breathing/exercises/${encodeURIComponent(id)}`),
+      request<BreathingExerciseResponse>(
+        `/breathing/exercises/${encodeURIComponent(id)}`,
+        { auth: false },
+      ),
 
     sessions: {
       // POST /breathing/sessions — records one completed session (completed
-      // defaults to true). 201 with the stored session.
+      // defaults to true). 201 with the stored session. Works signed out: a
+      // guest's history belongs to their anonymous session.
       record: (payload: CreateBreathingSessionPayload): Promise<BreathingSessionResponse> =>
         request<BreathingSessionResponse>('/breathing/sessions', {
           method: 'POST',
           body: payload,
+          auth: 'either',
         }),
 
-      // GET /breathing/sessions — the authenticated user's history, newest
-      // first. Optional `limit` (default 20, max 50).
+      // GET /breathing/sessions — the caller's history, newest first. Optional
+      // `limit` (default 20, max 50).
       list: (params?: { limit?: number }): Promise<BreathingSessionsResponse> => {
-        const query = new URLSearchParams()
-        if (params?.limit) query.set('limit', String(params.limit))
-        const qs = query.toString()
+        const query = params?.limit ? `?limit=${params.limit}` : ''
         return request<BreathingSessionsResponse>(
-          `/breathing/sessions${qs ? `?${qs}` : ''}`,
+          `/breathing/sessions${query ? `?${query}` : ''}`,
+          { auth: 'either' },
         )
       },
     },

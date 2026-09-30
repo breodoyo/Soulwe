@@ -17,6 +17,14 @@ import (
 )
 
 const testUserID = "11111111-1111-1111-1111-111111111111"
+const testAnonID = "33333333-3333-3333-3333-333333333333"
+
+// Writing a journal entry must not require registering, so both owner shapes are
+// exercised against every route.
+var (
+	registeredOwner = middleware.Owner{UserID: testUserID}
+	anonOwner       = middleware.Owner{AnonIdentityID: testAnonID}
+)
 
 var testTime = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -24,65 +32,67 @@ var testTime = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 // the methods under test.
 type fakeService struct {
 	Service
-	createFunc  func(ctx context.Context, userID, content string, moodTags []string, promptUsed *string) (*JournalEntry, error)
-	listFunc    func(ctx context.Context, userID string, limit int, before *time.Time) ([]JournalEntry, error)
-	getFunc     func(ctx context.Context, userID, entryID string) (*JournalEntry, error)
-	updateFunc  func(ctx context.Context, userID, entryID string, changes Update) (*JournalEntry, error)
-	deleteFunc  func(ctx context.Context, userID, entryID string) error
-	reflectFunc func(ctx context.Context, userID, entryID string) (*JournalEntry, error)
+	createFunc  func(ctx context.Context, owner middleware.Owner, content string, moodTags []string, promptUsed *string) (*JournalEntry, error)
+	listFunc    func(ctx context.Context, owner middleware.Owner, limit int, before *time.Time) ([]JournalEntry, error)
+	getFunc     func(ctx context.Context, owner middleware.Owner, entryID string) (*JournalEntry, error)
+	updateFunc  func(ctx context.Context, owner middleware.Owner, entryID string, changes Update) (*JournalEntry, error)
+	deleteFunc  func(ctx context.Context, owner middleware.Owner, entryID string) error
+	reflectFunc func(ctx context.Context, owner middleware.Owner, entryID string) (*JournalEntry, error)
 }
 
-func (f *fakeService) Create(ctx context.Context, userID, content string, moodTags []string, promptUsed *string) (*JournalEntry, error) {
+func (f *fakeService) Create(ctx context.Context, owner middleware.Owner, content string, moodTags []string, promptUsed *string) (*JournalEntry, error) {
 	if f.createFunc == nil {
 		return nil, errors.New("createFunc not configured")
 	}
-	return f.createFunc(ctx, userID, content, moodTags, promptUsed)
+	return f.createFunc(ctx, owner, content, moodTags, promptUsed)
 }
 
-func (f *fakeService) List(ctx context.Context, userID string, limit int, before *time.Time) ([]JournalEntry, error) {
+func (f *fakeService) List(ctx context.Context, owner middleware.Owner, limit int, before *time.Time) ([]JournalEntry, error) {
 	if f.listFunc == nil {
 		return nil, errors.New("listFunc not configured")
 	}
-	return f.listFunc(ctx, userID, limit, before)
+	return f.listFunc(ctx, owner, limit, before)
 }
 
-func (f *fakeService) Get(ctx context.Context, userID, entryID string) (*JournalEntry, error) {
+func (f *fakeService) Get(ctx context.Context, owner middleware.Owner, entryID string) (*JournalEntry, error) {
 	if f.getFunc == nil {
 		return nil, errors.New("getFunc not configured")
 	}
-	return f.getFunc(ctx, userID, entryID)
+	return f.getFunc(ctx, owner, entryID)
 }
 
-func (f *fakeService) Update(ctx context.Context, userID, entryID string, changes Update) (*JournalEntry, error) {
+func (f *fakeService) Update(ctx context.Context, owner middleware.Owner, entryID string, changes Update) (*JournalEntry, error) {
 	if f.updateFunc == nil {
 		return nil, errors.New("updateFunc not configured")
 	}
-	return f.updateFunc(ctx, userID, entryID, changes)
+	return f.updateFunc(ctx, owner, entryID, changes)
 }
 
-func (f *fakeService) Delete(ctx context.Context, userID, entryID string) error {
+func (f *fakeService) Delete(ctx context.Context, owner middleware.Owner, entryID string) error {
 	if f.deleteFunc == nil {
 		return errors.New("deleteFunc not configured")
 	}
-	return f.deleteFunc(ctx, userID, entryID)
+	return f.deleteFunc(ctx, owner, entryID)
 }
 
-func (f *fakeService) Reflect(ctx context.Context, userID, entryID string) (*JournalEntry, error) {
+func (f *fakeService) Reflect(ctx context.Context, owner middleware.Owner, entryID string) (*JournalEntry, error) {
 	if f.reflectFunc == nil {
 		return nil, errors.New("reflectFunc not configured")
 	}
-	return f.reflectFunc(ctx, userID, entryID)
+	return f.reflectFunc(ctx, owner, entryID)
 }
 
 // requestRouter builds a router that simulates the AuthRequired middleware by
-// stamping UserIDKey into the Gin context, then serves the request.
-func requestRouter(t *testing.T, method, path, body, userID string, handler func(c *gin.Context)) *httptest.ResponseRecorder {
+// stamping OwnerKey into the Gin context, then serves the request.
+func requestRouter(t *testing.T, method, path, body string, owner middleware.Owner, handler func(c *gin.Context)) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
-		if userID != "" {
-			c.Set(middleware.UserIDKey, userID)
+		// An ill-formed owner is treated as "no identity", mirroring how the real
+		// middleware would simply not have set the key.
+		if _, ok := middleware.IdentityFromOwner(owner); ok {
+			c.Set(middleware.OwnerKey, owner)
 		}
 		c.Next()
 	})
@@ -157,9 +167,9 @@ func assertErrorField(t *testing.T, rec *httptest.ResponseRecorder, want string)
 func TestJournalHandlerCreate(t *testing.T) {
 	t.Run("returns 201 with the entry and no plaintext or ciphertext", func(t *testing.T) {
 		svc := &fakeService{
-			createFunc: func(_ context.Context, userID, content string, tags []string, prompt *string) (*JournalEntry, error) {
-				if userID != testUserID {
-					t.Errorf("expected the authenticated user id, got %q", userID)
+			createFunc: func(_ context.Context, owner middleware.Owner, content string, tags []string, prompt *string) (*JournalEntry, error) {
+				if owner.UserID != testUserID {
+					t.Errorf("expected the authenticated user id, got %q", owner.UserID)
 				}
 				if content != "Today was hard. Mama called again..." {
 					t.Errorf("unexpected content: %q", content)
@@ -173,7 +183,7 @@ func TestJournalHandlerCreate(t *testing.T) {
 		}
 		rec := requestRouter(t, http.MethodPost, "/api/v1/journal",
 			`{"content":"Today was hard. Mama called again...","mood_tags":["Overwhelmed","Loved"],"prompt_used":"Family & pressure"}`,
-			testUserID, NewHandler(svc).Create)
+			registeredOwner, NewHandler(svc).Create)
 
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
@@ -192,21 +202,21 @@ func TestJournalHandlerCreate(t *testing.T) {
 
 	t.Run("ignores an unknown 'type' field", func(t *testing.T) {
 		svc := &fakeService{
-			createFunc: func(context.Context, string, string, []string, *string) (*JournalEntry, error) {
+			createFunc: func(context.Context, middleware.Owner, string, []string, *string) (*JournalEntry, error) {
 				e := entry()
 				e.Content = ""
 				return e, nil
 			},
 		}
 		rec := requestRouter(t, http.MethodPost, "/api/v1/journal",
-			`{"content":"hello","type":"prayer"}`, testUserID, NewHandler(svc).Create)
+			`{"content":"hello","type":"prayer"}`, registeredOwner, NewHandler(svc).Create)
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("expected 201 (type field is not part of the schema), got %d: %s", rec.Code, rec.Body.String())
 		}
 	})
 
 	t.Run("returns 400 for malformed JSON", func(t *testing.T) {
-		rec := requestRouter(t, http.MethodPost, "/api/v1/journal", `{"content":`, testUserID, NewHandler(&fakeService{}).Create)
+		rec := requestRouter(t, http.MethodPost, "/api/v1/journal", `{"content":`, registeredOwner, NewHandler(&fakeService{}).Create)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -215,11 +225,11 @@ func TestJournalHandlerCreate(t *testing.T) {
 
 	t.Run("returns 400 for invalid content with the field set", func(t *testing.T) {
 		svc := &fakeService{
-			createFunc: func(context.Context, string, string, []string, *string) (*JournalEntry, error) {
+			createFunc: func(context.Context, middleware.Owner, string, []string, *string) (*JournalEntry, error) {
 				return nil, ErrInvalidContent
 			},
 		}
-		rec := requestRouter(t, http.MethodPost, "/api/v1/journal", `{"content":""}`, testUserID, NewHandler(svc).Create)
+		rec := requestRouter(t, http.MethodPost, "/api/v1/journal", `{"content":""}`, registeredOwner, NewHandler(svc).Create)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", rec.Code)
 		}
@@ -228,11 +238,11 @@ func TestJournalHandlerCreate(t *testing.T) {
 
 	t.Run("returns 400 for invalid mood tags", func(t *testing.T) {
 		svc := &fakeService{
-			createFunc: func(context.Context, string, string, []string, *string) (*JournalEntry, error) {
+			createFunc: func(context.Context, middleware.Owner, string, []string, *string) (*JournalEntry, error) {
 				return nil, ErrInvalidMoodTags
 			},
 		}
-		rec := requestRouter(t, http.MethodPost, "/api/v1/journal", `{"content":"x","mood_tags":["a","b"]}`, testUserID, NewHandler(svc).Create)
+		rec := requestRouter(t, http.MethodPost, "/api/v1/journal", `{"content":"x","mood_tags":["a","b"]}`, registeredOwner, NewHandler(svc).Create)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", rec.Code)
 		}
@@ -240,7 +250,7 @@ func TestJournalHandlerCreate(t *testing.T) {
 	})
 
 	t.Run("returns 401 without an authenticated user", func(t *testing.T) {
-		rec := requestRouter(t, http.MethodPost, "/api/v1/journal", `{"content":"x"}`, "", NewHandler(&fakeService{}).Create)
+		rec := requestRouter(t, http.MethodPost, "/api/v1/journal", `{"content":"x"}`, middleware.Owner{}, NewHandler(&fakeService{}).Create)
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -249,11 +259,11 @@ func TestJournalHandlerCreate(t *testing.T) {
 
 	t.Run("returns 500 without leaking internals", func(t *testing.T) {
 		svc := &fakeService{
-			createFunc: func(context.Context, string, string, []string, *string) (*JournalEntry, error) {
+			createFunc: func(context.Context, middleware.Owner, string, []string, *string) (*JournalEntry, error) {
 				return nil, errors.New("secret plaintext is never in this error")
 			},
 		}
-		rec := requestRouter(t, http.MethodPost, "/api/v1/journal", `{"content":"x"}`, testUserID, NewHandler(svc).Create)
+		rec := requestRouter(t, http.MethodPost, "/api/v1/journal", `{"content":"x"}`, registeredOwner, NewHandler(svc).Create)
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("expected 500, got %d", rec.Code)
 		}
@@ -264,9 +274,9 @@ func TestJournalHandlerCreate(t *testing.T) {
 func TestJournalHandlerList(t *testing.T) {
 	t.Run("returns 200 with entries and a null cursor on a short page", func(t *testing.T) {
 		svc := &fakeService{
-			listFunc: func(_ context.Context, userID string, limit int, before *time.Time) ([]JournalEntry, error) {
-				if userID != testUserID {
-					t.Errorf("expected the authenticated user id, got %q", userID)
+			listFunc: func(_ context.Context, owner middleware.Owner, limit int, before *time.Time) ([]JournalEntry, error) {
+				if owner.UserID != testUserID {
+					t.Errorf("expected the authenticated user id, got %q", owner.UserID)
 				}
 				if limit != 10 {
 					t.Errorf("expected limit 10, got %d", limit)
@@ -279,7 +289,7 @@ func TestJournalHandlerList(t *testing.T) {
 				return []JournalEntry{*e}, nil
 			},
 		}
-		rec := requestRouter(t, http.MethodGet, "/api/v1/journal?limit=10", "", testUserID, NewHandler(svc).List)
+		rec := requestRouter(t, http.MethodGet, "/api/v1/journal?limit=10", "", registeredOwner, NewHandler(svc).List)
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -301,7 +311,7 @@ func TestJournalHandlerList(t *testing.T) {
 
 	t.Run("sets next_cursor when the page is full", func(t *testing.T) {
 		svc := &fakeService{
-			listFunc: func(_ context.Context, userID string, limit int, before *time.Time) ([]JournalEntry, error) {
+			listFunc: func(_ context.Context, owner middleware.Owner, limit int, before *time.Time) ([]JournalEntry, error) {
 				e1 := entry()
 				e1.Content = ""
 				e1.CreatedAt = testTime.Add(2 * time.Second)
@@ -311,7 +321,7 @@ func TestJournalHandlerList(t *testing.T) {
 				return []JournalEntry{*e1, *e2}, nil
 			},
 		}
-		rec := requestRouter(t, http.MethodGet, "/api/v1/journal?limit=2", "", testUserID, NewHandler(svc).List)
+		rec := requestRouter(t, http.MethodGet, "/api/v1/journal?limit=2", "", registeredOwner, NewHandler(svc).List)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -322,14 +332,14 @@ func TestJournalHandlerList(t *testing.T) {
 
 	t.Run("passes the before cursor to the service", func(t *testing.T) {
 		svc := &fakeService{
-			listFunc: func(_ context.Context, userID string, limit int, before *time.Time) ([]JournalEntry, error) {
+			listFunc: func(_ context.Context, owner middleware.Owner, limit int, before *time.Time) ([]JournalEntry, error) {
 				if before == nil || !before.Equal(testTime) {
 					t.Errorf("expected the parsed before cursor, got %v", before)
 				}
 				return []JournalEntry{}, nil
 			},
 		}
-		rec := requestRouter(t, http.MethodGet, "/api/v1/journal?before=2026-01-01T12:00:00Z", "", testUserID, NewHandler(svc).List)
+		rec := requestRouter(t, http.MethodGet, "/api/v1/journal?before=2026-01-01T12:00:00Z", "", registeredOwner, NewHandler(svc).List)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -337,7 +347,7 @@ func TestJournalHandlerList(t *testing.T) {
 
 	t.Run("returns 400 for a non-integer or non-positive limit", func(t *testing.T) {
 		for _, query := range []string{"limit=abc", "limit=0", "limit=-3"} {
-			rec := requestRouter(t, http.MethodGet, "/api/v1/journal?"+query, "", testUserID, NewHandler(&fakeService{}).List)
+			rec := requestRouter(t, http.MethodGet, "/api/v1/journal?"+query, "", registeredOwner, NewHandler(&fakeService{}).List)
 			if rec.Code != http.StatusBadRequest {
 				t.Errorf("expected 400 for %s, got %d", query, rec.Code)
 			}
@@ -346,7 +356,7 @@ func TestJournalHandlerList(t *testing.T) {
 	})
 
 	t.Run("returns 400 for a malformed before cursor", func(t *testing.T) {
-		rec := requestRouter(t, http.MethodGet, "/api/v1/journal?before=not-a-time", "", testUserID, NewHandler(&fakeService{}).List)
+		rec := requestRouter(t, http.MethodGet, "/api/v1/journal?before=not-a-time", "", registeredOwner, NewHandler(&fakeService{}).List)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -355,18 +365,18 @@ func TestJournalHandlerList(t *testing.T) {
 
 	t.Run("returns 401 and 500", func(t *testing.T) {
 		t.Run("401 without a user", func(t *testing.T) {
-			rec := requestRouter(t, http.MethodGet, "/api/v1/journal", "", "", NewHandler(&fakeService{}).List)
+			rec := requestRouter(t, http.MethodGet, "/api/v1/journal", "", middleware.Owner{}, NewHandler(&fakeService{}).List)
 			if rec.Code != http.StatusUnauthorized {
 				t.Fatalf("expected 401, got %d", rec.Code)
 			}
 		})
 		t.Run("500 without leaking internals", func(t *testing.T) {
 			svc := &fakeService{
-				listFunc: func(context.Context, string, int, *time.Time) ([]JournalEntry, error) {
+				listFunc: func(context.Context, middleware.Owner, int, *time.Time) ([]JournalEntry, error) {
 					return nil, errors.New("database is gone")
 				},
 			}
-			rec := requestRouter(t, http.MethodGet, "/api/v1/journal", "", testUserID, NewHandler(svc).List)
+			rec := requestRouter(t, http.MethodGet, "/api/v1/journal", "", registeredOwner, NewHandler(svc).List)
 			if rec.Code != http.StatusInternalServerError {
 				t.Fatalf("expected 500, got %d", rec.Code)
 			}
@@ -380,9 +390,9 @@ func TestJournalHandlerList(t *testing.T) {
 func TestJournalHandlerGet(t *testing.T) {
 	t.Run("returns 200 with decrypted content", func(t *testing.T) {
 		svc := &fakeService{
-			getFunc: func(_ context.Context, userID, entryID string) (*JournalEntry, error) {
-				if userID != testUserID {
-					t.Errorf("expected the authenticated user id, got %q", userID)
+			getFunc: func(_ context.Context, owner middleware.Owner, entryID string) (*JournalEntry, error) {
+				if owner.UserID != testUserID {
+					t.Errorf("expected the authenticated user id, got %q", owner.UserID)
 				}
 				if entryID != "22222222-2222-2222-2222-222222222222" {
 					t.Errorf("unexpected entry id: %q", entryID)
@@ -390,7 +400,7 @@ func TestJournalHandlerGet(t *testing.T) {
 				return entry(), nil
 			},
 		}
-		rec := requestRouter(t, http.MethodGet, "/api/v1/journal/22222222-2222-2222-2222-222222222222", "", testUserID, NewHandler(svc).Get)
+		rec := requestRouter(t, http.MethodGet, "/api/v1/journal/22222222-2222-2222-2222-222222222222", "", registeredOwner, NewHandler(svc).Get)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -401,11 +411,11 @@ func TestJournalHandlerGet(t *testing.T) {
 
 	t.Run("returns 404 for a foreign or missing entry", func(t *testing.T) {
 		svc := &fakeService{
-			getFunc: func(context.Context, string, string) (*JournalEntry, error) {
+			getFunc: func(context.Context, middleware.Owner, string) (*JournalEntry, error) {
 				return nil, ErrJournalEntryNotFound
 			},
 		}
-		rec := requestRouter(t, http.MethodGet, "/api/v1/journal/some-id", "", testUserID, NewHandler(svc).Get)
+		rec := requestRouter(t, http.MethodGet, "/api/v1/journal/some-id", "", registeredOwner, NewHandler(svc).Get)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -414,18 +424,18 @@ func TestJournalHandlerGet(t *testing.T) {
 
 	t.Run("returns 401 and 500", func(t *testing.T) {
 		t.Run("401 without a user", func(t *testing.T) {
-			rec := requestRouter(t, http.MethodGet, "/api/v1/journal/x", "", "", NewHandler(&fakeService{}).Get)
+			rec := requestRouter(t, http.MethodGet, "/api/v1/journal/x", "", middleware.Owner{}, NewHandler(&fakeService{}).Get)
 			if rec.Code != http.StatusUnauthorized {
 				t.Fatalf("expected 401, got %d", rec.Code)
 			}
 		})
 		t.Run("500 without leaking internals", func(t *testing.T) {
 			svc := &fakeService{
-				getFunc: func(context.Context, string, string) (*JournalEntry, error) {
+				getFunc: func(context.Context, middleware.Owner, string) (*JournalEntry, error) {
 					return nil, errors.New("cipher failed")
 				},
 			}
-			rec := requestRouter(t, http.MethodGet, "/api/v1/journal/x", "", testUserID, NewHandler(svc).Get)
+			rec := requestRouter(t, http.MethodGet, "/api/v1/journal/x", "", registeredOwner, NewHandler(svc).Get)
 			if rec.Code != http.StatusInternalServerError {
 				t.Fatalf("expected 500, got %d", rec.Code)
 			}
@@ -439,9 +449,9 @@ func TestJournalHandlerGet(t *testing.T) {
 func TestJournalHandlerUpdate(t *testing.T) {
 	t.Run("returns 200 with the updated entry", func(t *testing.T) {
 		svc := &fakeService{
-			updateFunc: func(_ context.Context, userID, entryID string, changes Update) (*JournalEntry, error) {
-				if userID != testUserID {
-					t.Errorf("expected the authenticated user id, got %q", userID)
+			updateFunc: func(_ context.Context, owner middleware.Owner, entryID string, changes Update) (*JournalEntry, error) {
+				if owner.UserID != testUserID {
+					t.Errorf("expected the authenticated user id, got %q", owner.UserID)
 				}
 				if changes.Content == nil || *changes.Content != "New words." {
 					t.Errorf("unexpected content change: %v", changes.Content)
@@ -453,7 +463,7 @@ func TestJournalHandlerUpdate(t *testing.T) {
 			},
 		}
 		rec := requestRouter(t, http.MethodPatch, "/api/v1/journal/22222222-2222-2222-2222-222222222222",
-			`{"content":"New words."}`, testUserID, NewHandler(svc).Update)
+			`{"content":"New words."}`, registeredOwner, NewHandler(svc).Update)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -464,11 +474,11 @@ func TestJournalHandlerUpdate(t *testing.T) {
 
 	t.Run("returns 400 when nothing to update", func(t *testing.T) {
 		svc := &fakeService{
-			updateFunc: func(context.Context, string, string, Update) (*JournalEntry, error) {
+			updateFunc: func(context.Context, middleware.Owner, string, Update) (*JournalEntry, error) {
 				return nil, ErrNothingToUpdate
 			},
 		}
-		rec := requestRouter(t, http.MethodPatch, "/api/v1/journal/x", `{}`, testUserID, NewHandler(svc).Update)
+		rec := requestRouter(t, http.MethodPatch, "/api/v1/journal/x", `{}`, registeredOwner, NewHandler(svc).Update)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -477,11 +487,11 @@ func TestJournalHandlerUpdate(t *testing.T) {
 
 	t.Run("returns 404 for a foreign or missing entry", func(t *testing.T) {
 		svc := &fakeService{
-			updateFunc: func(context.Context, string, string, Update) (*JournalEntry, error) {
+			updateFunc: func(context.Context, middleware.Owner, string, Update) (*JournalEntry, error) {
 				return nil, ErrJournalEntryNotFound
 			},
 		}
-		rec := requestRouter(t, http.MethodPatch, "/api/v1/journal/x", `{"content":"y"}`, testUserID, NewHandler(svc).Update)
+		rec := requestRouter(t, http.MethodPatch, "/api/v1/journal/x", `{"content":"y"}`, registeredOwner, NewHandler(svc).Update)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -490,11 +500,11 @@ func TestJournalHandlerUpdate(t *testing.T) {
 
 	t.Run("returns 400 for invalid content with the field set", func(t *testing.T) {
 		svc := &fakeService{
-			updateFunc: func(context.Context, string, string, Update) (*JournalEntry, error) {
+			updateFunc: func(context.Context, middleware.Owner, string, Update) (*JournalEntry, error) {
 				return nil, ErrInvalidContent
 			},
 		}
-		rec := requestRouter(t, http.MethodPatch, "/api/v1/journal/x", `{"content":""}`, testUserID, NewHandler(svc).Update)
+		rec := requestRouter(t, http.MethodPatch, "/api/v1/journal/x", `{"content":""}`, registeredOwner, NewHandler(svc).Update)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", rec.Code)
 		}
@@ -502,7 +512,7 @@ func TestJournalHandlerUpdate(t *testing.T) {
 	})
 
 	t.Run("returns 401 without a user", func(t *testing.T) {
-		rec := requestRouter(t, http.MethodPatch, "/api/v1/journal/x", `{"content":"y"}`, "", NewHandler(&fakeService{}).Update)
+		rec := requestRouter(t, http.MethodPatch, "/api/v1/journal/x", `{"content":"y"}`, middleware.Owner{}, NewHandler(&fakeService{}).Update)
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -512,9 +522,9 @@ func TestJournalHandlerUpdate(t *testing.T) {
 func TestJournalHandlerDelete(t *testing.T) {
 	t.Run("returns 204 on success", func(t *testing.T) {
 		svc := &fakeService{
-			deleteFunc: func(_ context.Context, userID, entryID string) error {
-				if userID != testUserID {
-					t.Errorf("expected the authenticated user id, got %q", userID)
+			deleteFunc: func(_ context.Context, owner middleware.Owner, entryID string) error {
+				if owner.UserID != testUserID {
+					t.Errorf("expected the authenticated user id, got %q", owner.UserID)
 				}
 				if entryID != "22222222-2222-2222-2222-222222222222" {
 					t.Errorf("unexpected entry id: %q", entryID)
@@ -522,7 +532,7 @@ func TestJournalHandlerDelete(t *testing.T) {
 				return nil
 			},
 		}
-		rec := requestRouter(t, http.MethodDelete, "/api/v1/journal/22222222-2222-2222-2222-222222222222", "", testUserID, NewHandler(svc).Delete)
+		rec := requestRouter(t, http.MethodDelete, "/api/v1/journal/22222222-2222-2222-2222-222222222222", "", registeredOwner, NewHandler(svc).Delete)
 		if rec.Code != http.StatusNoContent {
 			t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -533,11 +543,11 @@ func TestJournalHandlerDelete(t *testing.T) {
 
 	t.Run("returns 404 for a foreign or missing entry", func(t *testing.T) {
 		svc := &fakeService{
-			deleteFunc: func(context.Context, string, string) error {
+			deleteFunc: func(context.Context, middleware.Owner, string) error {
 				return ErrJournalEntryNotFound
 			},
 		}
-		rec := requestRouter(t, http.MethodDelete, "/api/v1/journal/x", "", testUserID, NewHandler(svc).Delete)
+		rec := requestRouter(t, http.MethodDelete, "/api/v1/journal/x", "", registeredOwner, NewHandler(svc).Delete)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -545,7 +555,7 @@ func TestJournalHandlerDelete(t *testing.T) {
 	})
 
 	t.Run("returns 401 without a user", func(t *testing.T) {
-		rec := requestRouter(t, http.MethodDelete, "/api/v1/journal/x", "", "", NewHandler(&fakeService{}).Delete)
+		rec := requestRouter(t, http.MethodDelete, "/api/v1/journal/x", "", middleware.Owner{}, NewHandler(&fakeService{}).Delete)
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -555,16 +565,16 @@ func TestJournalHandlerDelete(t *testing.T) {
 func TestJournalHandlerReflect(t *testing.T) {
 	t.Run("returns 200 with the generated reflection", func(t *testing.T) {
 		svc := &fakeService{
-			reflectFunc: func(_ context.Context, userID, entryID string) (*JournalEntry, error) {
-				if userID != testUserID {
-					t.Errorf("expected the authenticated user id, got %q", userID)
+			reflectFunc: func(_ context.Context, owner middleware.Owner, entryID string) (*JournalEntry, error) {
+				if owner.UserID != testUserID {
+					t.Errorf("expected the authenticated user id, got %q", owner.UserID)
 				}
 				e := entry()
 				e.AIReflection = ptr("A fresh thought.")
 				return e, nil
 			},
 		}
-		rec := requestRouter(t, http.MethodPost, "/api/v1/journal/22222222-2222-2222-2222-222222222222/reflect", "", testUserID, NewHandler(svc).Reflect)
+		rec := requestRouter(t, http.MethodPost, "/api/v1/journal/22222222-2222-2222-2222-222222222222/reflect", "", registeredOwner, NewHandler(svc).Reflect)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -575,11 +585,11 @@ func TestJournalHandlerReflect(t *testing.T) {
 
 	t.Run("returns 404 for a foreign or missing entry", func(t *testing.T) {
 		svc := &fakeService{
-			reflectFunc: func(context.Context, string, string) (*JournalEntry, error) {
+			reflectFunc: func(context.Context, middleware.Owner, string) (*JournalEntry, error) {
 				return nil, ErrJournalEntryNotFound
 			},
 		}
-		rec := requestRouter(t, http.MethodPost, "/api/v1/journal/x/reflect", "", testUserID, NewHandler(svc).Reflect)
+		rec := requestRouter(t, http.MethodPost, "/api/v1/journal/x/reflect", "", registeredOwner, NewHandler(svc).Reflect)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -587,11 +597,11 @@ func TestJournalHandlerReflect(t *testing.T) {
 
 	t.Run("returns 503 with a safe message when AI is unavailable", func(t *testing.T) {
 		svc := &fakeService{
-			reflectFunc: func(context.Context, string, string) (*JournalEntry, error) {
+			reflectFunc: func(context.Context, middleware.Owner, string) (*JournalEntry, error) {
 				return nil, ErrAIReflectionUnavailable
 			},
 		}
-		rec := requestRouter(t, http.MethodPost, "/api/v1/journal/x/reflect", "", testUserID, NewHandler(svc).Reflect)
+		rec := requestRouter(t, http.MethodPost, "/api/v1/journal/x/reflect", "", registeredOwner, NewHandler(svc).Reflect)
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("expected 503, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -602,7 +612,7 @@ func TestJournalHandlerReflect(t *testing.T) {
 	})
 
 	t.Run("returns 401 without a user", func(t *testing.T) {
-		rec := requestRouter(t, http.MethodPost, "/api/v1/journal/x/reflect", "", "", NewHandler(&fakeService{}).Reflect)
+		rec := requestRouter(t, http.MethodPost, "/api/v1/journal/x/reflect", "", middleware.Owner{}, NewHandler(&fakeService{}).Reflect)
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
 		}
@@ -610,11 +620,11 @@ func TestJournalHandlerReflect(t *testing.T) {
 
 	t.Run("returns 500 safely on an unexpected failure", func(t *testing.T) {
 		svc := &fakeService{
-			reflectFunc: func(context.Context, string, string) (*JournalEntry, error) {
+			reflectFunc: func(context.Context, middleware.Owner, string) (*JournalEntry, error) {
 				return nil, errors.New("something broke")
 			},
 		}
-		rec := requestRouter(t, http.MethodPost, "/api/v1/journal/x/reflect", "", testUserID, NewHandler(svc).Reflect)
+		rec := requestRouter(t, http.MethodPost, "/api/v1/journal/x/reflect", "", registeredOwner, NewHandler(svc).Reflect)
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("expected 500, got %d: %s", rec.Code, rec.Body.String())
 		}

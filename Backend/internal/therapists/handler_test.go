@@ -229,12 +229,19 @@ func TestHandlerListRoute(t *testing.T) {
 		assertErrorField(t, rec, "before")
 	})
 
-	t.Run("returns 401 when the user is not authenticated", func(t *testing.T) {
-		rec := requestRouter(t, http.MethodGet, "/api/v1/therapists", "", NewHandler(&fakeService{}).List)
-		if rec.Code != http.StatusUnauthorized {
-			t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+	t.Run("serves the directory to an anonymous caller (discovery is public)", func(t *testing.T) {
+		svc := &fakeService{
+			listFunc: func(context.Context, ListOptions, int, *time.Time) ([]Therapist, error) {
+				return []Therapist{*seededTherapist()}, nil
+			},
 		}
-		assertErrorCode(t, rec, "UNAUTHORIZED")
+		rec := requestRouter(t, http.MethodGet, "/api/v1/therapists", "", NewHandler(svc).List)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 without a user in context, got %d: %s", rec.Code, rec.Body.String())
+		}
+		if !bytes.Contains(rec.Body.Bytes(), []byte(`"display_name":"Dr. Amina Korir"`)) {
+			t.Errorf("expected the public directory for an anonymous caller: %s", rec.Body.String())
+		}
 	})
 
 	t.Run("returns 500 without leaking internals on service failure", func(t *testing.T) {
@@ -307,12 +314,19 @@ func TestHandlerGetRoute(t *testing.T) {
 		assertErrorCode(t, rec, "NOT_FOUND")
 	})
 
-	t.Run("returns 401 when the user is not authenticated", func(t *testing.T) {
-		rec := requestRouterPath(t, http.MethodGet, "/api/v1/therapists/:id", "/api/v1/therapists/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "", NewHandler(&fakeService{}).Get)
-		if rec.Code != http.StatusUnauthorized {
-			t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+	t.Run("serves a profile to an anonymous caller (discovery is public)", func(t *testing.T) {
+		svc := &fakeService{
+			getFunc: func(context.Context, string) (*Therapist, error) {
+				return seededTherapist(), nil
+			},
 		}
-		assertErrorCode(t, rec, "UNAUTHORIZED")
+		rec := requestRouterPath(t, http.MethodGet, "/api/v1/therapists/:id", "/api/v1/therapists/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "", NewHandler(svc).Get)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 without a user in context, got %d: %s", rec.Code, rec.Body.String())
+		}
+		if !bytes.Contains(rec.Body.Bytes(), []byte(`"therapist":{`)) {
+			t.Errorf("expected the public profile for an anonymous caller: %s", rec.Body.String())
+		}
 	})
 
 	t.Run("returns 500 without leaking internals on service failure", func(t *testing.T) {

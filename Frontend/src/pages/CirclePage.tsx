@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
-import { clearAnonToken, getAnonToken, setAnonToken } from '@/lib/api'
+import { clearAnonToken, ensureAnonSession } from '@/lib/api'
 import { isApiError, type Circle, type CircleMessage } from '@/types'
 import styles from './CirclePage.module.css'
 
@@ -8,28 +8,6 @@ const MESSAGE_PAGE_SIZE = 25
 const MAX_MESSAGE_LENGTH = 1000
 
 const ANON_COLORS = ['#0F766E', '#D4780A', '#16A34A', '#44403C', '#78716C']
-
-// The anonymous session is set up lazily when the circle experience first
-// opens: reuse a stored token (validating it), otherwise create one. Only the
-// anonymous token is ever persisted — never the registered JWT for these
-// endpoints, and never anything else about the identity.
-async function ensureAnonSession(): Promise<void> {
-  const existing = getAnonToken()
-  if (existing) {
-    try {
-      await api.anon.me()
-      return
-    } catch (err) {
-      if (isApiError(err) && err.status === 401) {
-        clearAnonToken()
-      } else {
-        throw err
-      }
-    }
-  }
-  const { anonymous_token } = await api.anon.create()
-  setAnonToken(anonymous_token)
-}
 
 function errorMessage(err: unknown, fallback: string): string {
   return isApiError(err) ? err.message : fallback

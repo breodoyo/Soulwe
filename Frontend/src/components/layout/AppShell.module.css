@@ -99,6 +99,49 @@
   animation: pulse 2.5s ease infinite;
 }
 
+.memberBadge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--sun-deep);
+  background: var(--sun-light);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memberDot {
+  width: 6px;
+  height: 6px;
+  background: var(--sun-deep);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.authLink {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  padding: 6px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-full);
+  text-decoration: none;
+  transition:
+    color var(--duration-base) var(--ease),
+    border-color var(--duration-base) var(--ease);
+}
+
+.authLink:hover {
+  color: var(--sun-deep);
+  border-color: var(--border);
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.3; }
@@ -297,7 +340,6 @@
 @media (min-width: 768px) {
   .sidebarLogout {
     display: flex;
-    margin-top: auto;
   }
 }
   .content {
@@ -364,17 +406,44 @@
     font-size: var(--text-xs);
     opacity: 0.45;
   }
+}
 
-  .tabbar::after {
-    content: '● Anonymous';
-    display: block;
-    font-size: var(--text-xs);
-    color: var(--teal);
-    padding: var(--space-4) var(--space-5);
-    border-top: 1px solid var(--border-soft);
-    letter-spacing: 0.04em;
-    font-weight: 500;
-  }
+/* ── Desktop sidebar session state ── */
+
+.sidebarSession {
+  display: none;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border-soft);
+  margin-top: auto;
+}
+
+.sidebarAuthLinks {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.sidebarAuthLink {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  padding: 4px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-full);
+  text-decoration: none;
+  transition:
+    color var(--duration-base) var(--ease),
+    border-color var(--duration-base) var(--ease);
+}
+
+.sidebarAuthLink:hover {
+  color: var(--sun-deep);
+  border-color: var(--border);
+}
+
+@media (min-width: 768px) {
+  .sidebarSession { display: flex; }
 }
 
 @media (min-width: 1280px) {
@@ -391,10 +460,6 @@
   .tabbar::before {
     padding: var(--space-8) var(--space-6) var(--space-3);
     font-size: var(--text-2xl);
-  }
-
-  .tabbar::after {
-    padding: var(--space-5) var(--space-6);
   }
 }
 /* ── Clickable brand link ── */

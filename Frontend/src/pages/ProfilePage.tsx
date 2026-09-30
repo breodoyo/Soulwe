@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '@/lib/api'
+import { useAuth } from '@/auth/AuthContext'
 import { isApiError, type LanguagePref, type User } from '@/types'
 import styles from './ProfilePage.module.css'
 
@@ -21,6 +23,12 @@ function formatMemberSince(iso: string): string {
 }
 
 export default function ProfilePage() {
+  const { status } = useAuth()
+  // A profile is by definition the user's own account data. The page itself
+  // stays open to guests — for them it is simply an empty state, and the
+  // request below is never sent without a session.
+  const hasAccount = status === 'authenticated'
+
   const [profile, setProfile] = useState<User | null>(null)
   const [displayName, setDisplayName] = useState('')
   const [languagePref, setLanguagePref] = useState<LanguagePref>('en')
@@ -32,6 +40,10 @@ export default function ProfilePage() {
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
+    if (!hasAccount) {
+      setLoading(false)
+      return
+    }
     let cancelled = false
     setLoading(true)
     setFeedError(null)
@@ -56,7 +68,7 @@ export default function ProfilePage() {
     return () => {
       cancelled = true
     }
-  }, [tick])
+  }, [tick, hasAccount])
 
   const baseName = profile?.display_name ?? ''
   const baseLang: LanguagePref =
@@ -102,6 +114,27 @@ export default function ProfilePage() {
           <button className={styles.retryBtn} onClick={() => setTick(t => t + 1)}>
             Try again
           </button>
+        </section>
+      ) : !hasAccount ? (
+        // A profile is the user's own account data, so there is genuinely
+        // nothing to show a guest here. That is stated plainly as an empty
+        // state — the page still opens, and a guest's journal, check-ins and
+        // breathing history all work without one.
+        <section className={styles.card}>
+          <p className={styles.sub}>Browsing anonymously</p>
+          <p className={styles.hint}>
+            There is no profile to show yet, because this page holds your own
+            account details. Your journal, check-ins and breathing history are
+            all saved to this browser without one.
+          </p>
+          <p className={styles.hint}>
+            <Link className={styles.link} to="/login" state={{ from: '/profile' }}>Log in</Link>
+            {' '}or{' '}
+            <Link className={styles.link} to="/register" state={{ from: '/profile' }}>
+              create a free account
+            </Link>{' '}
+            whenever you want one.
+          </p>
         </section>
       ) : profile ? (
         <div className={styles.card}>

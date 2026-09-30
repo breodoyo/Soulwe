@@ -46,7 +46,7 @@ type updateRequest struct {
 
 // Create handles POST /api/v1/journal.
 func (h *Handler) Create(c *gin.Context) {
-	userID, ok := middleware.UserIDFromContext(c)
+	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
 		return
@@ -59,7 +59,7 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	entry, err := h.svc.Create(c.Request.Context(), userID, req.Content, req.MoodTags, req.PromptUsed)
+	entry, err := h.svc.Create(c.Request.Context(), owner, req.Content, req.MoodTags, req.PromptUsed)
 	switch {
 	case errors.Is(err, ErrInvalidContent):
 		respondError(c, http.StatusBadRequest, "INVALID_INPUT",
@@ -79,11 +79,11 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 }
 
-// List handles GET /api/v1/journal. It returns the authenticated user's
+// List handles GET /api/v1/journal. It returns the authenticated owner's
 // entries newest first, honoring optional ?limit and ?before (cursor) query
 // parameters. Content is never returned in list responses.
 func (h *Handler) List(c *gin.Context) {
-	userID, ok := middleware.UserIDFromContext(c)
+	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
 		return
@@ -102,7 +102,7 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 
-	entries, err := h.svc.List(c.Request.Context(), userID, limit, before)
+	entries, err := h.svc.List(c.Request.Context(), owner, limit, before)
 	if err != nil {
 		slog.Error("journal list failed", slog.String("error", err.Error()))
 		respondError(c, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR",
@@ -115,13 +115,13 @@ func (h *Handler) List(c *gin.Context) {
 // Get handles GET /api/v1/journal/:id. The content is decrypted server-side
 // and returned only to the entry's owner.
 func (h *Handler) Get(c *gin.Context) {
-	userID, ok := middleware.UserIDFromContext(c)
+	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
 		return
 	}
 
-	entry, err := h.svc.Get(c.Request.Context(), userID, c.Param("id"))
+	entry, err := h.svc.Get(c.Request.Context(), owner, c.Param("id"))
 	switch {
 	case errors.Is(err, ErrJournalEntryNotFound):
 		respondError(c, http.StatusNotFound, "NOT_FOUND", "journal entry not found", "")
@@ -137,7 +137,7 @@ func (h *Handler) Get(c *gin.Context) {
 // Update handles PATCH /api/v1/journal/:id. Only the authenticated owner can
 // edit an entry; content edits clear any stale AI reflection.
 func (h *Handler) Update(c *gin.Context) {
-	userID, ok := middleware.UserIDFromContext(c)
+	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
 		return
@@ -150,7 +150,7 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	entry, err := h.svc.Update(c.Request.Context(), userID, c.Param("id"), Update{
+	entry, err := h.svc.Update(c.Request.Context(), owner, c.Param("id"), Update{
 		Content:    req.Content,
 		MoodTags:   req.MoodTags,
 		PromptUsed: req.PromptUsed,
@@ -182,13 +182,13 @@ func (h *Handler) Update(c *gin.Context) {
 // Delete handles DELETE /api/v1/journal/:id. Delete is immediate and
 // irreversible.
 func (h *Handler) Delete(c *gin.Context) {
-	userID, ok := middleware.UserIDFromContext(c)
+	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
 		return
 	}
 
-	err := h.svc.Delete(c.Request.Context(), userID, c.Param("id"))
+	err := h.svc.Delete(c.Request.Context(), owner, c.Param("id"))
 	switch {
 	case errors.Is(err, ErrJournalEntryNotFound):
 		respondError(c, http.StatusNotFound, "NOT_FOUND", "journal entry not found", "")
@@ -204,13 +204,13 @@ func (h *Handler) Delete(c *gin.Context) {
 // Reflect handles POST /api/v1/journal/:id/reflect. It generates (and stores)
 // a fresh AI reflection for the owner's entry.
 func (h *Handler) Reflect(c *gin.Context) {
-	userID, ok := middleware.UserIDFromContext(c)
+	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
 		return
 	}
 
-	entry, err := h.svc.Reflect(c.Request.Context(), userID, c.Param("id"))
+	entry, err := h.svc.Reflect(c.Request.Context(), owner, c.Param("id"))
 	switch {
 	case errors.Is(err, ErrJournalEntryNotFound):
 		respondError(c, http.StatusNotFound, "NOT_FOUND", "journal entry not found", "")

@@ -1013,13 +1013,13 @@ func TestPhase6TherapistDiscoveryEndToEndIntegration(t *testing.T) {
 
 	therapistRoutes := []string{"/api/v1/therapists", "/api/v1/therapists/" + ciciID}
 
-	t.Run("both routes reject missing and anonymous tokens", func(t *testing.T) {
+	t.Run("both routes are browsable with no credential and with an anonymous token", func(t *testing.T) {
 		for _, path := range therapistRoutes {
-			if w := do(t, http.MethodGet, path, "", ""); w.Code != http.StatusUnauthorized {
-				t.Errorf("%s: expected 401 without a token, got %d: %s", path, w.Code, w.Body.String())
+			if w := do(t, http.MethodGet, path, "", ""); w.Code != http.StatusOK {
+				t.Errorf("%s: expected 200 without a token, got %d: %s", path, w.Code, w.Body.String())
 			}
-			if w := do(t, http.MethodGet, path, rawAnon, ""); w.Code != http.StatusUnauthorized {
-				t.Errorf("%s: expected 401 for an anonymous token, got %d: %s", path, w.Code, w.Body.String())
+			if w := do(t, http.MethodGet, path, rawAnon, ""); w.Code != http.StatusOK {
+				t.Errorf("%s: expected 200 for an anonymous token, got %d: %s", path, w.Code, w.Body.String())
 			}
 		}
 	})
@@ -1709,11 +1709,12 @@ func TestPhase6BreathingEndToEndIntegration(t *testing.T) {
 	alice, _ := register(t, "breathe-alice")
 	bob, _ := register(t, "breathe-bob")
 
-	t.Run("breathing routes reject anonymous callers", func(t *testing.T) {
-		for _, path := range []string{"/api/v1/breathing/exercises", "/api/v1/breathing/sessions"} {
-			if w := do(t, http.MethodGet, path, "", ""); w.Code != http.StatusUnauthorized {
-				t.Errorf("%s: expected 401 without a token, got %d: %s", path, w.Code, w.Body.String())
-			}
+	t.Run("the exercise catalog is public but session routes reject anonymous callers", func(t *testing.T) {
+		if w := do(t, http.MethodGet, "/api/v1/breathing/exercises", "", ""); w.Code != http.StatusOK {
+			t.Errorf("exercises: expected 200 without a token, got %d: %s", w.Code, w.Body.String())
+		}
+		if w := do(t, http.MethodGet, "/api/v1/breathing/sessions", "", ""); w.Code != http.StatusUnauthorized {
+			t.Errorf("sessions: expected 401 without a token, got %d: %s", w.Code, w.Body.String())
 		}
 	})
 
