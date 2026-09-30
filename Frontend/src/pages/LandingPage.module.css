@@ -112,27 +112,23 @@
   content: '';
   position: absolute;
   inset: 0;
-  background-image: url('/hero-hand.jpg');
-  background-size: cover;
-  background-position: 20%;
+  background-image: url('/soulwe.webp');
+  /* contain, not cover. The source is 52x143 — a very tall, narrow strip — so
+     cover scaled it roughly 28x on a desktop viewport and cropped it to a thin
+     band, which read as a smeared, stretched image. contain shows the whole
+     photo undistorted; no-repeat stops the letterboxed remainder tiling. */
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
   opacity: 0.75;
   pointer-events: none;
   z-index: 0;
 }
 
-.hero::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    135deg,
-    rgba(255,251,245,0.92) 0%,
-    rgba(255,251,245,0.75) 40%,
-    rgba(245,158,42,0.08) 100%
-  );
-  pointer-events: none;
-  z-index: 1;
-}
+/* The gradient wash that used to sit here (rgba cream → amber, 135deg) is gone:
+   it was a scrim to keep the headline legible over the photo, and it was
+   muting the image badly. .hero::before and the hero content now stack
+   directly, with the content at z-index 2 above the photo at z-index 0. */
 
 @media (min-width: 900px) {
   .hero {
