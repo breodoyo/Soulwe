@@ -162,13 +162,19 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 				journalGroup.POST("/:id/reflect", journalHandler.Reflect)
 			}
 		}
-		if anonService != nil && circlesHandler != nil {
-			// Phase 6.1 peer support circles. Circles are an anonymous-session
-			// feature: memberships and messages are keyed to anon_identities,
-			// and every route (discovery through messaging) requires a valid
-			// anonymous bearer token. Registered-user JWTs are rejected by
-			// AnonymousAuthRequired.
-			circlesGroup := v1.Group("/circles", middleware.AnonymousAuthRequired(anonService))
+		// tokenManager is part of the guard because identity parses a
+		// registered token first; a server built without one must not wire
+		// these routes, matching the mood and journal groups above.
+		if tokenManager != nil && anonService != nil && circlesHandler != nil {
+			// Phase 6.1 peer support circles. Circles accept either
+			// credential, for the same reason as mood and journal: seeking
+			// peer support should not require an account. A membership and a
+			// message are owned by whichever identity authenticated — a
+			// registered member posts under their display name, an anonymous
+			// session under its pseudonym — and the two are never mixed, so a
+			// registered JWT can never read or write anonymous-only rows and
+			// vice versa.
+			circlesGroup := v1.Group("/circles", identity)
 			{
 				circlesGroup.GET("", circlesHandler.List)
 				circlesGroup.GET("/:id", circlesHandler.Get)

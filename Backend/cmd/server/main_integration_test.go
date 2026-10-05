@@ -579,8 +579,10 @@ func TestPhase5JournalEndToEndIntegration(t *testing.T) {
 
 // TestPhase6CirclesEndToEndIntegration runs the full Phase 6.1 circles stack
 // (discovery, detail, join/leave, membership-gated messaging) against a live
-// database through the real router, using anonymous sessions exactly as the
-// product intends. Registered-user JWT flows are untouched.
+// database through the real router, with both credential kinds: anonymous
+// sessions and registered JWTs. A registered member takes part in the same room
+// as an anonymous one, under their own display name, and the two memberships
+// stay separate.
 func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -596,6 +598,15 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 	}
 	defer pool.Close()
 
+	// The circle routes are gated on IdentityRequired, which verifies a
+	// registered token first, so this stack needs a real token manager.
+	tokenManager, err := auth.NewManager("integration-test-secret-not-for-production")
+	if err != nil {
+		t.Fatalf("auth.NewManager returned error: %v", err)
+	}
+	userService := user.NewService(user.NewPostgresRepository(pool), tokenManager)
+	userHandler := user.NewHandler(userService)
+
 	anonService := anon.NewService(anon.NewPostgresRepository(pool))
 	anonHandler := anon.NewHandler(anonService)
 	circlesHandler := circles.NewHandler(circles.NewService(circles.NewPostgresRepository(pool)))
@@ -604,15 +615,22 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		Env:         "test",
 		GinMode:     "test",
 		FrontendURL: "http://localhost:5173",
-	}, pool, nil, nil, anonHandler, anonService, nil, nil, nil, circlesHandler, nil, nil, nil)
+	}, pool, userHandler, tokenManager, anonHandler, anonService, nil, nil, nil, circlesHandler, nil, nil, nil)
 
-	// Created anonymous identities, cleaned up at the end. Deleting an
-	// anon_identities row cascades its circle_members and circle_messages.
+	// Created anonymous identities and users, cleaned up at the end. Deleting
+	// an anon_identities or users row cascades its circle_members and
+	// circle_messages.
 	createdIdentities := []string{}
+	createdEmails := []string{}
 	defer func() {
 		for _, id := range createdIdentities {
 			if _, err := pool.Exec(context.Background(), "DELETE FROM anon_identities WHERE id = $1", id); err != nil {
 				t.Errorf("cleanup failed to DELETE test identity %s: %v", id, err)
+			}
+		}
+		for _, e := range createdEmails {
+			if _, err := pool.Exec(context.Background(), "DELETE FROM users WHERE email = $1", e); err != nil {
+				t.Errorf("cleanup failed to DELETE test user %s: %v", e, err)
 			}
 		}
 	}()
@@ -659,24 +677,98 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		return w
 	}
 
+	// registerMember signs up a real account, names it, and returns its access
+	// token, so the registered half of the circle flow goes through the same
+	// router and the same session plumbing a signed-in member uses.
+	registerMember := func(t *testing.T, label, displayName string) string {
+		t.Helper()
+		email := fmt.Sprintf("circle-%s-%d@soulwe.local", label, time.Now().UnixNano())
+		createdEmails = append(createdEmails, email)
+		const password = "integration-secret-password"
+
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/register",
+			strings.NewReader(fmt.Sprintf(`{"email":%q,"password":%q}`, email, password)))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("%s: register: expected 201, got %d: %s", label, w.Code, w.Body.String())
+		}
+
+		req, _ = http.NewRequest(http.MethodPost, "/api/v1/auth/login",
+			strings.NewReader(fmt.Sprintf(`{"email":%q,"password":%q}`, email, password)))
+		req.Header.Set("Content-Type", "application/json")
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: login: expected 200, got %d: %s", label, w.Code, w.Body.String())
+		}
+		var res struct {
+			Token string `json:"access_token"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+			t.Fatalf("%s: failed to decode login: %v", label, err)
+		}
+		if res.Token == "" {
+			t.Fatalf("%s: expected an access token, got %s", label, w.Body.String())
+		}
+
+		// POST /auth/register takes only email and password, so the name has
+		// to be set through the profile route. Sending display_name to
+		// /auth/register would be silently dropped, and the circle would then
+		// show the neutral "Member" fallback instead of this member's name.
+		req, _ = http.NewRequest(http.MethodPatch, "/api/v1/users/me",
+			strings.NewReader(fmt.Sprintf(`{"display_name":%q}`, displayName)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+res.Token)
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: set display name: expected 200, got %d: %s", label, w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), fmt.Sprintf(`"display_name":%q`, displayName)) {
+			t.Fatalf("%s: display name not persisted: %s", label, w.Body.String())
+		}
+		return res.Token
+	}
+
 	var circleID string
 
-	t.Run("missing and registered-JWT tokens are rejected on every circle route", func(t *testing.T) {
-		routes := []struct {
-			method string
-			path   string
-			body   string
-		}{
-			{http.MethodGet, "/api/v1/circles", ""},
-			{http.MethodGet, "/api/v1/circles/00000000-0000-0000-0000-000000000000", ""},
-			{http.MethodPost, "/api/v1/circles/00000000-0000-0000-0000-000000000000/join", ""},
-			{http.MethodDelete, "/api/v1/circles/00000000-0000-0000-0000-000000000000/leave", ""},
-			{http.MethodGet, "/api/v1/circles/00000000-0000-0000-0000-000000000000/messages", ""},
-			{http.MethodPost, "/api/v1/circles/00000000-0000-0000-0000-000000000000/messages", `{"content":"x"}`},
-		}
-		for _, r := range routes {
+	circleRoutes := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{http.MethodGet, "/api/v1/circles", ""},
+		{http.MethodGet, "/api/v1/circles/00000000-0000-0000-0000-000000000000", ""},
+		{http.MethodPost, "/api/v1/circles/00000000-0000-0000-0000-000000000000/join", ""},
+		{http.MethodDelete, "/api/v1/circles/00000000-0000-0000-0000-000000000000/leave", ""},
+		{http.MethodGet, "/api/v1/circles/00000000-0000-0000-0000-000000000000/messages", ""},
+		{http.MethodPost, "/api/v1/circles/00000000-0000-0000-0000-000000000000/messages", `{"content":"x"}`},
+	}
+
+	t.Run("missing and unrecognized tokens are rejected on every circle route", func(t *testing.T) {
+		for _, r := range circleRoutes {
 			if w := do(r.method, r.path, "", r.body); w.Code != http.StatusUnauthorized {
 				t.Errorf("%s %s: expected 401 without a token, got %d: %s", r.method, r.path, w.Code, w.Body.String())
+			}
+			if w := do(r.method, r.path, "not-a-real-token", r.body); w.Code != http.StatusUnauthorized {
+				t.Errorf("%s %s: expected 401 for an unrecognized token, got %d: %s", r.method, r.path, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	// A peer-support circle used to reject this outright. Seeking support with
+	// an account should not be harder than seeking it without one.
+	t.Run("a registered JWT is accepted on every circle route", func(t *testing.T) {
+		memberToken := registerMember(t, "routes", "Bree")
+		for _, r := range circleRoutes {
+			w := do(r.method, r.path, memberToken, r.body)
+			// The two calls that read or write need a real circle and a
+			// membership, so only the credential itself is under test here:
+			// anything but 401 proves the JWT authenticated.
+			if w.Code == http.StatusUnauthorized {
+				t.Errorf("%s %s: a registered JWT must authenticate, got 401: %s", r.method, r.path, w.Body.String())
 			}
 		}
 	})
@@ -748,10 +840,13 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		if !strings.Contains(created, text) {
 			t.Errorf("expected the sent content echoed: %s", created)
 		}
-		if !strings.Contains(created, `"anon_name":`) {
-			t.Errorf("expected an anon_name on the created message: %s", created)
+		if !strings.Contains(created, `"author_name":`) {
+			t.Errorf("expected an author_name on the created message: %s", created)
 		}
-		for _, leak := range []string{"anon_identity_id", identityA, "token_hash"} {
+		if !strings.Contains(created, `"is_anonymous":true`) {
+			t.Errorf("expected an anonymous author to be flagged: %s", created)
+		}
+		for _, leak := range []string{"anon_identity_id", identityA, "user_id", "token_hash"} {
 			if strings.Contains(created, leak) {
 				t.Errorf("created message must never include %s: %s", leak, created)
 			}
@@ -819,6 +914,71 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("a registered member takes part in the same room, openly", func(t *testing.T) {
+		memberToken := registerMember(t, "member", "Bree")
+
+		// A registered member must join for themselves; the anonymous
+		// membership held by A grants nothing.
+		if w := do(http.MethodGet, "/api/v1/circles/"+circleID+"/messages", memberToken, ""); w.Code != http.StatusForbidden {
+			t.Fatalf("expected 403 for a registered non-member, got %d: %s", w.Code, w.Body.String())
+		}
+		if w := do(http.MethodPost, "/api/v1/circles/"+circleID+"/join", memberToken, ""); w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204 joining as a registered member, got %d: %s", w.Code, w.Body.String())
+		}
+		if w := do(http.MethodPost, "/api/v1/circles/"+circleID+"/join", memberToken, ""); w.Code != http.StatusConflict {
+			t.Fatalf("expected 409 on a duplicate registered join, got %d: %s", w.Code, w.Body.String())
+		}
+
+		// A registered member is not labelled anonymous, and is never labelled
+		// with an identity UUID.
+		const open = "Signed in today, but I still need this room."
+		sent := do(http.MethodPost, "/api/v1/circles/"+circleID+"/messages", memberToken,
+			fmt.Sprintf(`{"content":%q}`, open))
+		if sent.Code != http.StatusCreated {
+			t.Fatalf("expected 201 sending as a registered member, got %d: %s", sent.Code, sent.Body.String())
+		}
+		if !strings.Contains(sent.Body.String(), `"author_name":"Bree"`) {
+			t.Errorf("expected the registered display name: %s", sent.Body.String())
+		}
+		if !strings.Contains(sent.Body.String(), `"is_anonymous":false`) {
+			t.Errorf("expected is_anonymous false for a registered author: %s", sent.Body.String())
+		}
+
+		// Both members see each other: the anonymous member's message is
+		// readable by the registered one and vice versa.
+		for label, token := range map[string]string{"registered": memberToken, "anonymous": tokenA} {
+			list := do(http.MethodGet, "/api/v1/circles/"+circleID+"/messages", token, "")
+			if list.Code != http.StatusOK {
+				t.Fatalf("%s: expected 200 listing, got %d: %s", label, list.Code, list.Body.String())
+			}
+			body := list.Body.String()
+			if !strings.Contains(body, open) {
+				t.Errorf("%s: expected the registered member's message: %s", label, body)
+			}
+			if !strings.Contains(body, "I lost my father") {
+				t.Errorf("%s: expected the anonymous member's message: %s", label, body)
+			}
+			for _, leak := range []string{"anon_identity_id", "user_id", identityA} {
+				if strings.Contains(body, leak) {
+					t.Errorf("%s: messages must never expose %s: %s", label, leak, body)
+				}
+			}
+		}
+
+		// The registered member counts toward the room and can leave cleanly.
+		detail := do(http.MethodGet, "/api/v1/circles/"+circleID, memberToken, "")
+		if !strings.Contains(detail.Body.String(), `"member_count":2`) {
+			t.Errorf("expected both kinds of member in the count: %s", detail.Body.String())
+		}
+		if w := do(http.MethodDelete, "/api/v1/circles/"+circleID+"/leave", memberToken, ""); w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204 leaving as a registered member, got %d: %s", w.Code, w.Body.String())
+		}
+		// Leaving must not revoke the anonymous member's access.
+		if w := do(http.MethodGet, "/api/v1/circles/"+circleID+"/messages", tokenA, ""); w.Code != http.StatusOK {
+			t.Fatalf("a registered leave must not disturb the anonymous member, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
 	t.Run("unknown circles return 404 on every route", func(t *testing.T) {
 		const ghost = "/api/v1/circles/00000000-0000-0000-0000-000000000000"
 		if w := do(http.MethodGet, ghost, tokenA, ""); w.Code != http.StatusNotFound {
@@ -848,7 +1008,27 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("the database stores only anonymous authorship", func(t *testing.T) {
+	t.Run("every stored message and membership has exactly one owner", func(t *testing.T) {
+		// The schema's one-owner CHECK is the backstop behind the API's
+		// identity separation, so verify the data really does satisfy it for
+		// both kinds rather than trusting the middleware alone.
+		for name, query := range map[string]string{
+			"circle_messages": `SELECT COUNT(*) FROM circle_messages
+				WHERE circle_id = $1 AND num_nonnulls(user_id, anon_identity_id) <> 1`,
+			"circle_members": `SELECT COUNT(*) FROM circle_members
+				WHERE circle_id = $1 AND num_nonnulls(user_id, anon_identity_id) <> 1`,
+		} {
+			var bad int
+			if err := pool.QueryRow(ctx, query, circleID).Scan(&bad); err != nil {
+				t.Fatalf("%s: raw COUNT failed: %v", name, err)
+			}
+			if bad != 0 {
+				t.Errorf("%s: expected every row to have exactly one owner, found %d without", name, bad)
+			}
+		}
+
+		// The anonymous member's authorship is still backed by a real
+		// anon_identities row, so the pseudonym is server-generated.
 		var anonCount int
 		if err := pool.QueryRow(ctx,
 			`SELECT COUNT(*) FROM circle_messages m

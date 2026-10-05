@@ -402,23 +402,23 @@ func (s *stubCircleService) List(context.Context) ([]circles.Circle, error) {
 	return s.circleList, s.err
 }
 
-func (s *stubCircleService) Get(context.Context, string, string) (*circles.Circle, error) {
+func (s *stubCircleService) Get(context.Context, middleware.Owner, string) (*circles.Circle, error) {
 	return s.circle, s.err
 }
 
-func (s *stubCircleService) Join(context.Context, string, string) error {
+func (s *stubCircleService) Join(context.Context, middleware.Owner, string) error {
 	return s.err
 }
 
-func (s *stubCircleService) Leave(context.Context, string, string) error {
+func (s *stubCircleService) Leave(context.Context, middleware.Owner, string) error {
 	return s.err
 }
 
-func (s *stubCircleService) ListMessages(context.Context, string, string, int, *time.Time) ([]circles.CircleMessage, error) {
+func (s *stubCircleService) ListMessages(context.Context, middleware.Owner, string, int, *time.Time) ([]circles.CircleMessage, error) {
 	return s.messages, s.err
 }
 
-func (s *stubCircleService) SendMessage(context.Context, string, string, string) (*circles.CircleMessage, error) {
+func (s *stubCircleService) SendMessage(context.Context, middleware.Owner, string, string) (*circles.CircleMessage, error) {
 	return s.message, s.err
 }
 
@@ -885,10 +885,12 @@ func TestPhase4WellnessRoutes(t *testing.T) {
 }
 
 // TestPhase6CircleRoutes verifies the Phase 6.1 wiring: every circle route
-// exists behind the anonymous-session AnonymousAuthRequired middleware, rejects
-// missing and registered-JWT tokens, accepts a valid anonymous token, and is
-// absent when the circles stack is not wired. Registered-user JWT flows are
-// deliberately untouched: an anonymous token is still rejected by auth/me.
+// exists behind the dual-credential IdentityRequired middleware, rejects
+// missing and unparseable tokens, accepts both a valid anonymous token and a
+// valid registered-user JWT, and is absent when the circles stack is not
+// wired. The two credentials resolve to different owners and are never
+// interchangeable, and the registered-only auth/me route still refuses an
+// anonymous token.
 func TestPhase6CircleRoutes(t *testing.T) {
 	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
 	if err != nil {
@@ -898,6 +900,7 @@ func TestPhase6CircleRoutes(t *testing.T) {
 	const (
 		circleID     = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 		anonIdentity = "33333333-3333-3333-3333-333333333333"
+		registeredID = "44444444-4444-4444-4444-444444444444"
 		rawAnonToken = "raw-anonymous-token-phase-6"
 		griefName    = "Grief & Loss"
 	)
@@ -912,7 +915,8 @@ func TestPhase6CircleRoutes(t *testing.T) {
 	}
 	msg := &circles.CircleMessage{
 		ID:             "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-		AnonName:       "Anon Baobab",
+		AuthorName:     "Anon Baobab",
+		IsAnonymous:    true,
 		Content:        "Lost my father last month.",
 		ReactionCounts: map[string]int{},
 		CreatedAt:      time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC),
@@ -956,18 +960,14 @@ func TestPhase6CircleRoutes(t *testing.T) {
 		}
 	})
 
-	t.Run("routes reject registered-user JWTs", func(t *testing.T) {
-		jwt, err := tokenManager.SignAccessToken("11111111-1111-1111-1111-111111111111")
-		if err != nil {
-			t.Fatalf("SignAccessToken returned error: %v", err)
-		}
+	t.Run("routes reject a token that is neither credential", func(t *testing.T) {
 		for _, tc := range circleCases {
 			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
-			req.Header.Set("Authorization", "Bearer "+jwt)
+			req.Header.Set("Authorization", "Bearer not-a-real-token")
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 			if w.Code != http.StatusUnauthorized {
-				t.Errorf("%s: expected 401 for a registered JWT, got %d: %s", tc.name, w.Code, w.Body.String())
+				t.Errorf("%s: expected 401 for an unrecognized token, got %d: %s", tc.name, w.Code, w.Body.String())
 			}
 		}
 	})
@@ -987,6 +987,28 @@ func TestPhase6CircleRoutes(t *testing.T) {
 		}
 	})
 
+	// A peer-support circle used to be unreachable for anyone with an account.
+	// IdentityRequired now accepts a registered JWT, so a signed-in member
+	// takes part on exactly the same routes as an anonymous session.
+	t.Run("registered JWT reaches every circle route", func(t *testing.T) {
+		jwt, err := tokenManager.SignAccessToken(registeredID)
+		if err != nil {
+			t.Fatalf("SignAccessToken returned error: %v", err)
+		}
+		for _, tc := range circleCases {
+			req, _ := http.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			if tc.body != "" {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			req.Header.Set("Authorization", "Bearer "+jwt)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != tc.want {
+				t.Errorf("%s: expected %d for a registered JWT, got %d: %s", tc.name, tc.want, w.Code, w.Body.String())
+			}
+		}
+	})
+
 	t.Run("circle responses never leak identity or auth material", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, "/api/v1/circles/"+circleID+"/messages", nil)
 		req.Header.Set("Authorization", "Bearer "+rawAnonToken)
@@ -996,13 +1018,16 @@ func TestPhase6CircleRoutes(t *testing.T) {
 			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 		}
 		body := w.Body.String()
-		for _, leak := range []string{"anon_identity_id", "anonIdentity", "device_uuid", "token_hash", "password", anonIdentity} {
+		for _, leak := range []string{"anon_identity_id", "user_id", "anonIdentity", "device_uuid", "token_hash", "password", anonIdentity, registeredID} {
 			if strings.Contains(body, leak) {
 				t.Errorf("response must never include %s: %s", leak, body)
 			}
 		}
-		if !strings.Contains(body, `"anon_name":"Anon Baobab"`) {
-			t.Errorf("expected the anonymous display name: %s", body)
+		if !strings.Contains(body, `"author_name":"Anon Baobab"`) {
+			t.Errorf("expected the resolved author name: %s", body)
+		}
+		if !strings.Contains(body, `"is_anonymous":true`) {
+			t.Errorf("expected is_anonymous on the message: %s", body)
 		}
 	})
 
@@ -1016,7 +1041,7 @@ func TestPhase6CircleRoutes(t *testing.T) {
 		}
 	})
 
-	t.Run("circle routes are not registered without the anonymous stack", func(t *testing.T) {
+	t.Run("circle routes are not registered without the circles or identity stack", func(t *testing.T) {
 		sparseRouter := setupRouter(&config.Config{
 			Env:         "test",
 			GinMode:     "test",

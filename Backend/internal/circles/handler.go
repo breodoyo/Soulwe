@@ -14,9 +14,9 @@ import (
 
 // Handler owns the HTTP surface of the circles domain. It validates input,
 // calls the service layer, and writes responses — never the database. The
-// authenticated anonymous identity always comes from the anonymous-session
-// middleware; identity is never accepted from a request body or path, and no
-// response carries anon_identity_ids, device UUIDs, or token hashes.
+// authenticated owner always comes from the identity middleware; identity is
+// never accepted from a request body or path, and no response carries user or
+// anonymous identity IDs, device UUIDs, or token hashes.
 type Handler struct {
 	svc Service
 }
@@ -32,9 +32,9 @@ type sendRequest struct {
 }
 
 // List handles GET /api/v1/circles. It returns all active circles with live
-// member counts. Discovery is open to any authenticated anonymous session.
+// member counts. Discovery is open to any registered or anonymous session.
 func (h *Handler) List(c *gin.Context) {
-	if _, ok := middleware.AnonIdentityIDFromContext(c); !ok {
+	if _, ok := middleware.OwnerFromContext(c); !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
 		return
 	}
@@ -50,15 +50,15 @@ func (h *Handler) List(c *gin.Context) {
 }
 
 // Get handles GET /api/v1/circles/:id. It returns the circle's details,
-// member count, and whether the authenticated identity is a member.
+// member count, and whether the authenticated owner is a member.
 func (h *Handler) Get(c *gin.Context) {
-	identityID, ok := middleware.AnonIdentityIDFromContext(c)
+	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
 		return
 	}
 
-	circle, err := h.svc.Get(c.Request.Context(), identityID, c.Param("id"))
+	circle, err := h.svc.Get(c.Request.Context(), owner, c.Param("id"))
 	switch {
 	case errors.Is(err, ErrCircleNotFound):
 		respondError(c, http.StatusNotFound, "NOT_FOUND", "circle not found", "")
@@ -71,16 +71,16 @@ func (h *Handler) Get(c *gin.Context) {
 	}
 }
 
-// Join handles POST /api/v1/circles/:id/join. It adds the authenticated
-// identity to the circle. Joining the same circle twice conflicts.
+// Join handles POST /api/v1/circles/:id/join. It adds the authenticated owner
+// to the circle. Joining the same circle twice conflicts.
 func (h *Handler) Join(c *gin.Context) {
-	identityID, ok := middleware.AnonIdentityIDFromContext(c)
+	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
 		return
 	}
 
-	err := h.svc.Join(c.Request.Context(), identityID, c.Param("id"))
+	err := h.svc.Join(c.Request.Context(), owner, c.Param("id"))
 	switch {
 	case errors.Is(err, ErrCircleNotFound):
 		respondError(c, http.StatusNotFound, "NOT_FOUND", "circle not found", "")
@@ -96,16 +96,16 @@ func (h *Handler) Join(c *gin.Context) {
 }
 
 // Leave handles DELETE /api/v1/circles/:id/leave. It removes the authenticated
-// identity's membership and is idempotent: leaving a circle never joined still
+// owner's membership and is idempotent: leaving a circle never joined still
 // succeeds.
 func (h *Handler) Leave(c *gin.Context) {
-	identityID, ok := middleware.AnonIdentityIDFromContext(c)
+	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
 		return
 	}
 
-	err := h.svc.Leave(c.Request.Context(), identityID, c.Param("id"))
+	err := h.svc.Leave(c.Request.Context(), owner, c.Param("id"))
 	switch {
 	case errors.Is(err, ErrCircleNotFound):
 		respondError(c, http.StatusNotFound, "NOT_FOUND", "circle not found", "")
@@ -122,7 +122,7 @@ func (h *Handler) Leave(c *gin.Context) {
 // circle's messages come back newest first, honoring optional ?limit and
 // ?before (cursor) query parameters.
 func (h *Handler) ListMessages(c *gin.Context) {
-	identityID, ok := middleware.AnonIdentityIDFromContext(c)
+	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
 		return
@@ -141,7 +141,7 @@ func (h *Handler) ListMessages(c *gin.Context) {
 		return
 	}
 
-	messages, err := h.svc.ListMessages(c.Request.Context(), identityID, c.Param("id"), limit, before)
+	messages, err := h.svc.ListMessages(c.Request.Context(), owner, c.Param("id"), limit, before)
 	switch {
 	case errors.Is(err, ErrCircleNotFound):
 		respondError(c, http.StatusNotFound, "NOT_FOUND", "circle not found", "")
@@ -158,10 +158,12 @@ func (h *Handler) ListMessages(c *gin.Context) {
 }
 
 // SendMessage handles POST /api/v1/circles/:id/messages. Members only: the
-// message is validated and stored with the caller's anonymous identity. The
-// response exposes the server-generated anon_name, never the identity UUID.
+// message is validated and stored against the caller's owner. The response
+// exposes the resolved author_name and is_anonymous flag, never an identity
+// UUID — a registered member appears under their display name, an anonymous
+// session under its pseudonym.
 func (h *Handler) SendMessage(c *gin.Context) {
-	identityID, ok := middleware.AnonIdentityIDFromContext(c)
+	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
 		return
@@ -174,7 +176,7 @@ func (h *Handler) SendMessage(c *gin.Context) {
 		return
 	}
 
-	message, err := h.svc.SendMessage(c.Request.Context(), identityID, c.Param("id"), req.Content)
+	message, err := h.svc.SendMessage(c.Request.Context(), owner, c.Param("id"), req.Content)
 	switch {
 	case errors.Is(err, ErrInvalidContent):
 		respondError(c, http.StatusBadRequest, "INVALID_INPUT",

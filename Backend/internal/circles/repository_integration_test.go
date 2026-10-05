@@ -7,8 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
+
+	"Backend/internal/middleware"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -16,8 +19,9 @@ import (
 // TestPostgresRepositoryIntegration exercises the circles repository against a
 // running PostgreSQL. It is excluded from the default build via the
 // "integration" tag and skipped when DATABASE_URL is not set. A throwaway
-// circle and two anonymous identities are seeded directly so member counts,
-// message authorship, and ownership gating can be verified.
+// circle, two anonymous identities, and two registered users are seeded
+// directly so member counts, both kinds of message authorship, the neutral
+// fallback for an unnamed account, and ownership gating can be verified.
 func TestPostgresRepositoryIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -59,6 +63,29 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	identityA := seedIdentity(fmt.Sprintf("Anon A-%d", nonce))
 	identityB := seedIdentity(fmt.Sprintf("Anon B-%d", nonce))
 
+	// Seed two registered users. The second has no display name, so the
+	// DefaultAuthorName fallback is exercised against the real COALESCE.
+	userSeq := 0
+	seedUser := func(name *string) string {
+		userSeq++
+		var id string
+		if err := pool.QueryRow(ctx,
+			`INSERT INTO users (email, password_hash, display_name)
+			 VALUES ($1, 'hash', $2) RETURNING id`,
+			fmt.Sprintf("itest-%d-%d@example.test", nonce, userSeq), name,
+		).Scan(&id); err != nil {
+			t.Fatalf("failed to seed user: %v", err)
+		}
+		return id
+	}
+	namedUser := seedUser(strPtr("Bree"))
+	unnamedUser := seedUser(nil)
+
+	ownerA := middleware.Owner{AnonIdentityID: identityA}
+	ownerB := middleware.Owner{AnonIdentityID: identityB}
+	userOwner := middleware.Owner{UserID: namedUser}
+	unnamedOwner := middleware.Owner{UserID: unnamedUser}
+
 	defer func() {
 		if _, err := pool.Exec(context.Background(), "DELETE FROM circles WHERE id = $1", circleID); err != nil {
 			t.Errorf("circle cleanup: %v", err)
@@ -66,6 +93,11 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		for _, id := range []string{identityA, identityB} {
 			if _, err := pool.Exec(context.Background(), "DELETE FROM anon_identities WHERE id = $1", id); err != nil {
 				t.Errorf("identity cleanup for %s: %v", id, err)
+			}
+		}
+		for _, id := range []string{namedUser, unnamedUser} {
+			if _, err := pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", id); err != nil {
+				t.Errorf("user cleanup for %s: %v", id, err)
 			}
 		}
 	}()
@@ -106,41 +138,108 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	})
 
 	t.Run("membership add, duplicate, and remove", func(t *testing.T) {
-		if err := repo.AddMember(ctx, circleID, identityA); err != nil {
+		if err := repo.AddMember(ctx, circleID, ownerA); err != nil {
 			t.Fatalf("AddMember: %v", err)
 		}
-		if err := repo.AddMember(ctx, circleID, identityA); !errors.Is(err, ErrAlreadyMember) {
+		if err := repo.AddMember(ctx, circleID, ownerA); !errors.Is(err, ErrAlreadyMember) {
 			t.Errorf("expected ErrAlreadyMember on a duplicate, got %v", err)
 		}
-		ok, err := repo.IsMember(ctx, circleID, identityA)
+		ok, err := repo.IsMember(ctx, circleID, ownerA)
 		if err != nil || !ok {
 			t.Errorf("expected IsMember true, got %t (%v)", ok, err)
 		}
-		if ok, err := repo.IsMember(ctx, circleID, identityB); err != nil || ok {
+		if ok, err := repo.IsMember(ctx, circleID, ownerB); err != nil || ok {
 			t.Errorf("expected IsMember false for the other identity, got %t (%v)", ok, err)
 		}
-		if err := repo.RemoveMember(ctx, circleID, identityA); err != nil {
+		if err := repo.RemoveMember(ctx, circleID, ownerA); err != nil {
 			t.Fatalf("RemoveMember: %v", err)
 		}
 		// Idempotent leave: removing again is a no-op.
-		if err := repo.RemoveMember(ctx, circleID, identityA); err != nil {
+		if err := repo.RemoveMember(ctx, circleID, ownerA); err != nil {
 			t.Errorf("second RemoveMember should be a no-op, got %v", err)
 		}
 	})
 
+	t.Run("a registered member joins alongside anonymous ones", func(t *testing.T) {
+		if err := repo.AddMember(ctx, circleID, userOwner); err != nil {
+			t.Fatalf("registered AddMember: %v", err)
+		}
+		if err := repo.AddMember(ctx, circleID, userOwner); !errors.Is(err, ErrAlreadyMember) {
+			t.Errorf("expected ErrAlreadyMember on a duplicate registered join, got %v", err)
+		}
+		ok, err := repo.IsMember(ctx, circleID, userOwner)
+		if err != nil || !ok {
+			t.Errorf("expected IsMember true for the registered member, got %t (%v)", ok, err)
+		}
+		// The membership must be stored against user_id, and the anonymous
+		// column must be NULL so the one-owner CHECK holds.
+		var userID, anonID *string
+		if err := pool.QueryRow(ctx,
+			`SELECT user_id::text, anon_identity_id::text FROM circle_members
+			 WHERE circle_id = $1 AND user_id = $2`, circleID, namedUser).Scan(&userID, &anonID); err != nil {
+			t.Fatalf("raw membership SELECT failed: %v", err)
+		}
+		if userID == nil || *userID != namedUser {
+			t.Errorf("expected the membership on user_id, got %v", userID)
+		}
+		if anonID != nil {
+			t.Errorf("expected a NULL anon_identity_id for a registered member, got %q", *anonID)
+		}
+
+		// An anonymous member and a registered member are distinct rows.
+		if err := repo.AddMember(ctx, circleID, ownerA); err != nil {
+			t.Fatalf("anonymous AddMember alongside a registered one: %v", err)
+		}
+		if err := repo.RemoveMember(ctx, circleID, ownerA); err != nil {
+			t.Fatalf("RemoveMember: %v", err)
+		}
+		if ok, err := repo.IsMember(ctx, circleID, userOwner); err != nil || !ok {
+			t.Errorf("removing an anonymous member must not touch a registered one, got %t (%v)", ok, err)
+		}
+		if err := repo.RemoveMember(ctx, circleID, userOwner); err != nil {
+			t.Fatalf("RemoveMember registered: %v", err)
+		}
+	})
+
+	t.Run("an ill-formed owner never reaches the database", func(t *testing.T) {
+		// Neither identity set, then both set: middleware.IdentityFromOwner
+		// refuses both, so the repository must error rather than write a row
+		// that the one-owner CHECK would reject.
+		for _, bad := range []middleware.Owner{
+			{},
+			{UserID: namedUser, AnonIdentityID: identityA},
+		} {
+			if err := repo.AddMember(ctx, circleID, bad); err == nil {
+				t.Errorf("expected AddMember to reject owner %+v", bad)
+			}
+			if _, err := repo.IsMember(ctx, circleID, bad); err == nil {
+				t.Errorf("expected IsMember to reject owner %+v", bad)
+			}
+			if err := repo.RemoveMember(ctx, circleID, bad); err == nil {
+				t.Errorf("expected RemoveMember to reject owner %+v", bad)
+			}
+			if _, err := repo.CreateMessage(ctx, circleID, bad, "should not persist"); err == nil {
+				t.Errorf("expected CreateMessage to reject owner %+v", bad)
+			}
+		}
+	})
+
 	t.Run("CreateMessage attributes the message to the identity's anon_name", func(t *testing.T) {
-		if err := repo.AddMember(ctx, circleID, identityA); err != nil {
+		if err := repo.AddMember(ctx, circleID, ownerA); err != nil {
 			t.Fatalf("AddMember: %v", err)
 		}
-		msg, err := repo.CreateMessage(ctx, circleID, identityA, "I understand this so deeply.")
+		msg, err := repo.CreateMessage(ctx, circleID, ownerA, "I understand this so deeply.")
 		if err != nil {
 			t.Fatalf("CreateMessage: %v", err)
 		}
 		if len(msg.ID) != 36 {
 			t.Errorf("expected a UUID message id, got %q", msg.ID)
 		}
-		if msg.AnonName == "" {
+		if msg.AuthorName == "" {
 			t.Error("expected the author's anon_name to be resolved")
+		}
+		if !msg.IsAnonymous {
+			t.Error("expected an anonymous author to be flagged is_anonymous")
 		}
 		if msg.Content != "I understand this so deeply." {
 			t.Errorf("unexpected content round-trip: %q", msg.Content)
@@ -163,10 +262,51 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("a registered author's message carries their display name, not an ID", func(t *testing.T) {
+		if err := repo.AddMember(ctx, circleID, userOwner); err != nil {
+			t.Fatalf("registered AddMember: %v", err)
+		}
+		msg, err := repo.CreateMessage(ctx, circleID, userOwner, "Signed in, still here.")
+		if err != nil {
+			t.Fatalf("registered CreateMessage: %v", err)
+		}
+		if msg.AuthorName != "Bree" {
+			t.Errorf("expected the display name, got %q", msg.AuthorName)
+		}
+		if msg.IsAnonymous {
+			t.Error("a registered author must not be labelled anonymous")
+		}
+		// user_id is stored, but must not be selectable into the wire struct.
+		var stored string
+		if err := pool.QueryRow(ctx,
+			"SELECT user_id FROM circle_messages WHERE id = $1", msg.ID).Scan(&stored); err != nil {
+			t.Fatalf("raw SELECT failed: %v", err)
+		}
+		if stored != namedUser {
+			t.Errorf("expected the message to be owned by the named user, got %q", stored)
+		}
+
+		// A registered member with no display name gets the neutral label
+		// rather than the email local part.
+		if err := repo.AddMember(ctx, circleID, unnamedOwner); err != nil {
+			t.Fatalf("unnamed AddMember: %v", err)
+		}
+		fallback, err := repo.CreateMessage(ctx, circleID, unnamedOwner, "No name on my account.")
+		if err != nil {
+			t.Fatalf("unnamed CreateMessage: %v", err)
+		}
+		if fallback.AuthorName != DefaultAuthorName {
+			t.Errorf("expected %q for an unnamed account, got %q", DefaultAuthorName, fallback.AuthorName)
+		}
+		if strings.Contains(fallback.AuthorName, "@") {
+			t.Error("the fallback must never expose an email address")
+		}
+	})
+
 	t.Run("ListMessages returns newest first with cursoring", func(t *testing.T) {
 		for _, text := range []string{"first", "second", "third"} {
 			time.Sleep(time.Millisecond)
-			if _, err := repo.CreateMessage(ctx, circleID, identityA, text); err != nil {
+			if _, err := repo.CreateMessage(ctx, circleID, ownerA, text); err != nil {
 				t.Fatalf("CreateMessage: %v", err)
 			}
 		}
@@ -207,7 +347,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	})
 
 	t.Run("member count reflects joined members", func(t *testing.T) {
-		if err := repo.AddMember(ctx, circleID, identityB); err != nil {
+		if err := repo.AddMember(ctx, circleID, ownerB); err != nil {
 			t.Fatalf("AddMember B: %v", err)
 		}
 		c, err := repo.GetCircle(ctx, circleID)
@@ -217,7 +357,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		if c.MemberCount < 1 {
 			t.Errorf("expected at least 1 active membership, got %d", c.MemberCount)
 		}
-		if err := repo.RemoveMember(ctx, circleID, identityB); err != nil {
+		if err := repo.RemoveMember(ctx, circleID, ownerB); err != nil {
 			t.Fatalf("RemoveMember B: %v", err)
 		}
 	})

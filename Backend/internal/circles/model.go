@@ -14,6 +14,13 @@ const (
 	MaxMessageLength = 1000
 )
 
+// DefaultAuthorName labels a registered member who has not chosen a display
+// name. users.display_name is nullable, so a real account can reach a circle
+// without one; rather than fall back to the email local part — which would
+// publish a contact address to every member of the room — it gets the same
+// neutral label the rest of the app uses for an unnamed account.
+const DefaultAuthorName = "Member"
+
 // List pagination defaults, matching the documented convention (default 20,
 // maximum 50) shared with the other authenticated collections.
 const (
@@ -64,13 +71,21 @@ type Circle struct {
 	CreatedAt   time.Time `json:"-"`
 }
 
-// CircleMessage is the wire shape for a circle chat message. The author is
-// exposed only through the server-generated anonymous name — the raw
-// anon_identity_id, real user IDs, device UUIDs, and token hashes never leave
-// the server.
+// CircleMessage is the wire shape for a circle chat message.
+//
+// Circles accept both kinds of owner, so an author is described by a resolved
+// display name rather than by an identity kind. AuthorName is the author's own
+// display_name when they posted as a registered member, and their
+// server-generated pseudonym when they posted anonymously; IsAnonymous says
+// which, so a client can label the two without inferring it.
+//
+// Neither owner ID is ever serialized: user_id, anon_identity_id, device UUIDs
+// and token hashes stay on the server, and a registered member's identity is
+// only ever visible as the name they chose to publish.
 type CircleMessage struct {
 	ID             string         `json:"id"`
-	AnonName       string         `json:"anon_name"`
+	AuthorName     string         `json:"author_name"`
+	IsAnonymous    bool           `json:"is_anonymous"`
 	Content        string         `json:"content"`
 	ReactionCounts map[string]int `json:"reaction_counts"`
 	CreatedAt      time.Time      `json:"created_at"`
