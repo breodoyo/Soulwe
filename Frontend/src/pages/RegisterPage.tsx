@@ -12,23 +12,31 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // Which field the validation error belongs to. Each check below is specific to
+  // one input, so only that input is marked aria-invalid — a rejected signup
+  // (e.g. email already in use) leaves every field individually valid.
+  const [invalidField, setInvalidField] = useState<'email' | 'password' | 'confirm' | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     if (submitting) return
     setError(null)
+    setInvalidField(null)
 
     if (!email.trim()) {
       setError('Please enter your email address.')
+      setInvalidField('email')
       return
     }
     if (password.length < 12) {
       setError('Your password must be at least 12 characters long.')
+      setInvalidField('password')
       return
     }
     if (password !== confirm) {
       setError('Passwords do not match.')
+      setInvalidField('confirm')
       return
     }
 
@@ -67,7 +75,7 @@ export default function RegisterPage() {
           <p className={styles.sub}>Create an account to start your journey.</p>
         </div>
 
-        {error && <p className={styles.error} role="alert">{error}</p>}
+        {error && <p className={styles.error} id="register-error" role="alert">{error}</p>}
 
         <form className={styles.form} onSubmit={handleSubmit} noValidate>
           <div className={styles.field}>
@@ -80,6 +88,8 @@ export default function RegisterPage() {
               placeholder="you@example.com"
               value={email}
               onChange={e => setEmail(e.target.value)}
+              aria-invalid={invalidField === 'email' || undefined}
+              aria-describedby={error ? 'register-error' : undefined}
             />
           </div>
 
@@ -93,6 +103,8 @@ export default function RegisterPage() {
               placeholder="At least 12 characters"
               value={password}
               onChange={e => setPassword(e.target.value)}
+              aria-invalid={invalidField === 'password' || undefined}
+              aria-describedby={error ? 'register-error' : undefined}
             />
             <p className={styles.hint}>Use 12 or more characters — a phrase is fine.</p>
           </div>
@@ -107,6 +119,8 @@ export default function RegisterPage() {
               placeholder="Repeat your password"
               value={confirm}
               onChange={e => setConfirm(e.target.value)}
+              aria-invalid={invalidField === 'confirm' || undefined}
+              aria-describedby={error ? 'register-error' : undefined}
             />
           </div>
 

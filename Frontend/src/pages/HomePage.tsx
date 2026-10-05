@@ -204,7 +204,7 @@ export default function HomePage() {
             className={saveError ? styles.moodError : styles.moodSaved}
             role={saveError ? 'alert' : 'status'}
           >
-            {saving ? 'Saving your mood…' : saveError ?? 'Saved — how you are feeling today.'}
+            {saving ? 'Saving your mood…' : saveError ?? 'Saved. This is how you are feeling today.'}
           </p>
         )}
       </section>

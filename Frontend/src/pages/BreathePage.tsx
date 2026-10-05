@@ -106,6 +106,14 @@ export default function BreathePage() {
   const voiceOnRef = useRef(voiceOn)
   voiceOnRef.current = voiceOn
 
+  // The countdown that the interval ticks down. This mirrors `secs` but is the
+  // value the timer actually reads: a setState updater must stay pure, because
+  // React is free to call it more than once (StrictMode does exactly that in
+  // development, and concurrent rendering can re-invoke it in production).
+  // Deriving the phase change from `prev` inside the updater would therefore
+  // count breaths twice and speak every instruction twice.
+  const secsRef = useRef(0)
+
   const config = configRef.current
   const phase  = config ? config.phases[phaseIdx % config.phases.length] : null
 
@@ -137,6 +145,7 @@ export default function BreathePage() {
   const start = () => {
     if (!configRef.current) return
     setPhaseIdx(0)
+    secsRef.current = configRef.current.phases[0].duration
     setSecs(configRef.current.phases[0].duration)
     setBreathCount(0)
     setSaveError(null)
@@ -150,6 +159,7 @@ export default function BreathePage() {
     setRunning(false)
     if (timerRef.current) clearInterval(timerRef.current)
     setPhaseIdx(0)
+    secsRef.current = 0
     setSecs(0)
     window.speechSynthesis?.cancel()
     if (voiceOnRef.current) speak('Well done. Take a moment to notice how you feel.')
@@ -202,20 +212,28 @@ export default function BreathePage() {
   useEffect(() => {
     if (!running || !configRef.current) return
     const phases = configRef.current.phases
-    setSecs(phases[phaseIdx % phases.length].duration)
+    const phaseDuration = phases[phaseIdx % phases.length].duration
+    secsRef.current = phaseDuration
+    setSecs(phaseDuration)
     timerRef.current = setInterval(() => {
-      setSecs(prev => {
-        if (prev <= 1) {
-          if (timerRef.current) clearInterval(timerRef.current)
-          const nextIdx   = phaseIdx + 1
-          const nextPhase = phases[nextIdx % phases.length]
-          if (nextPhase.label === 'Inhale') setBreathCount(c => c + 1)
-          if (voiceOnRef.current) speak(nextPhase.instruction)
-          setPhaseIdx(nextIdx)
-          return nextPhase.duration
-        }
-        return prev - 1
-      })
+      const remaining = secsRef.current - 1
+      if (remaining > 0) {
+        secsRef.current = remaining
+        setSecs(remaining)
+        return
+      }
+      // The phase is over. Everything that must happen exactly once lives here
+      // in the interval body, not inside a setState updater.
+      if (timerRef.current) clearInterval(timerRef.current)
+      const nextIdx   = phaseIdx + 1
+      const nextPhase = phases[nextIdx % phases.length]
+      if (nextPhase.label === 'Inhale') setBreathCount(c => c + 1)
+      if (voiceOnRef.current) speak(nextPhase.instruction)
+      // Advancing the phase re-runs this effect and reseeds the countdown, but
+      // set it here too so the number never flashes to 0 in between.
+      secsRef.current = nextPhase.duration
+      setSecs(nextPhase.duration)
+      setPhaseIdx(nextIdx)
     }, 1000)
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [running, phaseIdx, selectedId])
@@ -365,13 +383,17 @@ export default function BreathePage() {
 
       {/* Technique selector */}
       {exercises !== null && exercises.length > 0 && (
-        <div className={styles.techniqueList} role="list">
+        // These are toggle buttons, not list items. `role="listitem"` on a
+        // button overrides its implicit role, which hid the control from
+        // assistive tech as an actionable element and made the `aria-pressed`
+        // below invalid. A labelled group describes them accurately and leaves
+        // the markup (and therefore the flex/gap layout) untouched.
+        <div className={styles.techniqueList} role="group" aria-label="Breathing techniques">
           {exercises.map((t, i) => (
             <button
               key={t.id}
               className={[styles.techniqueItem, selectedId === t.id ? styles.techniqueItemActive : ''].join(' ')}
               onClick={() => switchTechnique(t.id)}
-              role="listitem"
               aria-pressed={selectedId === t.id}
             >
               <div className={styles.techNum}>{i + 1}</div>

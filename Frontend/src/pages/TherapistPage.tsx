@@ -82,6 +82,11 @@ export default function TherapistPage() {
   const [filter, setFilter] = useState<Filter>('All')
   const [therapists, setTherapists] = useState<Therapist[] | null>(null)
   const [therapistsError, setTherapistsError] = useState<string | null>(null)
+  // Kept separate from therapistsError on purpose: a failed "load more" must
+  // not blank out the directory the user has already loaded, and the render
+  // gates below hide the whole list whenever therapistsError is set. This
+  // mirrors JournalPage's loadMoreError.
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [loadTick, setLoadTick] = useState(0)
@@ -109,6 +114,7 @@ export default function TherapistPage() {
     let cancelled = false
     setTherapists(null)
     setTherapistsError(null)
+    setLoadMoreError(null)
     setNextCursor(null)
     api.therapists
       .list({ language: languageParam })
@@ -168,12 +174,13 @@ export default function TherapistPage() {
   const handleLoadMore = async () => {
     if (!nextCursor || loadingMore) return
     setLoadingMore(true)
+    setLoadMoreError(null)
     try {
       const res = await api.therapists.list({ language: languageParam, before: nextCursor })
       setTherapists(prev => [...(prev ?? []), ...res.therapists])
       setNextCursor(res.next_cursor)
     } catch (err) {
-      setTherapistsError(
+      setLoadMoreError(
         isApiError(err) ? err.message : 'We could not load more therapists right now. Please try again.',
       )
     } finally {
@@ -306,6 +313,11 @@ export default function TherapistPage() {
                       Online only
                     </p>
                   )}
+                  {!t.is_active && (
+                    <p className={styles.inactiveNote}>
+                      Not currently taking bookings
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -328,17 +340,34 @@ export default function TherapistPage() {
                 <button
                   className={[styles.bookBtn, successById[t.id] ? styles.bookBtnBooked : ''].join(' ')}
                   onClick={() => {
+                    // An inactive therapist cannot take bookings, so the button
+                    // stays focusable but does nothing.
+                    if (!t.is_active) return
                     if (!canBook) {
                       setSignInForId(signInForId === t.id ? null : t.id)
                       return
                     }
                     setSignInForId(null)
+                    // Opening a different card must not inherit the date typed
+                    // into the previous one. Only one panel is mounted at a
+                    // time, so the old value would survive the unmount and
+                    // pre-fill the new therapist's panel — confirming it would
+                    // book the wrong therapist at the wrong time.
+                    setSlot('')
+                    setBookingError(null)
                     setOpenBookingId(openBookingId === t.id ? null : t.id)
                   }}
-                  aria-label={`Book session with ${t.display_name}`}
+                  disabled={!t.is_active}
+                  aria-label={
+                    t.is_active
+                      ? `Book session with ${t.display_name}`
+                      : `${t.display_name} is not currently taking bookings`
+                  }
                   aria-expanded={canBook ? openBookingId === t.id : signInForId === t.id}
                 >
-                  {successById[t.id] ? 'Book another time' : 'Book session'}
+                  {t.is_active
+                    ? (successById[t.id] ? 'Book another time' : 'Book session')
+                    : 'Unavailable'}
                 </button>
               </div>
 
@@ -408,6 +437,24 @@ export default function TherapistPage() {
           >
             {loadingMore ? 'Loading…' : 'Load more therapists'}
           </button>
+        )}
+
+        {/* A failed page load must not hide the directory that is already on
+            screen, so this sits with the "Load more" button rather than in the
+            therapistsError branch that blanks the list. */}
+        {loadMoreError && (
+          <div className={styles.errorNote} role="alert">
+            <p>{loadMoreError}</p>
+            {nextCursor && (
+              <button
+                className={styles.inlineBtn}
+                onClick={() => void handleLoadMore()}
+                disabled={loadingMore}
+              >
+                {loadingMore ? 'Retrying…' : 'Retry'}
+              </button>
+            )}
+          </div>
         )}
       </div>
 

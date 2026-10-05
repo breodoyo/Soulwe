@@ -42,7 +42,7 @@ import type {
   UpdateJournalPayload,
   UpdateProfilePayload,
 } from '@/types'
-import { ApiError } from '@/types'
+import { ApiError, type CredentialSent } from '@/types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
 const API_PREFIX = '/api/v1'
@@ -72,9 +72,12 @@ export function clearAuth(): void {
 
 // ── Anonymous token management ───────────────────────────────────────────────
 // The anonymous session token is deliberately stored separately from the
-// registered JWT: circles authenticate through the anonymous system, and the
-// two flows must never share a credential. Persisting the token is what lets
-// the same anonymous identity keep its circle memberships across page reloads.
+// registered JWT, and the two must never share a credential: the same
+// localStorage key for both would let signing in overwrite a guest's identity
+// and silently orphan the rows it owns. Features that accept either credential
+// send the JWT when there is one and fall back to this token, which keeps both
+// identities intact at the same time. Persisting the token is what lets the
+// same anonymous identity keep its circle memberships across page reloads.
 // Only the raw token is stored — never the anonymous_id, never the registered
 // JWT here, and never any device UUID.
 
@@ -108,8 +111,12 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
 //
 // This is the single place an anonymous identity is created. It is called by
 // the personal-feature requests that accept either credential, so a guest who
-// writes their first journal entry, checks in, or finishes a breathing exercise
-// never has to register first.
+// writes their first journal entry, checks in, finishes a breathing exercise,
+// or opens a circle never has to register first.
+//
+// Callers that already know a registered user is signed in should not call this:
+// there is nothing to fall back to, and minting an identity for a signed-in
+// person would leave a stray anonymous account behind that they never used.
 //
 // The in-flight promise is shared so that React's StrictMode double-invoke, and
 // several components starting at once, produce exactly one session instead of
@@ -232,7 +239,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (response.status === 401 && sent === 'registered') {
     clearAuth()
     unauthorizedHandler?.()
-    throw await readError(response)
+    throw await readError(response, sent)
   }
 
   // A request that went out under an anonymous session came back unauthorized:
@@ -241,7 +248,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   // session — there was not one involved.
   if (response.status === 401 && sent === 'anonymous') {
     clearAnonToken()
-    throw await readError(response)
+    throw await readError(response, sent)
   }
 
   if (response.status === 204) {
@@ -249,7 +256,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 
   if (!response.ok) {
-    throw await readError(response)
+    throw await readError(response, sent)
   }
 
   try {
@@ -266,12 +273,20 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 // Turns a failed response into a user-safe ApiError. The backend already keeps
 // its messages free of internal details; as a safety net, 5xx responses always
 // fall back to a generic message regardless of the body.
-async function readError(response: Response): Promise<ApiError> {
+//
+// `credential` is stamped onto the error so a caller that has to react to a 401
+// can tell which session ended. Reading it back out of storage afterwards does
+// not work: the client clears the rejected credential before throwing, so a
+// page that checked for a registered token would misread an expired-JWT 401 as
+// an anonymous one and discard a valid anonymous session.
+async function readError(response: Response, credential: CredentialSent = 'none'): Promise<ApiError> {
   if (response.status >= 500) {
     return new ApiError(
       response.status,
       'INTERNAL_SERVER_ERROR',
       'Something went wrong on our end. Please try again.',
+      undefined,
+      credential,
     )
   }
 
@@ -290,7 +305,7 @@ async function readError(response: Response): Promise<ApiError> {
     // Non-JSON body — keep the generic fallbacks above.
   }
 
-  return new ApiError(response.status, code, message, field)
+  return new ApiError(response.status, code, message, field, credential)
 }
 
 // ── API methods ──────────────────────────────────────────────────────────────
@@ -416,20 +431,26 @@ export const api = {
       request<AnonymousMeResponse>('/auth/anonymous/me', { auth: 'anonymous' }),
   },
 
+  // Every circle route accepts either credential, for the same reason as
+  // moods and journal: taking part in peer support should not require an
+  // account. `auth: 'either'` sends the registered JWT when there is one and
+  // the anonymous session otherwise, so a signed-in member joins and posts
+  // under their own identity while a guest keeps posting anonymously. The two
+  // are never merged server-side.
   circles: {
     // GET /circles — every active circle with a live member count.
     list: (): Promise<CircleListResponse> =>
-      request<CircleListResponse>('/circles', { auth: 'anonymous' }),
+      request<CircleListResponse>('/circles', { auth: 'either' }),
 
     // GET /circles/:id — one circle plus the caller's membership.
     get: (id: string): Promise<CircleResponse> =>
-      request<CircleResponse>(`/circles/${encodeURIComponent(id)}`, { auth: 'anonymous' }),
+      request<CircleResponse>(`/circles/${encodeURIComponent(id)}`, { auth: 'either' }),
 
     // POST /circles/:id/join — 204; 409 ALREADY_MEMBER when already a member.
     join: (id: string): Promise<void> =>
       request<void>(`/circles/${encodeURIComponent(id)}/join`, {
         method: 'POST',
-        auth: 'anonymous',
+        auth: 'either',
       }),
 
     // DELETE /circles/:id/leave — 204. Idempotent: leaving a circle you were
@@ -437,7 +458,7 @@ export const api = {
     leave: (id: string): Promise<void> =>
       request<void>(`/circles/${encodeURIComponent(id)}/leave`, {
         method: 'DELETE',
-        auth: 'anonymous',
+        auth: 'either',
       }),
 
     // GET /circles/:id/messages — members only. Newest first; `limit` (default
@@ -452,18 +473,18 @@ export const api = {
       const qs = query.toString()
       return request<CircleMessagesResponse>(
         `/circles/${encodeURIComponent(id)}/messages${qs ? `?${qs}` : ''}`,
-        { auth: 'anonymous' },
+        { auth: 'either' },
       )
     },
 
     // POST /circles/:id/messages — members only. 201 returns the stored message
-    // with its server-generated anon_name.
+    // with its server-resolved author_name and is_anonymous.
     sendMessage: (id: string, content: string): Promise<CircleMessageResponse> => {
       const payload: CreateCircleMessagePayload = { content }
       return request<CircleMessageResponse>(`/circles/${encodeURIComponent(id)}/messages`, {
         method: 'POST',
         body: payload,
-        auth: 'anonymous',
+        auth: 'either',
       })
     },
   },

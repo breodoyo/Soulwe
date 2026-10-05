@@ -54,7 +54,7 @@ function formatListDate(iso: string): { day: string; month: string } {
 }
 
 export default function JournalPage() {
-  const { status } = useAuth()
+  const { status, user } = useAuth()
   const hasAccount = status === 'authenticated'
 
   const [mode, setMode] = useState<JournalMode>('journal')
@@ -114,9 +114,19 @@ export default function JournalPage() {
   })
 
   useEffect(() => {
+    // Journal entries are personal data. The list has to be re-fetched whenever
+    // the credential changes, not only when `tick` is bumped: signing in,
+    // signing out, or switching accounts all left the previous identity's
+    // entries sitting on screen. `user?.id` also covers switching from one
+    // registered account straight to another.
+    if (status === 'loading') return
     let cancelled = false
     setListLoading(true)
     setListError(null)
+    // Drop the old identity's entries immediately rather than leaving them up
+    // for the duration of the refetch.
+    setEntries([])
+    setNextCursor(null)
     api.journal
       .list({ limit: 20 })
       .then(res => {
@@ -137,7 +147,7 @@ export default function JournalPage() {
     return () => {
       cancelled = true
     }
-  }, [tick])
+  }, [status, user?.id, tick])
 
   const switchMode = (m: JournalMode) => {
     setMode(m)
@@ -380,12 +390,14 @@ export default function JournalPage() {
         <button
           className={[styles.modeBtn, mode === 'journal' ? styles.modeBtnActive : ''].join(' ')}
           onClick={() => switchMode('journal')}
+          aria-pressed={mode === 'journal'}
         >
           ✍️ Journal
         </button>
         <button
           className={[styles.modeBtn, mode === 'prayer' ? styles.modeBtnActive : ''].join(' ')}
           onClick={() => switchMode('prayer')}
+          aria-pressed={mode === 'prayer'}
         >
           🙏 Prayer
         </button>
@@ -400,6 +412,7 @@ export default function JournalPage() {
                 key={p.label}
                 className={[styles.promptChip, activePrompt === i ? styles.promptChipActive : ''].join(' ')}
                 onClick={() => { setActivePrompt(i); textareaRef.current?.focus() }}
+                aria-pressed={activePrompt === i}
               >
                 {p.label}
               </button>
@@ -507,12 +520,13 @@ export default function JournalPage() {
         </div>
       )}
 
-      {/* Save button — both modes */}
+      {/* Save button — both modes. No aria-label: the visible text already names the
+          action, and a static label overrode it with the wrong verb in prayer
+          mode ("reflection" vs "prayer"), breaking WCAG 2.5.3 label-in-name. */}
       <button
         className={[styles.saveBtn, saving ? styles.saveBtnLoading : ''].join(' ')}
         onClick={handleSave}
         disabled={saving}
-        aria-label="Save and get AI reflection"
       >
         {saving
           ? <><span className={styles.spinner} aria-hidden="true" /> Reflecting...</>

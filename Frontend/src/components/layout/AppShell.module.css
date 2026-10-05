@@ -7,6 +7,40 @@
   background: var(--bg);
 }
 
+/* Visible only while focused, then pinned to the top of the viewport. */
+.skipLink {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -120%);
+  z-index: 100;
+  padding: var(--space-3) var(--space-5);
+  background: var(--ink);
+  color: var(--cream);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  transition: transform var(--duration-base) var(--ease);
+}
+
+.skipLink:focus,
+.skipLink:focus-visible {
+  transform: translate(-50%, 0);
+  outline: 2px solid var(--sun-deep);
+  outline-offset: 2px;
+}
+
+/* Programmatic focus on route change should not draw a focus box around the
+   whole page, but keyboard users arriving by Tab still get the ring. */
+.content:focus {
+  outline: none;
+}
+
+.content:focus-visible {
+  outline: 2px solid var(--sun-deep);
+  outline-offset: -2px;
+}
+
 
 .topnav {
   display: flex;
@@ -268,7 +302,11 @@
     justify-content: flex-start;
     align-items: stretch;
     flex-shrink: 0;
-    overflow: hidden;
+    /* Must scroll, not clip: on a short viewport the brand, six tabs, the
+       session block and the logout button exceed 100dvh, and `hidden` made the
+       logout control unreachable with no way to scroll to it. */
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .tabbar::before {

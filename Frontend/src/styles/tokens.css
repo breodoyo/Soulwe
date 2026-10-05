@@ -25,11 +25,33 @@
   --sage:        #22C55E;
   --sage-light:  #DCFCE7;
   --sage-deep:   #16A34A;
+  /* ── Terracotta ("clay") + deep-warm ("night") scale ──
+     The Home and Journal pages render a dark-card region alongside the light
+     default one, which needs its own colours. The module CSS was written
+     against these names, but the tokens were never added here, so every
+     `var(--clay)` and `var(--cream)` resolved to nothing: the journal save
+     button rendered white-on-white, and headings on the dark cards went
+     dark-on-dark. These are defined now so that markup works as designed.
+
+     Values are contrast-checked rather than picked by eye:
+       --clay        4.80:1 as text on --bg, 4.95:1 with white text on top
+       --clay-muted  6.51:1 as text on --bg and on the light clay chips
+       --cream       12.05:1 on --night-mid, 9.03:1 on --night-soft
+     The originally-recovered #C4714A only reached 3.51:1 as text and 3.62:1
+     under white, so it is darkened to #A85C33 to clear WCAG AA. */
+  --clay:        #A85C33;
+  --clay-light:  #C98A63;   /* fills, borders, decorative tint — not body text */
+  --clay-muted:  #8C4A2A;   /* text on light surfaces */
+  --cream:       #FAF6F1;   /* light text on the dark cards */
+  --night-mid:   #3E2E23;   /* dark warm card background */
+  --night-soft:  #5C3D2E;   /* soft border / hover tint on dark cards */
+
   /* Text */
   --ink:         #1C1917;
   --ink-mid:     #44403C;
   --muted:       #78716C;
   --subtle:      #A8A29E;
+  --text:        var(--ink); /* generic alias used by a few call sites */
 
   /* Borders */
   --border:      rgba(245,158,42,0.15);

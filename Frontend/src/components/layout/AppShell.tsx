@@ -1,4 +1,5 @@
 import { Outlet, NavLink, useLocation, Link } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
 import { useAuth } from '@/auth/AuthContext'
 import styles from './AppShell.module.css'
 
@@ -115,9 +116,29 @@ function SessionBadge() {
 export default function AppShell() {
   const { status, logout } = useAuth()
   const isGuest = status !== 'authenticated'
+  const { pathname } = useLocation()
+  const firstRender = useRef(true)
+
+  // Route changes in a single-page app leave focus on the link that was
+  // activated, so assistive tech still believes the user is on the previous
+  // page. Move focus to the main landmark after each navigation so the next
+  // Tab starts from the new content. Skipped on mount, which must not steal
+  // focus from the browser or a deep link.
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false
+      return
+    }
+    const main = document.getElementById('main-content')
+    if (main instanceof HTMLElement) main.focus()
+  }, [pathname])
 
   return (
     <div className={styles.shell}>
+
+      {/* First tab stop: lets keyboard users bypass the nav, session badge and
+          breadcrumbs. Hidden until focused, then pinned to the top. */}
+      <a className={styles.skipLink} href="#main-content">Skip to main content</a>
 
       {/* Top nav — mobile only */}
       <header className={styles.topnav} role="banner">
@@ -148,8 +169,9 @@ export default function AppShell() {
       {/* Breadcrumbs */}
       <Breadcrumbs />
 
-      {/* Page content */}
-      <main className={styles.content} id="main-content">
+      {/* Page content. tabIndex -1 so route changes can move focus here without
+          making the landmark reachable by Tab. */}
+      <main className={styles.content} id="main-content" tabIndex={-1}>
         <Outlet />
       </main>
 

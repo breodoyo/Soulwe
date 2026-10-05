@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import styles from './LandingPage.module.css'
 
 const features = [
@@ -16,7 +16,7 @@ const features = [
   {
     icon: '🤝',
     title: 'Talk to a therapist',
-    desc: 'Kenyan therapists in Swahili, Dholuo, Kikuyu. From KES 500. First sessions subsidised.',
+    desc: 'Kenyan therapists in Swahili, Dholuo, Kikuyu. From KES 500 a session.',
   },
   {
     icon: '🫁',
@@ -27,24 +27,6 @@ const features = [
     icon: '💛',
     title: 'Check in on yourself',
     desc: 'Name how you are feeling — heavy, okay, better, at peace, grateful — and watch it add up over time.',
-  },
-]
-
-const testimonials = [
-  {
-    text: "I typed into a circle at 2am and someone replied within minutes. That was the first time I felt less alone in years.",
-    name: 'Anon Baobab',
-    location: 'Nairobi',
-  },
-  {
-    text: "The prayer journal changed my mornings. A structured space to bring my fears to God — and an AI that responds with Scripture. It feels like being heard twice.",
-    name: 'Anon Willow',
-    location: 'Kisumu',
-  },
-  {
-    text: "I booked a therapist who speaks Dholuo. For the first time I described my pain in the language I dream in.",
-    name: 'Anon Savanna',
-    location: 'Eldoret',
   },
 ]
 
@@ -63,13 +45,11 @@ const circles = [
 // nothing shares that viewport. Every section the nav links to — features,
 // circles, therapists — is briefed on the page itself.
 export default function LandingPage() {
-  const navigate = useNavigate()
-
   return (
     <div className={styles.page}>
 
       {/* ── Nav ── */}
-      <nav className={styles.nav}>
+      <nav className={styles.nav} aria-label="Main">
         <div className={styles.navBrand}>
           <div className={styles.navMark}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
@@ -85,10 +65,17 @@ export default function LandingPage() {
           {/* Signing in is always a choice, never a gate on browsing. */}
           <Link to="/login" className={styles.navLink}>Log in</Link>
         </div>
-        <button className={styles.navCta} onClick={() => navigate('/home')}>
+        {/* These are navigations, not actions: real links so they are reachable
+            with the keyboard, exposed as links to assistive tech, and
+            middle-click/cmd-clickable like any other internal link. */}
+        <Link className={styles.navCta} to="/home">
           Start your journey
-        </button>
+        </Link>
       </nav>
+
+      {/* The landing page had no main landmark, so screen-reader users had no
+          single element to jump to and no way to skip the nav. */}
+      <main id="main-content">
 
       {/* ── Hero ── */}
       <section className={styles.hero}>
@@ -103,9 +90,9 @@ export default function LandingPage() {
             and Kenyan therapists who listen, guide, and walk with you —
             every step of your healing journey.
           </p>
-          <button className={styles.heroCtaPrimary} onClick={() => navigate('/home')}>
+          <Link className={styles.heroCtaPrimary} to="/home">
             Enter Soulwe — it's free
-          </button>
+          </Link>
           <div className={styles.heroPills}>
             <span className={styles.heroPill}>
               <span className={styles.pillStar}>✦</span> Anonymous by default
@@ -195,9 +182,9 @@ export default function LandingPage() {
               </span>
             ))}
           </div>
-          <button className={styles.circlesBtn} onClick={() => navigate('/circle')}>
+          <Link className={styles.circlesBtn} to="/circle">
             Join a circle anonymously →
-          </button>
+          </Link>
         </div>
       </section>
 
@@ -216,9 +203,9 @@ export default function LandingPage() {
               they understand what it means to be you. Sessions in Swahili, Dholuo,
               Kikuyu, and English. Starting from KES 500. First sessions often free.
             </p>
-            <button className={styles.therapistsBtn} onClick={() => navigate('/therapist')}>
+            <Link className={styles.therapistsBtn} to="/therapist">
               Find your therapist →
-            </button>
+            </Link>
           </div>
           <div className={styles.therapistsRight}>
             {[
@@ -282,9 +269,9 @@ export default function LandingPage() {
               </p>
             </div>
             <div className={styles.problemCard}>
-              <span className={styles.problemNum}>0</span>
+              <span className={styles.problemNum}>Very few</span>
               <p className={styles.problemText}>
-                mental health apps designed specifically around African culture, language, and stigma.
+                mental health apps are designed specifically around African culture, language, and stigma.
               </p>
             </div>
           </div>
@@ -292,25 +279,6 @@ export default function LandingPage() {
             Soulwe is not trying to replace psychiatry.<br />
             It is trying to close the gap between <strong>nothing</strong> and <strong>something.</strong>
           </p>
-        </div>
-      </section>
-
-      {/* ── Testimonials ── */}
-      <section className={styles.testimonials}>
-        <div className={styles.inner}>
-          <span className={styles.eyebrow}>From the community</span>
-          <h2 className={styles.sectionHeading}>Real words from real people.</h2>
-          <div className={styles.testimonialsGrid}>
-            {testimonials.map(t => (
-              <div key={t.name} className={styles.testimonialCard}>
-                <p className={styles.testimonialText}>"{t.text}"</p>
-                <div className={styles.testimonialAuthor}>
-                  <span className={styles.testimonialName}>{t.name}</span>
-                  <span className={styles.testimonialLocation}>{t.location}</span>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -329,14 +297,16 @@ export default function LandingPage() {
             No sign-up required. Walk in anonymously.<br />
             Stay as long as you need.
           </p>
-          <button className={styles.finalCtaBtn} onClick={() => navigate('/home')}>
+          <Link className={styles.finalCtaBtn} to="/home">
             Enter Soulwe — it's free
-          </button>
+          </Link>
           <p className={styles.finalCtaVerse}>
             "The Lord is close to the brokenhearted and saves those who are crushed in spirit." — Psalm 34:18
           </p>
         </div>
       </section>
+
+      </main>
 
       {/* ── Footer ── */}
       <footer className={styles.footer}>
@@ -351,9 +321,6 @@ export default function LandingPage() {
           </div>
           <p className={styles.footerTagline}>
             A home for your soul. Built in East Africa, for East Africa.
-          </p>
-          <p className={styles.footerCrisis}>
-            If you are in crisis — <strong>Befrienders Kenya: 0800 723 253</strong> (free, 24/7)
           </p>
           <p className={styles.footerCopy}>© 2026 Soulwe. Made with care in Kisumu, Kenya.</p>
         </div>

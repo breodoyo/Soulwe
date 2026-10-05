@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
 import AppShell from '@/components/layout/AppShell'
 import { GuestOnly } from '@/auth/RouteGuards'
 import LandingPage from '@/pages/LandingPage'
@@ -16,7 +17,29 @@ import ProfilePage from '@/pages/ProfilePage'
 // that store the user's own data gate just that part of the page in place
 // (see SignInPrompt), and therapist communication is the one action family
 // that needs a registered account.
+// A single-page app never reloads, so the tab title would stay whatever
+// index.html shipped. Set it per route so the title always names the page the
+// user is actually on, and so a screen reader announcing a new page has
+// something to read out.
+const pageTitles: Record<string, string> = {
+  '/':          'Soulwe — A home for your soul',
+  '/login':     'Log in — Soulwe',
+  '/register':  'Create an account — Soulwe',
+  '/home':      'Home — Soulwe',
+  '/journal':   'Journal — Soulwe',
+  '/circle':    'Circle — Soulwe',
+  '/therapist': 'Find a therapist — Soulwe',
+  '/breathe':   'Breathe — Soulwe',
+  '/profile':   'Profile — Soulwe',
+}
+
 export default function App() {
+  const { pathname } = useLocation()
+
+  useEffect(() => {
+    document.title = pageTitles[pathname] ?? 'Soulwe'
+  }, [pathname])
+
   return (
     <Routes>
 

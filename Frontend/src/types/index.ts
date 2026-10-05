@@ -156,12 +156,17 @@ export interface Circle {
   is_member: boolean
 }
 
-// A circle chat message. The author is exposed only as the server-generated
-// anon_name; identity UUIDs, device UUIDs, token hashes, and user IDs never
-// leave the API. reaction_counts is always an object (possibly empty).
+// A circle chat message. Circles accept both kinds of owner, so the author is
+// described by a resolved display name rather than an identity kind:
+// AuthorName is the author's own display_name when they posted as a registered
+// member, and their server-generated pseudonym when they posted anonymously,
+// with IsAnonymous saying which. Identity UUIDs, device UUIDs, token hashes and
+// user IDs never leave the API. reaction_counts is always an object (possibly
+// empty).
 export interface CircleMessage {
   id: string
-  anon_name: string
+  author_name: string
+  is_anonymous: boolean
   content: string
   reaction_counts: Record<string, number>
   created_at: string
@@ -327,19 +332,33 @@ export interface ApiErrorBody {
   }
 }
 
+// Which credential a request actually carried. A 401 does not say on its own
+// whose session ended, and by the time a page handles the error the client may
+// already have cleared that credential from storage — so the client records it
+// on the error to keep the two from being confused.
+export type CredentialSent = 'registered' | 'anonymous' | 'none'
+
 // Application-level error thrown by the API client for every failed request.
 // `message` is always safe to display to the user.
 export class ApiError extends Error {
   readonly status: number
   readonly code: string
   readonly field?: string
+  readonly credential: CredentialSent
 
-  constructor(status: number, code: string, message: string, field?: string) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    field?: string,
+    credential: CredentialSent = 'none',
+  ) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.field = field
+    this.credential = credential
   }
 }
 

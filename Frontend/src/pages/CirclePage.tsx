@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
-import { clearAnonToken, ensureAnonSession } from '@/lib/api'
+import { clearAnonToken, ensureAnonSession, getAccessToken } from '@/lib/api'
+import { useAuth } from '@/auth/AuthContext'
 import { isApiError, type Circle, type CircleMessage } from '@/types'
 import styles from './CirclePage.module.css'
 
@@ -17,8 +18,10 @@ function initialsOf(name: string): string {
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 }
 
-// Deterministic per-author colour so a message's bubble matches its avatar
-// without ever exposing who the author is.
+// Deterministic per-author colour so a message's bubble matches its avatar.
+// For an anonymous author this stays pseudonym-based — it is keyed on the
+// server-generated name, never on an identity — while a registered member's
+// bubble is keyed on the name they publish.
 function avatarColor(name: string): string {
   let hash = 0
   for (let i = 0; i < name.length; i++) {
@@ -39,6 +42,12 @@ function formatMessageTime(iso: string): string {
 }
 
 export default function CirclePage() {
+  // Circles accept either credential. A signed-in member posts under their own
+  // display name, so the promises this page makes — and the label on the
+  // composer — depend on which identity is actually in play.
+  const { status: authStatus } = useAuth()
+  const signedIn = authStatus === 'authenticated'
+
   // Anonymous session lifecycle
   const [sessionState, setSessionState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [sessionError, setSessionError] = useState<string | null>(null)
@@ -82,7 +91,30 @@ export default function CirclePage() {
   // The anonymous token may have been invalidated by the server (e.g. rotated
   // by another device). Drop it, return to the circle list, and mint a fresh
   // session on the next pass.
-  const handleSessionLost = () => {
+  //
+  // `err` decides whether that is warranted, because a 401 does not say whose
+  // session ended. An `auth: 'either'` request sends the registered JWT when
+  // there is one, and api.ts has already cleared that token by the time this
+  // runs — so checking storage here would read "no registered token" and
+  // wrongly wipe a still-valid anonymous session. The error carries the
+  // credential that was actually rejected, so trust that instead.
+  //
+  // `setError` is the caller's own error state. Every caller returns straight
+  // after this, so whatever is not written here is never shown: a signed-out
+  // member would otherwise be left staring at a permanent spinner, an empty
+  // thread that looks like a circle nobody has posted in, or a dead button.
+  const handleSessionLost = (err: unknown, setError: (message: string) => void) => {
+    if (isApiError(err) && err.credential === 'registered') {
+      // The account session ended. api.ts cleared the JWT and the auth
+      // provider has already moved the UI to signed out, and any anonymous
+      // session is still good, so there is nothing to refresh into.
+      setError('Your session has ended. Sign in again to keep browsing circles.')
+      return
+    }
+    // 'none' would mean the request went out with no credential at all, which
+    // should not happen after the bootstrap below. It lands here too, so a
+    // guest who lost their session always recovers rather than failing
+    // silently.
     clearAnonToken()
     setSessionNotice('Your anonymous session was renewed. Please open the circle again.')
     setSessionTick(t => t + 1)
@@ -94,7 +126,13 @@ export default function CirclePage() {
     setSessionError(null)
     void (async () => {
       try {
-        await ensureAnonSession()
+        // Circles accept either credential, so a signed-in member needs no
+        // anonymous session at all. Minting one for them would leave a stray
+        // identity behind that they never asked for, so only a guest boots
+        // one here.
+        if (!getAccessToken()) {
+          await ensureAnonSession()
+        }
         if (cancelled) return
         setSessionState('ready')
         setActiveCircleId(null)
@@ -107,7 +145,7 @@ export default function CirclePage() {
         if (cancelled) return
         setSessionState('error')
         setSessionError(
-          errorMessage(err, 'We could not set up your anonymous session right now. Please try again.'),
+          errorMessage(err, 'We could not set up your session right now. Please try again.'),
         )
       }
     })()
@@ -130,7 +168,7 @@ export default function CirclePage() {
       .catch(err => {
         if (cancelled) return
         if (isApiError(err) && err.status === 401) {
-          handleSessionLost()
+          handleSessionLost(err, setCirclesError)
           return
         }
         setCirclesError(
@@ -168,7 +206,10 @@ export default function CirclePage() {
       setNextCursor(res.next_cursor)
     } catch (err) {
       if (isApiError(err) && err.status === 401) {
-        handleSessionLost()
+        // Route the message to whichever pane was loading, so the failure
+        // lands where the user is looking instead of being swallowed.
+        if (mode === 'initial') handleSessionLost(err, setMessagesError)
+        else handleSessionLost(err, setOlderError)
         return
       }
       if (mode === 'initial') {
@@ -210,7 +251,7 @@ export default function CirclePage() {
       }
     } catch (err) {
       if (isApiError(err) && err.status === 401) {
-        handleSessionLost()
+        handleSessionLost(err, setDetailError)
         return
       }
       setDetailError(
@@ -251,7 +292,7 @@ export default function CirclePage() {
       await afterJoined(circleId)
     } catch (err) {
       if (isApiError(err) && err.status === 401) {
-        handleSessionLost()
+        handleSessionLost(err, setActionError)
         return
       }
       if (isApiError(err) && err.code === 'ALREADY_MEMBER') {
@@ -286,7 +327,7 @@ export default function CirclePage() {
       setPageNotice('You left the circle. You can rejoin anytime.')
     } catch (err) {
       if (isApiError(err) && err.status === 401) {
-        handleSessionLost()
+        handleSessionLost(err, setActionError)
         return
       }
       setActionError(errorMessage(err, 'We could not leave this circle right now. Please try again.'))
@@ -308,7 +349,7 @@ export default function CirclePage() {
       setReply('')
     } catch (err) {
       if (isApiError(err) && err.status === 401) {
-        handleSessionLost()
+        handleSessionLost(err, setSendError)
         return
       }
       setSendError(
@@ -330,7 +371,9 @@ export default function CirclePage() {
   if (sessionState === 'loading') {
     return (
       <div className={styles.page}>
-        <p className={styles.status} role="status">Setting up your anonymous session…</p>
+        <p className={styles.status} role="status">
+          {signedIn ? 'Opening the circles…' : 'Setting up your anonymous session…'}
+        </p>
       </div>
     )
   }
@@ -367,7 +410,14 @@ export default function CirclePage() {
 
           <div className={styles.anonNotice} role="note">
             <span aria-hidden="true">🔒</span>
-            <p>All circles are anonymous. Your name is never shown. Conversations stay within the circle.</p>
+            {signedIn ? (
+              <p>
+                You are posting as yourself. Guests in this circle stay anonymous, and
+                conversations stay within the circle.
+              </p>
+            ) : (
+              <p>All circles are anonymous. Your name is never shown. Conversations stay within the circle.</p>
+            )}
           </div>
 
           <p className={styles.sectionLabel}>Open circles</p>
@@ -506,13 +556,21 @@ export default function CirclePage() {
                       <div key={m.id} className={styles.msg}>
                         <div
                           className={styles.msgAvatar}
-                          style={{ background: avatarColor(m.anon_name) }}
+                          style={{ background: avatarColor(m.author_name) }}
                           aria-hidden="true"
                         >
-                          {initialsOf(m.anon_name)}
+                          {initialsOf(m.author_name)}
                         </div>
                         <div className={styles.msgBubble}>
-                          <p className={styles.msgName}>{m.anon_name}</p>
+                          <p className={styles.msgName}>
+                            {m.author_name}
+                            {/* An anonymous author is already a pseudonym, so
+                                say so; a registered member is posting under
+                                their own name and needs no badge. */}
+                            {m.is_anonymous && (
+                              <span className={styles.msgAnonTag}>anonymous</span>
+                            )}
+                          </p>
                           <p className={styles.msgText}>{m.content}</p>
                           <div className={styles.msgFooter}>
                             <span className={styles.msgTime}>{formatMessageTime(m.created_at)}</span>
@@ -563,7 +621,9 @@ export default function CirclePage() {
               </div>
 
               <div className={styles.replyBox}>
-                <label className="sr-only" htmlFor="circle-reply">Type your anonymous message</label>
+                <label className="sr-only" htmlFor="circle-reply">
+                  {signedIn ? 'Type your message' : 'Type your anonymous message'}
+                </label>
                 <textarea
                   id="circle-reply"
                   className={styles.replyInput}
@@ -575,7 +635,11 @@ export default function CirclePage() {
                       void handleSend()
                     }
                   }}
-                  placeholder="Share something anonymously..."
+                  placeholder={
+                    signedIn
+                      ? 'Share with the circle under your name...'
+                      : 'Share something anonymously...'
+                  }
                   maxLength={MAX_MESSAGE_LENGTH}
                   rows={1}
                 />

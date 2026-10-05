@@ -140,7 +140,14 @@
   border-radius: 14px 14px 14px 4px; padding: var(--space-3) var(--space-4);
 }
 
-.msgName { font-size: 11px; color: var(--muted); margin-bottom: var(--space-1); }
+.msgName { font-size: 11px; color: var(--muted); margin-bottom: var(--space-1); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* Marks a message whose author posted anonymously. A registered member posts
+   under their own name, so the badge is only ever shown for a pseudonym. */
+.msgAnonTag {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-full); padding: 1px 6px;
+  color: var(--subtle); background: var(--bg-mid);
+}
 .msgText { font-size: var(--text-sm); color: var(--ink); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 
 .msgFooter { display: flex; align-items: center; justify-content: space-between; margin-top: var(--space-2); flex-wrap: wrap; gap: var(--space-1); }

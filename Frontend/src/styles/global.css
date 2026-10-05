@@ -37,7 +37,9 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--sun);
+  /* --sun is only 2.08:1 against the light page background, which fails the
+     WCAG 2.2 3:1 minimum for focus indicators. --sun-deep is 3.14:1. */
+  outline: 2px solid var(--sun-deep);
   outline-offset: 2px;
   border-radius: 2px;
 }

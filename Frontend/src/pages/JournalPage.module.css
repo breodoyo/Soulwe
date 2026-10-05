@@ -10,7 +10,9 @@
 .heading {
   font-family: var(--font-display);
   font-size: var(--text-xl);
-  color: var(--cream);
+  /* The page background is --bg (#FFFBF5), so the heading needs the dark ink.
+     --cream is light text reserved for the dark cards below. */
+  color: var(--ink);
   margin-bottom: 3px;
 }
 
@@ -120,7 +122,10 @@
   border-radius: var(--radius-full);
   border: 1px solid var(--border);
   background: var(--night-mid);
-  color: var(--muted);
+  /* The chip sits on the dark card, where the light-palette --muted grey only
+     reaches 2.7:1. Cream at 70% is the same treatment HomePage already uses
+     for its dark-surface labels, and clears AA at 6.8:1. */
+  color: rgba(250, 246, 241, 0.7);
   transition:
     background var(--duration-fast) var(--ease),
     color var(--duration-fast) var(--ease),
@@ -132,7 +137,9 @@
 .tagActive {
   background: rgba(196,113,74,0.15);
   border-color: var(--clay-muted);
-  color: var(--clay-light);
+  /* --clay-light is a fill/border tint and is too pale to read on this pale
+     clay background, so the active label uses the muted text tone. */
+  color: var(--clay-muted);
 }
 
 /* ── Save button ── */
@@ -250,7 +257,7 @@
 .entryItem:hover { background: rgba(245, 158, 42, 0.06); }
 
 .entryItem:focus-visible {
-  outline: 2px solid var(--sun);
+  outline: 2px solid var(--sun-deep);
   outline-offset: 2px;
 }
 
@@ -543,7 +550,6 @@
 }
 
 .editTextarea:focus {
-  outline: none;
   border-color: var(--sun-muted);
 }
 
@@ -726,7 +732,6 @@
 
 .prayerTextarea:focus {
   border-color: var(--sun-muted);
-  outline: none;
 }
 
 .prayerTextarea::placeholder { color: var(--subtle); }

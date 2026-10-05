@@ -136,7 +136,14 @@
 }
 .savingLine { color: var(--muted); }
 .saveLine { background: var(--teal-light); color: var(--teal-deep); }
-.saveError { background: var(--sun-light); color: var(--sun-deep); }
+/* Was --sun-light/--sun-deep, which read as a neutral notice rather than a
+   failure next to the teal success line. Uses the same danger treatment as
+   AuthForm and ProfilePage. */
+.saveError {
+  background: rgba(220, 38, 38, 0.06);
+  border: 1px solid rgba(220, 38, 38, 0.22);
+  color: #B91C1C;
+}
 .signInLink { color: var(--sun-deep); font-weight: 600; }
 
 /* ── Guest notice ── */

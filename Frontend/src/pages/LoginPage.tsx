@@ -20,15 +20,21 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [fieldsInvalid, setFieldsInvalid] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     if (submitting) return
     setError(null)
+    setFieldsInvalid(false)
 
     if (!email.trim() || !password) {
       setError('Please enter your email and password.')
+      // Missing fields is a per-field validity problem, so the inputs are
+      // marked invalid below. A rejected credential is not: it leaves both
+      // fields individually valid.
+      setFieldsInvalid(true)
       return
     }
 
@@ -72,7 +78,7 @@ export default function LoginPage() {
             Your account was created. Welcome to Soulwe — please sign in.
           </p>
         )}
-        {error && <p className={styles.error} role="alert">{error}</p>}
+        {error && <p className={styles.error} id="login-error" role="alert">{error}</p>}
 
         <form className={styles.form} onSubmit={handleSubmit} noValidate>
           <div className={styles.field}>
@@ -85,6 +91,8 @@ export default function LoginPage() {
               placeholder="you@example.com"
               value={email}
               onChange={e => setEmail(e.target.value)}
+              aria-invalid={fieldsInvalid || undefined}
+              aria-describedby={error ? 'login-error' : undefined}
             />
           </div>
 
@@ -98,6 +106,8 @@ export default function LoginPage() {
               placeholder="Your password"
               value={password}
               onChange={e => setPassword(e.target.value)}
+              aria-invalid={fieldsInvalid || undefined}
+              aria-describedby={error ? 'login-error' : undefined}
             />
           </div>
 
