@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import {
+  Feather, Briefcase, Home, HeartHandshake, Sprout, MessageCircle, Lock,
+} from 'lucide-react'
 import { api } from '@/lib/api'
 import { clearAnonToken, ensureAnonSession, getAccessToken } from '@/lib/api'
 import { useAuth } from '@/auth/AuthContext'
@@ -7,6 +10,22 @@ import styles from './CirclePage.module.css'
 
 const MESSAGE_PAGE_SIZE = 25
 const MAX_MESSAGE_LENGTH = 1000
+
+// circles.icon holds a stable key, not a glyph — emoji were replaced by
+// migration 019_circle_icon_keys because they render inconsistently across
+// platforms and cannot be tinted. An unknown or null key falls back to a
+// generic message icon so a circle is never left without a mark.
+const CIRCLE_ICONS: Record<string, typeof MessageCircle> = {
+  grief: Feather,
+  work: Briefcase,
+  family: Home,
+  relationships: HeartHandshake,
+  growth: Sprout,
+}
+
+function circleIcon(key: string | null) {
+  return (key && CIRCLE_ICONS[key]) || MessageCircle
+}
 
 const ANON_COLORS = ['#0F766E', '#D4780A', '#16A34A', '#44403C', '#78716C']
 
@@ -409,7 +428,9 @@ export default function CirclePage() {
           {sessionNotice && <p className={styles.noticeInfo} role="status">{sessionNotice}</p>}
 
           <div className={styles.anonNotice} role="note">
-            <span aria-hidden="true">🔒</span>
+            <span className={styles.anonNoticeIcon} aria-hidden="true">
+              <Lock />
+            </span>
             {signedIn ? (
               <p>
                 You are posting as yourself. Guests in this circle stay anonymous, and
@@ -441,25 +462,30 @@ export default function CirclePage() {
 
           {circles !== null && !circlesError && circles.length > 0 && (
             <div className={styles.circleList}>
-              {circles.map(c => (
-                <button
-                  key={c.id}
-                  className={styles.circleCard}
-                  onClick={() => openCircle(c.id)}
-                  aria-label={`Open ${c.name}`}
-                >
-                  <span className={styles.circleIcon} aria-hidden="true">{c.icon ?? '💬'}</span>
-                  <div className={styles.circleInfo}>
-                    <h2 className={styles.circleName}>{c.name}</h2>
-                    {c.description && <p className={styles.circleDesc}>{c.description}</p>}
-                  </div>
-                  <div className={styles.circleMeta}>
-                    <span className={styles.memberCount}>
-                      {c.member_count} {c.member_count === 1 ? 'member' : 'members'}
+              {circles.map(c => {
+                const Icon = circleIcon(c.icon)
+                return (
+                  <button
+                    key={c.id}
+                    className={styles.circleCard}
+                    onClick={() => openCircle(c.id)}
+                    aria-label={`Open ${c.name}`}
+                  >
+                    <span className={styles.circleIcon} aria-hidden="true">
+                      <Icon />
                     </span>
-                  </div>
-                </button>
-              ))}
+                    <div className={styles.circleInfo}>
+                      <h2 className={styles.circleName}>{c.name}</h2>
+                      {c.description && <p className={styles.circleDesc}>{c.description}</p>}
+                    </div>
+                    <div className={styles.circleMeta}>
+                      <span className={styles.memberCount}>
+                        {c.member_count} {c.member_count === 1 ? 'member' : 'members'}
+                      </span>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           )}
         </>
@@ -476,7 +502,9 @@ export default function CirclePage() {
           </button>
 
           <div className={styles.threadHeader}>
-            <span className={styles.threadIcon} aria-hidden="true">{detail?.icon ?? '💬'}</span>
+            <span className={styles.threadIcon} aria-hidden="true">
+              {(() => { const Icon = circleIcon(detail?.icon ?? null); return <Icon /> })()}
+            </span>
             <div>
               <h1 className={styles.threadName}>{detail?.name ?? 'Circle'}</h1>
               {detail?.description && <p className={styles.threadDesc}>{detail.description}</p>}

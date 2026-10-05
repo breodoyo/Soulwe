@@ -1,44 +1,49 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
+import {
+  PenLine, Leaf, Handshake, Wind, HeartPulse,
+  Feather, Briefcase, Contrast, Church, Brain, Sprout,
+  Link as LinkIcon,
+} from 'lucide-react'
 import styles from './LandingPage.module.css'
 
 const features = [
   {
-    icon: '✍️',
+    icon: PenLine,
     title: 'Journal your truth',
     desc: 'Write freely or pray intentionally. Private, encrypted, AI-reflected with African wisdom and Scripture.',
   },
   {
-    icon: '🌿',
+    icon: Leaf,
     title: 'Find your circle',
     desc: 'Anonymous peer support around real African experiences — grief, PTSD, relationships, faith. No names. No judgment.',
   },
   {
-    icon: '🤝',
+    icon: Handshake,
     title: 'Talk to a therapist',
     desc: 'Kenyan therapists in Swahili, Dholuo, Kikuyu. From KES 500 a session.',
   },
   {
-    icon: '🫁',
+    icon: Wind,
     title: 'Breathe through it',
     desc: 'Guided breathing exercises. Two minutes to shift from panic to peace.',
   },
   {
-    icon: '💛',
+    icon: HeartPulse,
     title: 'Check in on yourself',
     desc: 'Name how you are feeling — heavy, okay, better, at peace, grateful — and watch it add up over time.',
   },
 ]
 
 const circles = [
-  { icon: '🕊️', name: 'Grief & loss'        },
-  { icon: '💼', name: 'Work pressure'        },
-  { icon: '🌿', name: 'Family expectations'  },
-  { icon: '💜', name: 'Trauma & healing'     },
-  { icon: '💍', name: 'Relationships'        },
-  { icon: '🙏', name: 'Faith & doubt'        },
-  { icon: '🧠', name: 'Anxiety & depression' },
-  { icon: '🌱', name: 'Young adults'         },
+  { icon: Feather,         name: 'Grief & loss'        },
+  { icon: Briefcase,       name: 'Work pressure'        },
+  { icon: Leaf,            name: 'Family expectations'  },
+  { icon: Contrast,        name: 'Trauma & healing'     },
+  { icon: LinkIcon,        name: 'Relationships'        },
+  { icon: Church,          name: 'Faith & doubt'        },
+  { icon: Brain,           name: 'Anxiety & depression' },
+  { icon: Sprout,          name: 'Young adults'         },
 ]
 
 // One page. The hero is exclusive: it holds the entire first screen and
@@ -152,13 +157,18 @@ export default function LandingPage() {
               role="group"
               aria-label="Soulwe features, scroll sideways for more"
             >
-              {features.map(f => (
-                <div key={f.title} className={styles.featureCard}>
-                  <span className={styles.featureIcon}>{f.icon}</span>
-                  <h3 className={styles.featureTitle}>{f.title}</h3>
-                  <p className={styles.featureDesc}>{f.desc}</p>
-                </div>
-              ))}
+              {features.map(f => {
+                const Icon = f.icon
+                return (
+                  <div key={f.title} className={styles.featureCard}>
+                    <span className={styles.featureIcon}>
+                      <Icon aria-hidden="true" />
+                    </span>
+                    <h3 className={styles.featureTitle}>{f.title}</h3>
+                    <p className={styles.featureDesc}>{f.desc}</p>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>
@@ -176,11 +186,15 @@ export default function LandingPage() {
             No names. No profiles. Just honest conversation.
           </p>
           <div className={styles.circlesPills}>
-            {circles.map(c => (
-              <span key={c.name} className={styles.circleBadge}>
-                {c.icon} {c.name}
-              </span>
-            ))}
+            {circles.map(c => {
+              const Icon = c.icon
+              return (
+                <span key={c.name} className={styles.circleBadge}>
+                  <Icon aria-hidden="true" size={16} />
+                  {c.name}
+                </span>
+              )
+            })}
           </div>
           <Link className={styles.circlesBtn} to="/circle">
             Join a circle anonymously →

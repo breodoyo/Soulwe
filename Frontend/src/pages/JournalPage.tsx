@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { NotebookPen, HandHeart, Sprout, Send, Ear, Sparkles } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/auth/AuthContext'
 import { isApiError, type JournalEntry } from '@/types'
@@ -392,14 +393,16 @@ export default function JournalPage() {
           onClick={() => switchMode('journal')}
           aria-pressed={mode === 'journal'}
         >
-          ✍️ Journal
+          <NotebookPen aria-hidden="true" className={styles.modeBtnIcon} />
+          Journal
         </button>
         <button
           className={[styles.modeBtn, mode === 'prayer' ? styles.modeBtnActive : ''].join(' ')}
           onClick={() => switchMode('prayer')}
           aria-pressed={mode === 'prayer'}
         >
-          🙏 Prayer
+          <HandHeart aria-hidden="true" className={styles.modeBtnIcon} />
+          Prayer
         </button>
       </div>
 
@@ -466,7 +469,10 @@ export default function JournalPage() {
 
           <div className={styles.prayerSection}>
             <label className={styles.prayerLabel} htmlFor="gratitude">
-              🌿 Gratitude
+              <span className={styles.prayerLabelRow}>
+                <Sprout aria-hidden="true" className={styles.prayerLabelIcon} />
+                Gratitude
+              </span>
               <span className={styles.prayerPrompt}>What am I thankful for today?</span>
             </label>
             <textarea
@@ -482,7 +488,10 @@ export default function JournalPage() {
 
           <div className={styles.prayerSection}>
             <label className={styles.prayerLabel} htmlFor="petition">
-              🕊️ Petition
+              <span className={styles.prayerLabelRow}>
+                <Send aria-hidden="true" className={styles.prayerLabelIcon} />
+                Petition
+              </span>
               <span className={styles.prayerPrompt}>What am I bringing before God?</span>
             </label>
             <textarea
@@ -498,7 +507,10 @@ export default function JournalPage() {
 
           <div className={styles.prayerSection}>
             <label className={styles.prayerLabel} htmlFor="listening">
-              👂 Listening
+              <span className={styles.prayerLabelRow}>
+                <Ear aria-hidden="true" className={styles.prayerLabelIcon} />
+                Listening
+              </span>
               <span className={styles.prayerPrompt}>What do I feel He is saying to me?</span>
             </label>
             <textarea
@@ -530,7 +542,9 @@ export default function JournalPage() {
       >
         {saving
           ? <><span className={styles.spinner} aria-hidden="true" /> Reflecting...</>
-          : mode === 'prayer' ? '🙏 Save prayer' : 'Save & reflect with AI'
+          : mode === 'prayer'
+            ? <><HandHeart aria-hidden="true" className={styles.saveBtnIcon} /> Save prayer</>
+            : <><Sparkles aria-hidden="true" className={styles.saveBtnIcon} /> Save &amp; reflect with AI</>
         }
       </button>
 
@@ -728,7 +742,9 @@ export default function JournalPage() {
                     <div className={styles.entryBody}>
                       <div className={styles.entryMeta}>
                         <span className={styles.entryModeTag}>
-                          {isPrayer ? '🙏 Prayer' : '✍️ Journal'}
+                          {isPrayer
+                            ? <><HandHeart aria-hidden="true" className={styles.entryModeIcon} /> Prayer</>
+                            : <><NotebookPen aria-hidden="true" className={styles.entryModeIcon} /> Journal</>}
                         </span>
                         <span className={styles.entryWords}>{wordsLabel(entry.word_count)}</span>
                         {entry.ai_reflection && (

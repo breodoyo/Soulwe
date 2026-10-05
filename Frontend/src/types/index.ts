@@ -146,6 +146,9 @@ export interface AnonymousMeResponse {
 // (Backend/internal/circles/model.go). description/icon are nullable;
 // is_member is always present but only meaningful on the detail endpoint (the
 // list always reports false).
+// icon is a stable key ('grief' | 'work' | 'family' | 'relationships' |
+// 'growth'), not a glyph — it was emoji until migration
+// 019_circle_icon_keys. CirclePage maps it to an icon component.
 export interface Circle {
   id: string
   slug: string

@@ -13,6 +13,11 @@
 }
 .anonNotice p { flex: 1; }
 
+/* Was an emoji glyph sized with font-size; now an <svg> that needs explicit
+   dimensions and a tint matching the notice text. */
+.anonNoticeIcon { flex-shrink: 0; display: inline-flex; margin-top: 2px; }
+.anonNoticeIcon svg { width: 17px; height: 17px; }
+
 .sectionLabel { font-size: var(--text-xs); color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; }
 
 .circleList { display: flex; flex-direction: column; gap: var(--space-3); }
@@ -26,7 +31,8 @@
 }
 .circleCard:hover { border-color: var(--sun-muted); background: rgba(245, 158, 42, 0.06); }
 
-.circleIcon { font-size: 28px; flex-shrink: 0; }
+.circleIcon { flex-shrink: 0; display: inline-flex; color: var(--sun-deep); }
+.circleIcon svg { width: 26px; height: 26px; stroke-width: 1.6; }
 .circleInfo { flex: 1; }
 .circleName { font-size: var(--text-base); font-weight: 500; color: var(--ink); margin-bottom: 2px; }
 .circleDesc { font-size: var(--text-xs); color: var(--muted); line-height: 1.4; }
@@ -119,7 +125,8 @@
   display: flex; align-items: flex-start; gap: var(--space-3);
   padding-bottom: var(--space-4); border-bottom: 1px solid var(--border);
 }
-.threadIcon { font-size: 28px; line-height: 1; flex-shrink: 0; }
+.threadIcon { flex-shrink: 0; display: inline-flex; color: var(--sun-deep); }
+.threadIcon svg { width: 26px; height: 26px; stroke-width: 1.6; }
 .threadName { font-family: var(--font-display); font-size: var(--text-xl); color: var(--ink); margin-bottom: 2px; }
 .threadDesc { font-size: var(--text-sm); color: var(--muted); }
 .threadMeta { font-size: var(--text-xs); color: var(--muted); margin-top: var(--space-1); }

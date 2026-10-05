@@ -560,9 +560,17 @@
 }
 
 .featureIcon {
-  font-size: 30px;
   display: block;
   margin-bottom: var(--space-4);
+  color: var(--sun-deep);
+}
+
+/* Sizing lives here rather than in JSX so the feature cards and the circle
+   badges can both render a lucide <svg> at their own scale. */
+.featureIcon svg {
+  width: 30px;
+  height: 30px;
+  stroke-width: 1.6;
 }
 
 .featureTitle {
@@ -669,6 +677,9 @@
 }
 
 .circleBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: var(--text-sm);
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.1);

@@ -163,6 +163,14 @@
 
 .saveBtnLoading { opacity: 0.7; }
 
+/* Icons that replaced the old emoji glyphs. .saveBtn is already flex with a
+   gap, so the icon just needs a size; the others get their own layout. */
+.saveBtnIcon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
 .spinner {
   width: 16px;
   height: 16px;
@@ -665,7 +673,17 @@
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   transition: all var(--duration-base) var(--ease);
+}
+
+.modeBtnIcon {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
 }
 
 .modeBtn:hover { color: var(--ink); }
@@ -708,6 +726,21 @@
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--ink);
+}
+
+/* .prayerLabel stacks its children in a column, so the icon needs its own row
+   to sit beside the section name rather than above it. */
+.prayerLabelRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prayerLabelIcon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--clay);
 }
 
 .prayerPrompt {
@@ -781,4 +814,13 @@
   padding: 2px 8px;
   border-radius: var(--radius-full);
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.entryModeIcon {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
 }

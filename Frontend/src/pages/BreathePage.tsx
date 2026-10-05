@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import { Volume2, VolumeX } from 'lucide-react'
 import { isApiError, type BreathingExercise, type BreathingSession } from '@/types'
 import { api } from '@/lib/api'
 import { useAuth } from '@/auth/AuthContext'
@@ -264,7 +265,9 @@ export default function BreathePage() {
           aria-pressed={voiceOn}
           aria-label={voiceOn ? 'Turn voice guidance off' : 'Turn voice guidance on'}
         >
-          {voiceOn ? '🔊 Voice on' : '🔇 Voice off'}
+          {voiceOn
+            ? <><Volume2 aria-hidden="true" className={styles.voiceBtnIcon} /> Voice on</>
+            : <><VolumeX aria-hidden="true" className={styles.voiceBtnIcon} /> Voice off</>}
         </button>
       </div>
 
