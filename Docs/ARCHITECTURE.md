@@ -127,14 +127,17 @@ This keeps pages clean and makes feature logic easier to test.
 
 ## Authentication design
 
-Soulwe has two identity modes.
+Soulwe has two identity modes, and the important thing about them is that they
+coexist rather than compete. Neither is the "trial" and the other the "real"
+version.
 
 ### Anonymous users
 
 * Receive a random anonymous name such as `Anon Baobab`
 * Can use circles, breathing, and limited journaling
 * No email or phone required
-* Anonymous token stored in `localStorage`
+* Anonymous token stored in `localStorage` under a separate key from the
+  registered JWT, so the two never overwrite each other
 
 ### Registered users
 
@@ -147,6 +150,37 @@ Soulwe has two identity modes.
 * Refresh token — 30 days
 
 The anonymous system allows users to experience Soulwe before sharing personal information.
+
+### Both at once
+
+A person who has signed up is still welcome to post as a guest, and a guest is
+never pushed to register. The server models this with a single `Owner` value
+that is **exactly one of** a user ID or an anonymous identity ID, so every
+owned table has the same shape:
+
+| | anonymous | registered |
+|---|---|---|
+| storage | `localStorage['sw_anon_token']` | `localStorage['sw_access_token']` |
+| route middleware | `IdentityRequired` | `IdentityRequired` |
+| resolved `Owner` | `AnonIdentityID` | `UserID` |
+| name shown to others | generated pseudonym | profile `display_name`, else `Member` |
+
+`IdentityRequired` is the middleware for every dual-credential feature (moods,
+journal, breathing history, circles). It tries the registered JWT first and
+falls back to the anonymous token, then puts the single resolved `Owner` in the
+context. Handlers read ownership from that context and never from the request
+body, and repositories match it with `IS NOT DISTINCT FROM` so an ownerless row
+cannot be queried by accident.
+
+This is why a registered JWT cannot read anonymous data even though both
+tokens open the same endpoint: the *endpoint* is flexible about which identity
+you are, but a row belongs to one identity permanently. Circle memberships and
+messages make the separation visible — a member who is signed in posts under
+their own name, and a guest in the same room posts under a pseudonym.
+
+A useful side effect: because the same route accepts both credentials, the
+frontend does not need a separate guest build of a feature. It just sends the
+JWT if it has one and the anonymous token otherwise.
 
 ---
 
@@ -165,9 +199,15 @@ This trade-off must be clearly explained before account creation.
 
 ### Circle anonymity
 
-Circle messages store a user ID for moderation, but that ID maps to an anonymous identity rather than a real identity.
+Anonymous circle messages store an ID for moderation, but that ID maps to an
+anonymous identity rather than a real one. The mapping is stored separately and
+is accessible only by the backend.
 
-The mapping is stored separately and is accessible only by the backend.
+For a **registered** member the trade-off runs the other way: they post
+openly, under the display name on their profile, and only to members of the
+circle they are in. Nothing is broadcast publicly, and no email address is ever
+shown. The name is resolved at read time from `users`/`anon_identities`, so it
+is never duplicated into message rows and cannot drift out of sync.
 
 ### AI data handling
 

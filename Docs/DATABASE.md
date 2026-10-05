@@ -217,24 +217,60 @@ and prevents abuse. New circles are added by the team.
 
 ### circle_members
 
-Membership in a circle. Keyed to `anon_identities` (never registered users),
-mirroring `circle_messages` — members must stay anonymous.
+Membership in a circle. A member is **either** a registered user or an
+anonymous identity, never both — migration `018` added the `user_id` side
+alongside `anon_identity_id` so a signed-in member can take part too.
 
 ```sql
 CREATE TABLE circle_members (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     circle_id        UUID NOT NULL REFERENCES circles(id) ON DELETE CASCADE,
-    anon_identity_id UUID NOT NULL REFERENCES anon_identities(id) ON DELETE CASCADE,
+    anon_identity_id UUID REFERENCES anon_identities(id) ON DELETE CASCADE,
+    user_id          UUID REFERENCES users(id) ON DELETE CASCADE,
     joined_at        TIMESTAMPTZ DEFAULT NOW(),
 
-    UNIQUE(circle_id, anon_identity_id)
+    CONSTRAINT circle_members_one_owner
+        CHECK ((user_id IS NOT NULL) <> (anon_identity_id IS NOT NULL))
 );
+
+-- One join per identity. The original single UNIQUE(circle_id, anon_identity_id)
+-- is replaced by one partial index per owner kind, because a plain
+-- UNIQUE(circle_id, anon_identity_id, user_id) would not catch NULLs: in
+-- Postgres NULLs are distinct, so a second anonymous join would slip through
+-- as (circle, anon, NULL) twice.
+CREATE UNIQUE INDEX idx_circle_members_circle_anon
+    ON circle_members(circle_id, anon_identity_id)
+    WHERE anon_identity_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_circle_members_circle_user
+    ON circle_members(circle_id, user_id)
+    WHERE user_id IS NOT NULL;
+
+-- The anonymous side is already indexed by idx_circle_members_anon_identity
+-- (migration 013) for cascade deletes and "which circles has this person
+-- joined". This is its registered twin, added for the same reasons.
+CREATE INDEX idx_circle_members_user ON circle_members(user_id);
 ```
 
-- `UNIQUE(circle_id, anon_identity_id)` makes joining twice a unique
-  violation, which the service maps to a `409 ALREADY_MEMBER`.
+- `circle_members_one_owner` enforces exactly one owner, so a row can never be
+  ownerless (unattributable) or doubly owned (ambiguous). The `<>` between two
+  `IS NOT NULL` tests is the XOR that expresses "exactly one".
+- Migration 018 drops the original `circle_members_circle_id_anon_identity_id_key`
+  and replaces it with the two partial indexes. The anonymous index reproduces
+  the previous guarantee exactly, and joining twice still raises a unique
+  violation, which the service maps to `409 ALREADY_MEMBER`.
+- Anonymous and registered memberships are counted together for the public
+  member count, and neither can see the other's rows.
 - Live member counts are a `COUNT` over `circle_members` grouped by circle.
 - Leaving is an idempotent `DELETE` (no-op when the row is absent).
+
+**Why does promotion not move old memberships?** A user who promotes an
+anonymous identity still has their older `anon_identity_id` rows intact —
+nothing rewrites them to the new `user_id`. That matches migration `017`'s
+behaviour for the other anonymous-owned tables: history keeps the identity it
+was written under. The trade-off is that a promoted user does not see the
+circles they joined anonymously before signing up. Rewriting ownership in
+place would be a silent, irreversible change to data attributed to a
+pseudonym, so it is left as a follow-up rather than done automatically.
 
 ---
 
@@ -242,18 +278,39 @@ CREATE TABLE circle_members (
 
 ```sql
 CREATE TABLE circle_messages (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    circle_id       UUID NOT NULL REFERENCES circles(id) ON DELETE CASCADE,
-    anon_identity_id UUID NOT NULL REFERENCES anon_identities(id),
-    content         TEXT NOT NULL,
-    reaction_counts JSONB DEFAULT '{}',    -- {"💙": 12, "🙏": 4}
-    is_flagged      BOOLEAN DEFAULT FALSE,
-    created_at      TIMESTAMPTZ DEFAULT NOW()
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    circle_id        UUID NOT NULL REFERENCES circles(id) ON DELETE CASCADE,
+    anon_identity_id UUID REFERENCES anon_identities(id) ON DELETE CASCADE,
+    content          TEXT NOT NULL,
+    reaction_counts  JSONB DEFAULT '{}',    -- {"💙": 12, "🙏": 4}
+    is_flagged       BOOLEAN DEFAULT FALSE,
+    user_id          UUID REFERENCES users(id) ON DELETE CASCADE,
+    created_at       TIMESTAMPTZ DEFAULT NOW(),
+
+    CONSTRAINT circle_messages_one_owner
+        CHECK ((user_id IS NOT NULL) <> (anon_identity_id IS NOT NULL))
 );
 
 CREATE INDEX idx_circle_messages_circle_created
     ON circle_messages(circle_id, created_at DESC);
+
+-- Author-side lookups ("which rooms has this person posted in"). The
+-- (circle_id, created_at DESC) index above already serves every read of a
+-- room, newest first, for both owner kinds.
+CREATE INDEX idx_circle_messages_anon
+    ON circle_messages(anon_identity_id) WHERE anon_identity_id IS NOT NULL;
+CREATE INDEX idx_circle_messages_user
+    ON circle_messages(user_id) WHERE user_id IS NOT NULL;
 ```
+
+**Author name is resolved, not stored.** The message row keeps no name at all.
+Reads `LEFT JOIN` `anon_identities` and `users` to derive what the API returns:
+an anonymous author's pseudonym, or a registered author's `display_name`
+(falling back to the literal `Member` so an email can never surface). Renaming
+a profile therefore updates the circle history immediately, and deleting a
+user removes their messages with them — neither would be true of a denormalized
+name column. Both owner columns cascade, so either identity vanishing takes its
+messages with it.
 
 **Why JSONB for reactions?**
 Reaction types may change over time (adding new emojis). JSONB lets us add
@@ -264,19 +321,34 @@ do relational queries on individual reactions, but we don't need to.
 
 ### message_flags
 
-When a user flags a message as harmful.
+When a user flags a message as harmful. Ownership is dual here too, kept
+consistent with `circle_messages` even though flagging is not implemented yet.
 
 ```sql
 CREATE TABLE message_flags (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     message_id  UUID NOT NULL REFERENCES circle_messages(id) ON DELETE CASCADE,
-    flagged_by  UUID NOT NULL REFERENCES anon_identities(id),
+    flagged_by  UUID REFERENCES anon_identities(id),
     reason      TEXT,
+    user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
     created_at  TIMESTAMPTZ DEFAULT NOW(),
 
-    UNIQUE(message_id, flagged_by)         -- one flag per person per message
+    CONSTRAINT message_flags_one_owner
+        CHECK ((user_id IS NOT NULL) <> (flagged_by IS NOT NULL))
 );
+
+CREATE UNIQUE INDEX idx_message_flags_message_anon
+    ON message_flags(message_id, flagged_by) WHERE flagged_by IS NOT NULL;
+CREATE UNIQUE INDEX idx_message_flags_message_user
+    ON message_flags(message_id, user_id) WHERE user_id IS NOT NULL;
 ```
+
+The original `UNIQUE(message_id, flagged_by)` (`message_flags_message_id_flagged_by_key`)
+is dropped and replaced, because a single multi-column unique cannot express
+"one flag per owner" across two owner columns — and once either side is
+nullable, NULLs being distinct would let the same anonymous person flag the
+same message repeatedly. The partial indexes reproduce the original guarantee
+and add the registered one.
 
 ---
 
@@ -443,6 +515,8 @@ Migrations live in `backend/db/migrations/` and are numbered sequentially:
 014_create_bookings.sql
 015_create_booking_overlap_guard.sql
 016_create_breathing_exercises.sql
+017_add_anon_ownership.sql
+018_circle_registered_ownership.sql
 ```
 
 We run them with `golang-migrate`. Each file contains both an `up` migration
@@ -452,6 +526,14 @@ We run them with `golang-migrate`. Each file contains both an `up` migration
 
 **Rule:** Never edit a migration file after it has been run in production.
 If you need to change something, write a new migration.
+
+**Widening an owner column (`017`, `018`).** Both migrations take a
+`NOT NULL` anonymous owner column and add a nullable `user_id` alternative,
+guarded by a `<>`-between-`IS NOT NULL` CHECK plus one partial unique index per
+owner kind. These migrations are not reversible in the strict sense: `down`
+cannot recover which anonymous identity a registered-owned row "really" belonged
+to, so it **deletes** registered-owned rows before dropping the column.
+Anonymous data is always preserved. That direction is the safe one to lose.
 
 ---
 

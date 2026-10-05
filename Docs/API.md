@@ -17,18 +17,26 @@ Authorization: Bearer <access_token>
 ```
 
 Access tokens expire in 15 minutes. Use the refresh endpoint to get a new one.
-Anonymous users get a short-lived token that grants access to circles and
-basic features without registration.
+Anonymous users get a short-lived token that grants access to the same personal
+features without registration.
 
 Protected endpoints are picky about token type:
 
-- **Registered-user endpoints** (`/auth/me`, `/users/me`, `/moods`,
-  `/dashboard`, `/journal`, `/therapists`, `/bookings`, and
-  `POST /therapists/:id/bookings`) require a registered-user **JWT** and
-  reject anonymous tokens with `401`.
-- **Anonymous endpoints** (`/auth/anonymous/me`, `/auth/anonymous/promote`,
-  and all `/circles` routes) require the opaque anonymous token and reject
-  registered-user JWTs with `401`.
+- **Public endpoints** (`GET /therapists`, `GET /therapists/:id`,
+  `GET /breathing/exercises`, `GET /breathing/exercises/:id`) need no token at
+  all. They are shared catalog data with no owner and no private fields.
+- **Registered-user endpoints** (`/auth/me`, `/users/me`, `/dashboard`,
+  `/bookings`, and `POST /therapists/:id/bookings`) require a registered-user
+  **JWT** and reject anonymous tokens with `401`.
+- **Anonymous endpoints** (`/auth/anonymous/me`, `/auth/anonymous/promote`)
+  require the opaque anonymous token and reject registered-user JWTs with `401`.
+- **Dual-credential endpoints** (`/moods`, `/journal`, `/circles`, and the
+  `/breathing/sessions` routes) accept **either** credential, because taking
+  part in a personal feature should not require an account. A registered JWT is
+  tried first and resolves to a user; an anonymous token resolves to an
+  anonymous session. The two are never interchangeable, so a registered caller
+  can never read anonymous-owned data and vice versa — only the *choice of
+  credential* is flexible, never the scope of a row.
 
 ---
 
@@ -324,8 +332,9 @@ when the user has no check-ins yet.
 
 ### Journal
 
-All journal endpoints require a registered user token (not anonymous). Anonymous
-tokens are rejected.
+All journal endpoints accept either a registered-user JWT or an anonymous token —
+writing an entry should not require registering. Entries are scoped to whichever
+identity authenticated, and the two never see each other's entries.
 
 Journal text is always encrypted in the database (AES-256-GCM). The server
 decrypts content only to build a response for the entry's own owner; ciphertext
@@ -474,9 +483,20 @@ credentials, tokens, and keys never leave the server.
 
 ### Circles
 
-Circle endpoints require an **anonymous** token. Registered-user JWTs are
-rejected with `401`. Circle IDs are UUIDs (use the value returned by
-`GET /circles`).
+Circle endpoints accept **either** credential — a registered-user JWT or an
+anonymous token — so seeking peer support never requires an account. A
+membership and a message belong to whichever identity authenticated, and the
+two are never mixed: a registered member's rows are scoped to their user ID and
+an anonymous session's to its anonymous identity, so neither can read or write
+the other's.
+
+A **registered** member is shown under the `display_name` on their profile.
+An **anonymous** member is shown under a server-generated pseudonym. If a
+registered account has no display name it is labelled `Member` — never the email
+address. No identity UUID (user or anonymous), device UUID, or token hash is
+ever returned.
+
+Circle IDs are UUIDs (use the value returned by `GET /circles`).
 
 #### `GET /circles`
 List all active circles with live member counts.
@@ -520,7 +540,7 @@ Details for one active circle, including the caller's membership.
 ---
 
 #### `POST /circles/:id/join`
-Join a circle.
+Join a circle as the authenticated identity.
 
 **Response `204`:** no body
 - `409` if the identity is already a member (`ALREADY_MEMBER`)
@@ -530,7 +550,7 @@ Join a circle.
 
 #### `DELETE /circles/:id/leave`
 Leave a circle. Idempotent — leaving a circle you are not a member of still
-returns `204`.
+returns `204`. Only the caller's own membership is removed.
 
 **Response `204`:** no body
 - `404` if the circle does not exist
@@ -538,7 +558,8 @@ returns `204`.
 ---
 
 #### `GET /circles/:id/messages`
-Get recent messages in a circle. Only members may read.
+Get recent messages in a circle. Only members may read, and a membership
+granted by one identity does not admit the other.
 
 **Query params:**
 - `limit` — default 20, max 50
@@ -550,17 +571,29 @@ Get recent messages in a circle. Only members may read.
   "messages": [
     {
       "id": "uuid",
-      "anon_name": "Anon Baobab",
+      "author_name": "Bree",
+      "is_anonymous": false,
       "content": "Lost my father last month...",
       "reaction_counts": {},
       "created_at": "2026-08-19T09:45:00Z"
+    },
+    {
+      "id": "uuid",
+      "author_name": "Anon Baobab",
+      "is_anonymous": true,
+      "content": "Sending strength your way...",
+      "reaction_counts": {},
+      "created_at": "2026-08-19T09:40:00Z"
     }
   ],
   "next_cursor": "2026-08-19T09:44:00Z"
 }
 ```
 
-`next_cursor` is present only when more messages may follow.
+`author_name` is the author's own `display_name` when they posted as a
+registered member and their generated pseudonym when they posted anonymously;
+`is_anonymous` says which. `next_cursor` is present only when more messages may
+follow.
 
 - `403` if the caller is not a member (`NOT_A_MEMBER`)
 - `404` if the circle does not exist
@@ -568,7 +601,9 @@ Get recent messages in a circle. Only members may read.
 ---
 
 #### `POST /circles/:id/messages`
-Send an anonymous message to a circle. Only members may send.
+Send a message to a circle. Only members may send. A registered member's
+message is stored against their user ID; an anonymous session's against its
+anonymous identity.
 
 **Request:**
 ```json
@@ -582,7 +617,8 @@ Send an anonymous message to a circle. Only members may send.
 {
   "message": {
     "id": "uuid",
-    "anon_name": "Anon Willow",
+    "author_name": "Anon Willow",
+    "is_anonymous": true,
     "content": "I understand this so deeply...",
     "reaction_counts": {},
     "created_at": "2026-08-19T10:01:00Z"
@@ -601,9 +637,11 @@ Reactions (`react`) and safety flags (`flag`) are planned but not built yet.
 ### Therapists
 
 Browse the public therapist directory and view public profiles. Both endpoints
-require a registered-user **JWT** and reject anonymous tokens with `401`.
-Profiles expose only public fields — never emails, credentials, or internal
-storage details.
+are public: the directory is shared catalog data with no owner, so guests and
+anonymous sessions may browse too. Profiles expose only public fields — never
+emails, credentials, or internal storage details. *Contacting* a therapist is
+the registered-only half: `POST /therapists/:id/bookings` requires a
+registered-user **JWT** and rejects anonymous tokens with `401`.
 
 #### `GET /therapists`
 List therapists, newest first.
