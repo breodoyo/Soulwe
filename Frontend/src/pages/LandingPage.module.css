@@ -122,7 +122,9 @@
      band, which read as a smeared, stretched image. contain shows the whole
      photo undistorted; no-repeat stops the letterboxed remainder tiling. */
   background-size: contain;
-  background-position: center;
+  /* Nudged off dead-centre so the photo sits clear of the headline column
+     rather than running straight down the middle of it. */
+  background-position: calc(50% + 56px) center;
   background-repeat: no-repeat;
   opacity: 0.75;
   pointer-events: none;
@@ -202,16 +204,28 @@
   gap: var(--space-3);
 }
 
+/* The hero photo shows through behind these at 0.75 opacity and no hero-wide
+   scrim, so --muted text landed on an unpredictable backdrop and lost contrast
+   (worst on "Kenyan therapists", which wraps onto the busiest part of the
+   photo). Each pill therefore carries its own near-opaque backdrop plus --ink
+   text, so legibility no longer depends on what the photo happens to do
+   underneath — and the photo stays unmasked everywhere else. */
 .heroPill {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: var(--text-sm);
-  color: var(--muted);
+  color: var(--ink);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 251, 245, 0.88);
+  border: 1px solid var(--border-soft);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .pillStar {
-  color: var(--sun);
+  color: var(--sun-deep);
   font-size: 14px;
 }
 
@@ -898,7 +912,7 @@
 }
 
 .footerInner {
-  max-width: 600px;
+  max-width: 960px;
   margin: 0 auto;
   padding: 0 var(--space-5);
   display: flex;
@@ -928,6 +942,8 @@
 .footerCopy {
   font-size: var(--text-xs);
   color: rgba(255,255,255,0.2);
+  align-self: flex-start;
+  text-align: left;
 }
 
 .heroCtaPrimary {

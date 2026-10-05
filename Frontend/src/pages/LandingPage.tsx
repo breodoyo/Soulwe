@@ -322,7 +322,7 @@ export default function LandingPage() {
           <p className={styles.footerTagline}>
             A home for your soul. Built in East Africa, for East Africa.
           </p>
-          <p className={styles.footerCopy}>© 2026 Soulwe. Made with care in Kisumu, Kenya.</p>
+          <p className={styles.footerCopy}>© 2026 Soulwe.</p>
         </div>
       </footer>
 
