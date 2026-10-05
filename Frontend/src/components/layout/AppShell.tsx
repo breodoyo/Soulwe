@@ -54,40 +54,13 @@ const LogoutIcon = () => (
 )
 
 const tabs = [
-  { to: '/home',      label: 'Home',      swahili: 'Nyumba',  Icon: HomeIcon      },
-  { to: '/journal',   label: 'Journal',   swahili: 'Diary',   Icon: JournalIcon   },
-  { to: '/circle',    label: 'Circle',    swahili: 'Duara',   Icon: CircleIcon    },
+  { to: '/home',      label: 'Home',      swahili: 'Mwanzo',  Icon: HomeIcon      },
+  { to: '/journal',   label: 'Journal',   swahili: 'Shajara', Icon: JournalIcon   },
+  { to: '/circle',    label: 'Circle',    swahili: 'Kikundi', Icon: CircleIcon    },
   { to: '/therapist', label: 'Therapist', swahili: 'Mshauri', Icon: TherapistIcon },
-  { to: '/breathe',   label: 'Breathe',   swahili: 'Pumzika', Icon: BreatheIcon   },
+  { to: '/breathe',   label: 'Breathe',   swahili: 'Pumua',   Icon: BreatheIcon   },
   { to: '/profile',   label: 'Profile',   swahili: 'Wasifu',  Icon: ProfileIcon   },
 ]
-
-const breadcrumbLabels: Record<string, string> = {
-  '/home':      'Home',
-  '/journal':   'Journal',
-  '/circle':    'Circle',
-  '/therapist': 'Therapist',
-  '/breathe':   'Breathe',
-  '/profile':   'Profile',
-}
-
-function Breadcrumbs() {
-  const location = useLocation()
-  const label = breadcrumbLabels[location.pathname]
-  if (!label || location.pathname === '/home') return null
-
-  return (
-    <nav className={styles.breadcrumbs} aria-label="Breadcrumb">
-      <Link to="/home" className={styles.breadcrumbHome}>
-        Home
-      </Link>
-      <span className={styles.breadcrumbSep} aria-hidden="true">/</span>
-      <span className={styles.breadcrumbCurrent} aria-current="page">
-        {label}
-      </span>
-    </nav>
-  )
-}
 
 // The session badge is the app's answer to "am I anonymous right now?": a
 // guest always sees "Anonymous session" and a way in, a registered user sees
@@ -136,8 +109,8 @@ export default function AppShell() {
   return (
     <div className={styles.shell}>
 
-      {/* First tab stop: lets keyboard users bypass the nav, session badge and
-          breadcrumbs. Hidden until focused, then pinned to the top. */}
+      {/* First tab stop: lets keyboard users bypass the nav and session badge.
+          Hidden until focused, then pinned to the top. */}
       <a className={styles.skipLink} href="#main-content">Skip to main content</a>
 
       {/* Top nav — mobile only */}
@@ -165,9 +138,6 @@ export default function AppShell() {
           )}
         </div>
       </header>
-
-      {/* Breadcrumbs */}
-      <Breadcrumbs />
 
       {/* Page content. tabIndex -1 so route changes can move focus here without
           making the landmark reachable by Tab. */}

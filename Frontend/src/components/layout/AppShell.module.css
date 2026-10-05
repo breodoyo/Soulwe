@@ -519,39 +519,3 @@
 .brand:hover {
   opacity: 0.75;
 }
-
-/* ── Breadcrumbs ── */
-.breadcrumbs {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  background: var(--bg-mid);
-  border-bottom: 1px solid var(--border-soft);
-  font-size: var(--text-xs);
-}
-
-.breadcrumbHome {
-  color: var(--sun-deep);
-  font-weight: 500;
-  text-decoration: none;
-  transition: color var(--duration-fast) var(--ease);
-}
-
-.breadcrumbHome:hover { color: var(--sun); }
-
-.breadcrumbSep {
-  color: var(--subtle);
-}
-
-.breadcrumbCurrent {
-  color: var(--muted);
-  font-weight: 400;
-}
-
-/* ── Desktop breadcrumbs ── */
-@media (min-width: 768px) {
-  .breadcrumbs {
-    padding: var(--space-2) var(--space-6);
-  }
-}
