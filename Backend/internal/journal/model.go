@@ -6,8 +6,7 @@ import (
 	"time"
 )
 
-// Content/validation limits for journal entries. These are application-level
-// guards; the database schema stays unchanged.
+// Content/validation limits for journal entries; the database schema is unchanged.
 const (
 	// MaxContentLength caps content at 10,000 Unicode code points.
 	MaxContentLength = 10000
@@ -19,17 +18,14 @@ const (
 	MaxPromptLength = 200
 )
 
-// List pagination defaults, matching the documented convention (default 20,
-// maximum 50) shared with the other authenticated collections.
+// List pagination defaults, shared with the other authenticated collections.
 const (
 	DefaultListLimit = 20
 	MaxListLimit     = 50
 )
 
-// ClampLimit applies the documented page-size defaults/ceiling to a raw
-// client-supplied limit. Non-positive values fall back to the default; large
-// values are capped rather than rejected. Exported so the handler can compute
-// the next_cursor from the effective page size.
+// ClampLimit applies the page-size defaults; non-positive values fall back to the
+// default and large values are capped rather than rejected.
 func ClampLimit(limit int) int {
 	if limit <= 0 {
 		return DefaultListLimit
@@ -40,8 +36,7 @@ func ClampLimit(limit int) int {
 	return limit
 }
 
-// Sentinel errors returned by the journal domain. Handlers map these to safe
-// HTTP responses; none of them embed user content or secrets.
+// Sentinel errors returned by the journal domain; none embed user content.
 var (
 	ErrJournalEntryNotFound    = errors.New("journal entry not found")
 	ErrInvalidContent          = errors.New("invalid journal content")
@@ -51,24 +46,10 @@ var (
 	ErrAIReflectionUnavailable = errors.New("ai reflection is unavailable")
 )
 
-// JournalEntry mirrors the journal_entries table
-// (db/migrations/003_create_journal_entries.up.sql, extended by
-// 017_add_anon_ownership).
-//
-// Content shipping between the service and the wire:
-//   - Content is only populated after a server-side decryption (detail,
-//     update and reflect responses). List responses and the create response
-//     never carry it — the `omitempty` tag keeps plaintext off the wire.
-//   - ContentEnc/ContentIV are the AES-256-GCM ciphertext and its fresh
-//     nonce; they are stored in the database and never serialized.
-//   - UserID and AnonIdentityID are always derived from the authenticated
-//     identity, never from a request body, and are never serialized. Exactly
-//     one of them is set, matching the schema's one-owner CHECK. Writing a
-//     journal entry must not require registering, so both kinds of owner are
-//     first-class.
-//
-// The schema has no journal-type column: the product defines a single
-// regular journal entry. No artificial "type" vocabulary is introduced.
+// JournalEntry mirrors journal_entries. Exactly one of UserID or AnonIdentityID
+// is set (journalling must not require registering); ownership, ContentEnc and
+// ContentIV are never serialized, and Content stays empty outside detail
+// responses, so no plaintext ever reaches the wire by accident.
 type JournalEntry struct {
 	ID             string    `json:"id"`
 	UserID         string    `json:"-"`
@@ -83,9 +64,7 @@ type JournalEntry struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-// ReflectionGenerator turns journal content into a short server-side
-// reflection. It isolates the Anthropic client behind a tiny seam so the
-// service can be fully tested without a real API key.
+// ReflectionGenerator isolates the Claude client behind a seam testable without a key.
 type ReflectionGenerator interface {
 	GenerateReflection(ctx context.Context, content string, moodTags []string) (string, error)
 }

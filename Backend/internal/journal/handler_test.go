@@ -19,8 +19,7 @@ import (
 const testUserID = "11111111-1111-1111-1111-111111111111"
 const testAnonID = "33333333-3333-3333-3333-333333333333"
 
-// Writing a journal entry must not require registering, so both owner shapes are
-// exercised against every route.
+// Writing a journal entry must not require registering, so both owner shapes are tested.
 var (
 	registeredOwner = middleware.Owner{UserID: testUserID}
 	anonOwner       = middleware.Owner{AnonIdentityID: testAnonID}
@@ -28,8 +27,6 @@ var (
 
 var testTime = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
-// fakeService embeds the Service interface so handler tests only need to stub
-// the methods under test.
 type fakeService struct {
 	Service
 	createFunc  func(ctx context.Context, owner middleware.Owner, content string, moodTags []string, promptUsed *string) (*JournalEntry, error)
@@ -82,15 +79,13 @@ func (f *fakeService) Reflect(ctx context.Context, owner middleware.Owner, entry
 	return f.reflectFunc(ctx, owner, entryID)
 }
 
-// requestRouter builds a router that simulates the AuthRequired middleware by
-// stamping OwnerKey into the Gin context, then serves the request.
+// requestRouter stands in for the AuthRequired middleware by stamping OwnerKey.
 func requestRouter(t *testing.T, method, path, body string, owner middleware.Owner, handler func(c *gin.Context)) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
-		// An ill-formed owner is treated as "no identity", mirroring how the real
-		// middleware would simply not have set the key.
+		// An ill-formed owner is treated as "no identity", as the real middleware would.
 		if _, ok := middleware.IdentityFromOwner(owner); ok {
 			c.Set(middleware.OwnerKey, owner)
 		}
@@ -121,10 +116,8 @@ func requestRouter(t *testing.T, method, path, body string, owner middleware.Own
 	return rec
 }
 
-// routePattern converts a concrete request path into the Gin route pattern so
-// the :id path parameter resolves on the handler. The journal routes have at
-// most one dynamic segment (the id), optionally followed by the literal
-// "reflect".
+// routePattern turns a request path into the Gin route pattern; the routes have
+// at most one dynamic segment, optionally followed by the literal "reflect".
 func routePattern(path string) string {
 	const prefix = "/api/v1/journal"
 	if path == prefix {

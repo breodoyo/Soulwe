@@ -21,16 +21,11 @@ const (
 	testUserID     = "44444444-4444-4444-4444-444444444444"
 )
 
-// Owners of both kinds, so handler tests can prove the owner reaching the
-// service is the one the middleware resolved and that its two halves are kept
-// apart.
 var (
 	anonTestOwner = middleware.Owner{AnonIdentityID: testIdentityID}
 	userTestOwner = middleware.Owner{UserID: testUserID}
 )
 
-// fakeService embeds the Service interface so handler tests only need to stub
-// the methods under test.
 type fakeService struct {
 	Service
 	listFunc         func(ctx context.Context) ([]Circle, error)
@@ -83,9 +78,8 @@ func (f *fakeService) SendMessage(ctx context.Context, owner middleware.Owner, c
 	return f.sendMessageFunc(ctx, owner, circleID, content)
 }
 
-// newTestRouter builds a router that simulates the identity middleware by
-// stamping an Owner into the Gin context, then registers the circles handler on
-// every route. A nil owner stands for an unauthenticated request.
+// newTestRouter simulates the identity middleware by stamping an Owner into the
+// Gin context. A nil owner stands for an unauthenticated request.
 func newTestRouter(t *testing.T, h *Handler, owner *middleware.Owner) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -153,8 +147,6 @@ func message() *CircleMessage {
 }
 
 func TestHandler_UnauthenticatedRequests(t *testing.T) {
-	// No identity in the context: every route must answer 401 defensively,
-	// matching what the anonymous middleware enforces in the router.
 	router := newTestRouter(t, NewHandler(&fakeService{}), nil)
 
 	cases := []struct {

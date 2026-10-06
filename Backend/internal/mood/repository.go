@@ -11,48 +11,30 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Repository defines the persistence operations the mood domain needs.
-// Implementations only touch the database; they contain no business logic.
-//
-// Every method is scoped by Owner, which carries exactly one identity (a
-// registered user or an anonymous session). The owner predicates below are
-// written so that a row is only ever returned to the identity that owns it:
-// the non-matching owner column is compared against NULL, and because the
-// schema forbids a row with both or neither set, a caller can never widen the
-// scope by omitting its own identity.
 type Repository interface {
-	// Create inserts a check-in for the given owner and fills in the database
-	// generated fields (id, logged_at) on the passed value.
+	// Create inserts a check-in and fills in generated fields (id, logged_at) on log.
 	Create(ctx context.Context, log *MoodLog) error
 
-	// ListByOwner returns the owner's check-ins, newest first, limited to
-	// limit rows. It returns an empty slice (not nil) when they have none.
+	// ListByOwner returns the owner's check-ins newest first; empty slice, not nil.
 	ListByOwner(ctx context.Context, owner middleware.Owner, limit int) ([]MoodLog, error)
 
-	// LatestByOwner returns the owner's most recent check-in, or nil when they
-	// have none.
+	// LatestByOwner returns the owner's most recent check-in, or nil.
 	LatestByOwner(ctx context.Context, owner middleware.Owner) (*MoodLog, error)
 
-	// CountByOwner returns the total number of the owner's check-ins.
 	CountByOwner(ctx context.Context, owner middleware.Owner) (int64, error)
 }
 
-// PostgresRepository implements Repository on top of the shared pgx pool.
 type PostgresRepository struct {
 	pool *pgxpool.Pool
 }
 
-// NewPostgresRepository returns a Repository backed by the given pool.
 func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
 
 const moodColumns = "id, user_id, anon_identity_id, mood, logged_at"
 
-// ownerPredicate scopes a statement to a single identity. The NULL comparison
-// is what makes this safe: with exactly-one-owner enforced by the schema, a
-// caller holding a UserID can only match rows whose anon_identity_id IS NULL,
-// and vice versa.
+// The NULL comparison makes scoping safe given the schema's exactly-one-owner rule.
 const ownerPredicate = `user_id IS NOT DISTINCT FROM $1 AND anon_identity_id IS NOT DISTINCT FROM $2`
 
 const (
@@ -61,8 +43,7 @@ const (
 		VALUES ($1, $2, $3)
 		RETURNING ` + moodColumns
 
-	// logged_at DESC with an id tiebreaker ('id DESC') makes "newest first"
-	// deterministic even when several check-ins share the same timestamp.
+	// id DESC breaks same-timestamp ties so "newest first" is deterministic.
 	listMoodsSQL = "SELECT " + moodColumns +
 		` FROM mood_logs WHERE ` + ownerPredicate +
 		` ORDER BY logged_at DESC, id DESC LIMIT $3`
@@ -74,13 +55,8 @@ const (
 	countMoodsSQL = "SELECT COUNT(*) FROM mood_logs WHERE " + ownerPredicate
 )
 
-// ownerArgs converts an owner into the two bind parameters every statement
-// expects. The boolean reports whether the owner was well-formed; an
-// ill-formed owner must never reach the database.
 func ownerArgs(owner middleware.Owner) (any, any, bool) {
-	// IdentityFromOwner is the single place the exactly-one-owner invariant is
-	// enforced, so an ambiguous owner (both IDs set) is rejected here instead
-	// of silently resolving to whichever branch came first.
+	// IdentityFromOwner enforces exactly-one-owner, so ambiguous owners are rejected here.
 	if _, ok := middleware.IdentityFromOwner(owner); !ok {
 		return nil, nil, false
 	}
@@ -92,10 +68,7 @@ func ownerArgs(owner middleware.Owner) (any, any, bool) {
 
 // scanLog decodes one mood_logs row.
 //
-// The two owner columns are mutually exclusive, so exactly one of them is NULL.
-// pgx refuses to scan a NULL into a plain *string ("cannot scan NULL into
-// *string"), so the owner columns are decoded as **string and then flattened
-// into the model's non-pointer fields.
+// Owner columns are decoded as *string because pgx cannot scan NULL into *string.
 func scanLog(s func(dest ...any) error, log *MoodLog) error {
 	var userID, anonID *string
 	if err := s(&log.ID, &userID, &anonID, &log.Mood, &log.LoggedAt); err != nil {
@@ -105,8 +78,6 @@ func scanLog(s func(dest ...any) error, log *MoodLog) error {
 	return nil
 }
 
-// assignOwner copies the two scanned owner columns onto the model, leaving the
-// unset side as the empty string.
 func assignOwner(userID, anonID *string, dstUser, dstAnon *string) {
 	if userID != nil {
 		*dstUser = *userID
@@ -116,8 +87,6 @@ func assignOwner(userID, anonID *string, dstUser, dstAnon *string) {
 	}
 }
 
-// Create inserts a new mood check-in. The mood value is expected to be
-// pre-validated by the service layer; the repository stores it verbatim.
 func (r *PostgresRepository) Create(ctx context.Context, log *MoodLog) error {
 	userID, anonID, ok := ownerArgs(middleware.Owner{
 		UserID:         log.UserID,

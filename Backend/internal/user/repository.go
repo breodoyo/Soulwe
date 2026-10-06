@@ -17,14 +17,10 @@ type Repository interface {
 	Create(ctx context.Context, u *User) error
 	FindByEmail(ctx context.Context, email string) (*User, error)
 	FindByID(ctx context.Context, id string) (*User, error)
-	// Promote atomically creates a registered user and links the given
-	// anonymous identity to it in a single transaction. See the concrete
-	// implementation for the conflict semantics.
+	// Promote atomically creates a user and links the anonymous identity to it.
 	Promote(ctx context.Context, identityID, email, passwordHash string, displayName *string, languagePref string) (*User, error)
-	// UpdateProfile updates a user's profile fields in one statement and
-	// returns the refreshed user, or ErrUserNotFound when the id does not
-	// belong to a non-deleted user. A nil field means "leave unchanged";
-	// displayName pointing at "" means "clear the stored display name".
+	// UpdateProfile writes only the passed fields; displayName pointing at ""
+	// clears the stored display name.
 	UpdateProfile(ctx context.Context, userID string, displayName, languagePref *string) (*User, error)
 }
 
@@ -33,13 +29,12 @@ type PostgresRepository struct {
 	pool *pgxpool.Pool
 }
 
-// NewPostgresRepository returns a Repository backed by the given pool.
 func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
 
-// userColumns lists the columns every SELECT below returns. deleted_at IS NULL
-// keeps soft-deleted accounts invisible to lookups (see Docs/DATABASE.md).
+// userColumns lists the columns every SELECT below returns; deleted_at IS NULL
+// keeps soft-deleted accounts invisible to lookups.
 const userColumns = "id, email, password_hash, display_name, language_pref, is_verified, created_at, updated_at, deleted_at"
 
 const (
@@ -51,12 +46,8 @@ const (
 	findUserByEmailSQL = "SELECT " + userColumns + ` FROM users WHERE email = $1 AND deleted_at IS NULL`
 	findUserByIDSQL    = "SELECT " + userColumns + ` FROM users WHERE id = $1 AND deleted_at IS NULL`
 
-	// updateProfileSQL sets a column only when the caller asked for it
-	// ($2/$4 booleans). NULLIF turns an explicit "" display_name into NULL so
-	// clearing the name and leaving it untouched are distinguishable:
-	//   displayName = nil               → column untouched
-	//   displayName = &""               → column set to NULL
-	//   displayName = &"Bree"           → column set to "Bree"
+	// updateProfileSQL writes a column only when the caller asked for it
+	// ($2/$4 booleans), so nil leaves it untouched while &"" clears it to NULL.
 	updateProfileSQL = `
 		UPDATE users SET
 			display_name = CASE WHEN $2::boolean THEN NULLIF($3, '')::text ELSE display_name END,
@@ -66,9 +57,8 @@ const (
 		RETURNING ` + userColumns
 )
 
-// Create inserts a new user and fills in the database-generated fields
-// (id, defaults, timestamps) on the passed user. Parameterized SQL is used
-// throughout — user input is never concatenated into queries.
+// Create inserts a new user, filling in the database-generated fields.
+// User input is always bound as a query parameter, never concatenated.
 func (r *PostgresRepository) Create(ctx context.Context, u *User) error {
 	err := r.pool.QueryRow(ctx, createUserSQL,
 		u.Email, u.PasswordHash, u.DisplayName, u.LanguagePref,
@@ -118,19 +108,11 @@ func (r *PostgresRepository) FindByID(ctx context.Context, id string) (*User, er
 	return u, nil
 }
 
-// Promote creates a registered user AND links the given anonymous identity to
-// it in one PostgreSQL transaction so the two writes can never be split: the
-// forbidden half-states (user created but identity unlinked, identity linked
-// without a surviving user record) are impossible.
-//
-// The anon_identities row is locked FOR UPDATE for the duration of the
-// transaction, so two concurrent promotion attempts against the same identity
-// serialize: the loser observes user_id already set and rolls back with
-// ErrIdentityAlreadyPromoted rather than creating a second, orphaned user.
-//
-// Errors:
-//   - ErrIdentityAlreadyPromoted — the identity is already linked to an account
-//   - ErrEmailTaken             — the email is already registered
+// Promote creates a user AND links the anonymous identity in one transaction,
+// so neither half-state (user without a link, link without a user) can exist.
+// The identity row is locked FOR UPDATE, so concurrent attempts serialize and
+// the loser gets ErrIdentityAlreadyPromoted instead of an orphaned user.
+// Returns ErrEmailTaken when the email is already registered.
 func (r *PostgresRepository) Promote(ctx context.Context, identityID, email, passwordHash string, displayName *string, languagePref string) (*User, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -138,9 +120,7 @@ func (r *PostgresRepository) Promote(ctx context.Context, identityID, email, pas
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// Lock the identity row and read its current binding in one statement.
-	// Waiting for a concurrent promote's lock is what makes the same-identity
-	// race resolve to exactly one winner instead of two created users.
+	// Blocking on this lock is what makes a same-identity race yield one winner.
 	var linkedUserID *string
 	if err := tx.QueryRow(ctx,
 		"SELECT user_id FROM anon_identities WHERE id = $1 FOR UPDATE", identityID,
@@ -182,10 +162,9 @@ func (r *PostgresRepository) Promote(ctx context.Context, identityID, email, pas
 	return u, nil
 }
 
-// UpdateProfile persists profile changes in one statement. Only the fields the
-// caller explicitly passes are written, so a PATCH that omits a field can never
-// clobber another client's concurrent update to that field. Returns the
-// refreshed user or ErrUserNotFound.
+// UpdateProfile writes only the fields the caller passed, so a PATCH that
+// omits one cannot clobber a concurrent update to it. Returns the refreshed
+// user or ErrUserNotFound.
 func (r *PostgresRepository) UpdateProfile(ctx context.Context, userID string, displayName, languagePref *string) (*User, error) {
 	u := &User{}
 	err := r.pool.QueryRow(ctx, updateProfileSQL,
@@ -206,8 +185,7 @@ func (r *PostgresRepository) UpdateProfile(ctx context.Context, userID string, d
 }
 
 // nullableString returns the value behind p, or "" when p is nil, for the
-// positional parameters of updateProfileSQL (the boolean guards already encode
-// whether the field is being set).
+// positional parameters of updateProfileSQL.
 func nullableString(p *string) string {
 	if p == nil {
 		return ""

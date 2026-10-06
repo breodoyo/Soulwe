@@ -11,25 +11,21 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Handler owns the HTTP surface of the mood domain. It validates input, calls
-// the service layer, and writes responses — never the database.
+// Handler owns the HTTP surface of the mood domain.
 type Handler struct {
 	svc Service
 }
 
-// NewHandler returns a Handler bound to the given service.
 func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// createRequest is the body of POST /api/v1/moods. Ownership is never taken
-// from the body: it comes from the authenticated identity context.
+// Ownership comes from the identity context, never from the body.
 type createRequest struct {
 	Mood string `json:"mood"`
 }
 
-// Create handles POST /api/v1/moods. It records a mood check-in for the
-// authenticated owner, which may be a registered user or an anonymous session.
+// Create handles POST /api/v1/moods.
 func (h *Handler) Create(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -58,10 +54,7 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 }
 
-// List handles GET /api/v1/moods. It returns the authenticated owner's mood
-// history, newest first, honoring an optional ?limit= query parameter. The
-// owner always comes from the identity context, so this can never list another
-// person's check-ins.
+// List handles GET /api/v1/moods for the authenticated owner, newest first.
 func (h *Handler) List(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -86,8 +79,6 @@ func (h *Handler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"moods": logs})
 }
 
-// parseLimit reads the optional ?limit query parameter. Absent or empty means
-// "use the service default"; a non-integer value is a client error.
 func parseLimit(c *gin.Context) (int, error) {
 	raw := c.Query("limit")
 	if raw == "" {
@@ -103,8 +94,6 @@ func parseLimit(c *gin.Context) (int, error) {
 	return limit, nil
 }
 
-// respondError writes the documented error envelope:
-// {"error": {"code": "...", "message": "...", "field": "..."}}.
 func respondError(c *gin.Context, status int, code, message, field string) {
 	body := gin.H{
 		"error": gin.H{

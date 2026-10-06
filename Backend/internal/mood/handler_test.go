@@ -19,8 +19,6 @@ import (
 const testUserID = "11111111-1111-1111-1111-111111111111"
 const testAnonID = "33333333-3333-3333-3333-333333333333"
 
-// fakeService embeds the Service interface so handler tests only need to
-// stub the methods under test.
 type fakeService struct {
 	Service
 	createFunc func(ctx context.Context, owner middleware.Owner, mood string) (*MoodLog, error)
@@ -41,14 +39,12 @@ func (f *fakeService) List(ctx context.Context, owner middleware.Owner, limit in
 	return f.listFunc(ctx, owner, limit)
 }
 
-// requestRouter builds a router that simulates the IdentityRequired middleware
-// by stamping OwnerKey into the Gin context, then serves the request.
+// requestRouter simulates IdentityRequired by stamping OwnerKey.
 func requestRouter(t *testing.T, method, path, body string, owner middleware.Owner, handler func(c *gin.Context)) *httptest.ResponseRecorder {
 	t.Helper()
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
-		// An ill-formed owner is treated as "no identity", mirroring how the
-		// real middleware would simply not have set the key.
+		// An ill-formed owner counts as "no identity", like the real middleware.
 		if _, ok := middleware.IdentityFromOwner(owner); ok {
 			c.Set(middleware.OwnerKey, owner)
 		}

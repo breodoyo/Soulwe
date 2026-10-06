@@ -15,9 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// fakeService embeds the Service interface so the handler tests only need to
-// stub the methods under test; the remaining methods fall back to their
-// zero-value result.
+// fakeService embeds Service so tests only stub the methods under test.
 type fakeService struct {
 	Service
 	registerFunc      func(ctx context.Context, email, password string) (*User, error)
@@ -308,7 +306,6 @@ func TestHandlerMeRoute(t *testing.T) {
 	t.Run("returns the authenticated user id", func(t *testing.T) {
 		handler := NewHandler(nil)
 		router := gin.New()
-		// Simulate what the auth middleware does: store the user id in context.
 		router.Use(func(c *gin.Context) {
 			c.Set(middleware.UserIDKey, "11111111-1111-1111-1111-111111111111")
 			c.Next()
@@ -352,9 +349,8 @@ func TestHandlerMeRoute(t *testing.T) {
 	})
 }
 
-// performPromote runs the promote handler with the anonymous identity stored in
-// the request context, exactly as the anonymous auth middleware would. Passing
-// an empty identityID simulates a request without anonymous authentication.
+// performPromote seeds the identity into the context as the middleware would;
+// an empty identityID simulates an unauthenticated request.
 func performPromote(t *testing.T, svc Service, body, identityID string) *httptest.ResponseRecorder {
 	t.Helper()
 	handler := NewHandler(svc)
@@ -557,8 +553,7 @@ func TestHandlerPromoteRoute(t *testing.T) {
 
 func stringPtr(s string) *string { return &s }
 
-// profileUser is the safe profile the fake service returns for the profile
-// handler tests, with a password hash populated to assert it is never leaked.
+// profileUser carries a password hash so tests can assert it is never leaked.
 var profileUser = &User{
 	ID:           "11111111-1111-1111-1111-111111111111",
 	Email:        "bree@example.com",
@@ -568,8 +563,7 @@ var profileUser = &User{
 	PasswordHash: "$2a$12$abcdefghijklmnopqrstuv",
 }
 
-// performWithUserID builds a router that simulates the AuthRequired middleware
-// by stamping UserIDKey into the Gin context, then serves the request.
+// performWithUserID simulates AuthRequired by stamping UserIDKey into the context.
 func performWithUserID(t *testing.T, method, path, body, userID string, handler func(c *gin.Context)) *httptest.ResponseRecorder {
 	t.Helper()
 	router := gin.New()

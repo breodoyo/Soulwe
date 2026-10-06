@@ -6,41 +6,33 @@ import (
 )
 
 const (
-	// MinPasswordLength is the minimum accepted raw password length.
-	// Mirrors the 12-character minimum documented in Docs/API.md.
+	// MinPasswordLength is the minimum accepted raw password length (Docs/API.md).
 	MinPasswordLength = 12
 
 	// MaxPasswordLength caps raw passwords at bcrypt's 72-byte input limit.
-	// Longer inputs are rejected rather than silently truncated.
 	MaxPasswordLength = 72
 
-	// MaxDisplayNameLength caps the profile display name at a reasonable
-	// displayable length. Blank names are allowed (stored as NULL).
+	// MaxDisplayNameLength caps the profile display name length.
 	MaxDisplayNameLength = 100
 )
 
-// Sentinel errors returned by the users domain. Handlers map these to
-// safe, client-facing HTTP responses; they never contain user input.
+// Sentinel errors of the users domain, mapped by handlers to safe HTTP responses.
 var (
 	ErrEmailTaken      = errors.New("email already registered")
 	ErrInvalidEmail    = errors.New("invalid email address")
 	ErrInvalidPassword = errors.New("invalid password")
 	ErrUserNotFound    = errors.New("user not found")
 	ErrBadCredentials  = errors.New("invalid email or password")
-	// ErrIdentityAlreadyPromoted reports that an anonymous identity has already
-	// been linked to a registered account (anon_identities.user_id is set).
+	// ErrIdentityAlreadyPromoted reports an identity already linked to an account.
 	ErrIdentityAlreadyPromoted = errors.New("anonymous identity already promoted")
-	// ErrInvalidDisplayName reports a profile display name outside the
-	// supported length, e.g. longer than MaxDisplayNameLength.
+	// ErrInvalidDisplayName reports a name longer than MaxDisplayNameLength.
 	ErrInvalidDisplayName = errors.New("invalid display name")
-	// ErrInvalidLanguagePref reports a language_pref outside the supported set
-	// ('en', 'sw', 'luo', 'kik') documented in Docs/DATABASE.md.
+	// ErrInvalidLanguagePref reports a language_pref outside the supported set.
 	ErrInvalidLanguagePref = errors.New("invalid language preference")
 )
 
-// validLanguagePrefs is the set of language codes the product supports. The
-// schema stores the plain TEXT value; validation happens at the application
-// boundary so the DB column stays free-form.
+// validLanguagePrefs holds the supported codes; the schema stores free-form
+// TEXT, so validation lives here at the application boundary.
 var validLanguagePrefs = map[string]bool{
 	"en":  true,
 	"sw":  true,
@@ -48,8 +40,7 @@ var validLanguagePrefs = map[string]bool{
 	"kik": true,
 }
 
-// User mirrors the `users` table from db/migrations/001_create_users.up.sql.
-// PasswordHash is never serialized to JSON or returned to API clients.
+// User mirrors the users table; PasswordHash is never serialized to JSON.
 type User struct {
 	ID           string     `json:"id"`
 	Email        string     `json:"email"`

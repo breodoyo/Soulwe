@@ -12,39 +12,33 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Handler owns the HTTP surface of the journal domain. It validates input,
-// calls the service layer, and writes responses — never the database, and
-// never the ciphertext. Ownership always comes from the authenticated JWT;
-// the user ID is never accepted from a request body or path.
+// Handler is the journal HTTP surface: it validates input and delegates to the
+// service. Ownership always comes from the authenticated JWT, never a request.
 type Handler struct {
 	svc Service
 }
 
-// NewHandler returns a Handler bound to the given service.
 func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
 // createRequest is the body of POST /api/v1/journal. There is deliberately no
-// "type" field: the schema has no journal-type column, so the product defines
-// a single regular journal entry and no types are invented. Unknown fields
-// (like a stray "type") are ignored by JSON binding.
+// "type" field: the schema has no journal-type column, so unknown fields are
+// ignored by JSON binding rather than inventing a type vocabulary.
 type createRequest struct {
 	Content    string   `json:"content"`
 	MoodTags   []string `json:"mood_tags"`
 	PromptUsed *string  `json:"prompt_used"`
 }
 
-// updateRequest is the body of PATCH /api/v1/journal/:id. Pointer fields
-// distinguish "omitted" from "explicit value"; prompt_used follows the
-// profile convention where "" clears the stored value.
+// updateRequest is the body of PATCH /api/v1/journal/:id. Pointer fields mark
+// "omitted"; prompt_used follows the profile convention where "" clears it.
 type updateRequest struct {
 	Content    *string   `json:"content"`
 	MoodTags   *[]string `json:"mood_tags"`
 	PromptUsed *string   `json:"prompt_used"`
 }
 
-// Create handles POST /api/v1/journal.
 func (h *Handler) Create(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -79,9 +73,7 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 }
 
-// List handles GET /api/v1/journal. It returns the authenticated owner's
-// entries newest first, honoring optional ?limit and ?before (cursor) query
-// parameters. Content is never returned in list responses.
+// List handles GET /api/v1/journal, honouring the ?limit and ?before parameters.
 func (h *Handler) List(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -112,8 +104,7 @@ func (h *Handler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"entries": entries, "next_cursor": nextCursor(entries, limit)})
 }
 
-// Get handles GET /api/v1/journal/:id. The content is decrypted server-side
-// and returned only to the entry's owner.
+// Get handles GET /api/v1/journal/:id, returning the owner's decrypted content.
 func (h *Handler) Get(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -134,8 +125,7 @@ func (h *Handler) Get(c *gin.Context) {
 	}
 }
 
-// Update handles PATCH /api/v1/journal/:id. Only the authenticated owner can
-// edit an entry; content edits clear any stale AI reflection.
+// Update handles PATCH /api/v1/journal/:id; content edits clear a stale reflection.
 func (h *Handler) Update(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -179,8 +169,7 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 }
 
-// Delete handles DELETE /api/v1/journal/:id. Delete is immediate and
-// irreversible.
+// Delete handles DELETE /api/v1/journal/:id; deletion is immediate and irreversible.
 func (h *Handler) Delete(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -201,8 +190,7 @@ func (h *Handler) Delete(c *gin.Context) {
 	}
 }
 
-// Reflect handles POST /api/v1/journal/:id/reflect. It generates (and stores)
-// a fresh AI reflection for the owner's entry.
+// Reflect handles POST /api/v1/journal/:id/reflect, generating and storing a reflection.
 func (h *Handler) Reflect(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -215,8 +203,7 @@ func (h *Handler) Reflect(c *gin.Context) {
 	case errors.Is(err, ErrJournalEntryNotFound):
 		respondError(c, http.StatusNotFound, "NOT_FOUND", "journal entry not found", "")
 	case errors.Is(err, ErrAIReflectionUnavailable):
-		// Safe by design: reveals only that reflections are unavailable, never
-		// why (no key material, no upstream details).
+		// Safe by design: never reveals why, only that it is unavailable.
 		respondError(c, http.StatusServiceUnavailable, "AI_REFLECTION_UNAVAILABLE",
 			"AI reflection is temporarily unavailable", "")
 	case err != nil:
@@ -228,8 +215,7 @@ func (h *Handler) Reflect(c *gin.Context) {
 	}
 }
 
-// nextCursor computes the keyset pagination cursor for the next page. It is
-// the last entry's created_at when the page is full, otherwise null.
+// nextCursor is the last entry's created_at, or nil when the page is not full.
 func nextCursor(entries []JournalEntry, limit int) *time.Time {
 	if len(entries) == 0 {
 		return nil
@@ -241,8 +227,7 @@ func nextCursor(entries []JournalEntry, limit int) *time.Time {
 	return &last
 }
 
-// parseLimit reads the optional ?limit query parameter. Absent or empty means
-// "use the service default"; a non-integer value is a client error.
+// parseLimit reads ?limit; empty means "use the service default".
 func parseLimit(c *gin.Context) (int, error) {
 	raw := c.Query("limit")
 	if raw == "" {
@@ -258,7 +243,6 @@ func parseLimit(c *gin.Context) (int, error) {
 	return limit, nil
 }
 
-// parseBefore reads the optional ?before cursor (ISO 8601 timestamp).
 func parseBefore(c *gin.Context) (*time.Time, error) {
 	raw := c.Query("before")
 	if raw == "" {
@@ -271,8 +255,7 @@ func parseBefore(c *gin.Context) (*time.Time, error) {
 	return &before, nil
 }
 
-// respondError writes the documented error envelope:
-// {"error": {"code": "...", "message": "...", "field": "..."}}.
+// respondError writes {"error": {"code", "message", "field"}}.
 func respondError(c *gin.Context, status int, code, message, field string) {
 	body := gin.H{
 		"error": gin.H{

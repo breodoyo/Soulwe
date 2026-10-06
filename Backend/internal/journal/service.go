@@ -13,51 +13,43 @@ import (
 	"Backend/internal/middleware"
 )
 
-// Service is the journal business-logic boundary. It owns the input
-// validation, the AES-GCM contract (content encrypted before it ever reaches
-// the repository, decrypted only to return the authenticated owner's own
-// entry), and the server-side AI reflection. It never constructs SQL and it
+// Service is the journal business-logic boundary: it owns input validation, the
+// AES-GCM contract, and the server-side AI reflection. It never builds SQL and
 // never logs journal content.
-//
-// Every method takes an Owner, which is either a registered user or an
-// anonymous session: writing a journal entry is a normal action, so it must
-// not require registering first.
 type Service interface {
-	// Create validates input, encrypts content, stores the entry, and — when
-	// a reflection generator is configured — attempts a reflection. A failing
-	// or missing generator never fails the create: the entry is saved with
-	// ai_reflection = nil, exactly as documented. The returned entry never
-	// carries plaintext content on the wire.
+	// Create validates input, encrypts content, stores the entry, and attempts a
+	// reflection. A failing or missing generator never fails the create: the entry
+	// is saved with ai_reflection = nil. The returned entry carries no plaintext.
 	Create(ctx context.Context, owner middleware.Owner, content string, moodTags []string, promptUsed *string) (*JournalEntry, error)
 
-	// List returns the owner's entries newest first, clamped to a sane page
-	// size, optionally resuming from a created_at cursor (exclusive).
+	// List returns the owner's entries newest first, clamped to a sane page size,
+	// optionally resuming from an exclusive created_at cursor.
 	List(ctx context.Context, owner middleware.Owner, limit int, before *time.Time) ([]JournalEntry, error)
 
 	// Get returns the owner's entry with its content decrypted server-side, or
 	// ErrJournalEntryNotFound.
 	Get(ctx context.Context, owner middleware.Owner, entryID string) (*JournalEntry, error)
 
-	// Update applies the provided fields to the owner's entry. Content changes
-	// are re-encrypted and invalidate any stored AI reflection; metadata-only
-	// changes preserve it. Returns ErrNothingToUpdate when no field was
-	// provided and ErrJournalEntryNotFound when the entry is not the owner's.
+	// Update applies the provided fields to the owner's entry. Content changes are
+	// re-encrypted and invalidate any stored AI reflection; metadata-only changes
+	// preserve it. Returns ErrNothingToUpdate when no field was provided and
+	// ErrJournalEntryNotFound when the entry is not the owner's.
 	Update(ctx context.Context, owner middleware.Owner, entryID string, changes Update) (*JournalEntry, error)
 
-	// Delete permanently removes the owner's entry. Returns
+	// Delete permanently removes the owner's entry, or returns
 	// ErrJournalEntryNotFound when the entry is not the owner's.
 	Delete(ctx context.Context, owner middleware.Owner, entryID string) error
 
 	// Reflect decrypts the owner's entry, generates a fresh AI reflection and
 	// persists it. Returns ErrAIReflectionUnavailable when no generator is
-	// configured or Claude fails; ErrJournalEntryNotFound when the entry is
-	// not the owner's.
+	// configured or Claude fails; ErrJournalEntryNotFound when the entry is not
+	// the owner's.
 	Reflect(ctx context.Context, owner middleware.Owner, entryID string) (*JournalEntry, error)
 }
 
-// Update carries the optional fields of PATCH /journal/:id. A nil field
-// leaves that attribute untouched. PromptUsed follows the profile convention:
-// nil keeps the current value, "" clears it to null.
+// Update carries the optional fields of PATCH /journal/:id. A nil field leaves
+// that attribute untouched; PromptUsed follows the profile convention where ""
+// clears it to null.
 type Update struct {
 	Content    *string
 	MoodTags   *[]string
@@ -70,27 +62,20 @@ type service struct {
 	reflection ReflectionGenerator
 }
 
-// NewService wires the journal service to a repository, the AES-GCM codec and
-// an optional reflection generator. The generator may be nil when
-// ANTHROPIC_API_KEY is unset.
+// NewService wires the service; reflection may be nil when ANTHROPIC_API_KEY is unset.
 func NewService(entries Repository, codec *cipher.AESGCM, reflection ReflectionGenerator) *service {
 	return &service{entries: entries, codec: codec, reflection: reflection}
 }
 
 // encryptionAAD returns the AES-GCM associated data for an owner's entries.
 //
-// For a registered user this is the bare user ID, which is what every entry
-// encrypted before anonymous support was already written with — changing it
-// would make existing journals undecryptable, so the registered form is fixed.
-//
-// An anonymous session is namespaced ("anon:" prefix) so its entries can never
-// share an AAD with a user whose ID happens to be the same UUID. Both user IDs
-// and anonymous identity IDs are server-generated UUIDs, so the collision is
-// improbable, but the prefix costs nothing and removes the ambiguity.
+// A registered user's AAD is the bare user ID, fixed because entries encrypted
+// before anonymous support was added already use it; changing it would make
+// existing journals undecryptable. An anonymous session is namespaced with an
+// "anon:" prefix so it can never share an AAD with a user whose ID happens to be
+// the same UUID.
 func encryptionAAD(owner middleware.Owner) ([]byte, error) {
-	// IdentityFromOwner refuses an owner with both or neither identity set, so
-	// an ambiguous owner can never pick the AAD of one identity and then be
-	// written as the other.
+	// An ambiguous owner must never pick one identity's AAD and be written as the other.
 	if _, ok := middleware.IdentityFromOwner(owner); !ok {
 		return nil, errors.New("journal: no single owner")
 	}
@@ -100,8 +85,6 @@ func encryptionAAD(owner middleware.Owner) ([]byte, error) {
 	return []byte("anon:" + owner.AnonIdentityID), nil
 }
 
-// applyOwner stamps the owner columns onto an entry being written. Exactly one
-// is set, matching the schema's one-owner CHECK.
 func applyOwner(entry *JournalEntry, owner middleware.Owner) {
 	entry.UserID = ""
 	entry.AnonIdentityID = ""
@@ -146,15 +129,13 @@ func (s *service) Create(ctx context.Context, owner middleware.Owner, content st
 	}
 	applyOwner(entry, owner)
 
-	// Reflection is best-effort on create: a missing or failing Claude call
-	// must not lose the journal entry. ai_reflection stays null.
+	// Reflection is best-effort: a missing or failing call must not lose the entry.
 	entry.AIReflection = s.generateReflection(ctx, content, tags)
 
 	if err := s.entries.Create(ctx, entry); err != nil {
 		return nil, err
 	}
-	// The create response carries no plaintext, ciphertext, or ownership:
-	// the row is already persisted, so drop the wire-sensitive fields.
+	// The row is persisted, so drop the wire-sensitive fields from the response.
 	entry.ContentEnc = nil
 	entry.ContentIV = nil
 	entry.UserID = ""
@@ -162,8 +143,7 @@ func (s *service) Create(ctx context.Context, owner middleware.Owner, content st
 	return entry, nil
 }
 
-// generateReflection invokes the configured generator, never letting a failure
-// escape. Journal content is intentionally not included in logs.
+// generateReflection never lets a failure escape; journal content is not logged.
 func (s *service) generateReflection(ctx context.Context, content string, tags []string) *string {
 	if s.reflection == nil {
 		return nil
@@ -185,9 +165,7 @@ func (s *service) List(ctx context.Context, owner middleware.Owner, limit int, b
 	if err != nil {
 		return nil, err
 	}
-	// Content stays empty in list responses; only the single-entry endpoints
-	// decrypt and return it. Ciphertext and the ownership fields are also
-	// stripped at the boundary so the wire can never accidentally include them.
+	// Strip ciphertext and ownership here too, so the wire can never carry them.
 	cleaned := make([]JournalEntry, 0, len(entries))
 	for _, e := range entries {
 		e.UserID = ""
@@ -232,8 +210,7 @@ func (s *service) Update(ctx context.Context, owner middleware.Owner, entryID st
 		if err != nil {
 			return nil, err
 		}
-		// Re-encrypt only when the text actually changed, so editing without
-		// touching the words preserves the stored AI reflection.
+		// Re-encrypt only when the text changed, so an unchanged edit keeps the reflection.
 		plain, err := s.codec.Decrypt(existing.ContentEnc, existing.ContentIV, aad)
 		if err != nil {
 			return nil, fmt.Errorf("journal decrypt: %w", err)
@@ -307,9 +284,8 @@ func (s *service) Reflect(ctx context.Context, owner middleware.Owner, entryID s
 	return entry, nil
 }
 
-// decrypt replaces the entry's ciphertext with the plaintext content, scoped
-// to the owner's authenticated-data tag. Because the AAD is owner-specific, a
-// successful decrypt is itself proof that the caller owns the row.
+// decrypt replaces the ciphertext with plaintext. Since the AAD is owner-specific,
+// a successful decrypt is itself proof the caller owns the row.
 func (s *service) decrypt(entry *JournalEntry, owner middleware.Owner) error {
 	aad, err := encryptionAAD(owner)
 	if err != nil {
@@ -371,7 +347,6 @@ func normalizePrompt(prompt *string) (*string, error) {
 	return &promptText, nil
 }
 
-// wordCount counts space-separated tokens in the trimmed content.
 func wordCount(content string) int {
 	return len(strings.Fields(content))
 }

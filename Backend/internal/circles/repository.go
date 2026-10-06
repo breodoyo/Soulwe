@@ -18,41 +18,36 @@ import (
 // Implementations only touch the database; they contain no business logic.
 //
 // Every owner argument is a middleware.Owner resolved from the request's
-// credential: either a registered user ID or an anonymous-identity UUID. Owner
-// IDs never arrive from a request body or path, and raw tokens and device UUIDs
-// are never accepted.
+// credential: a registered user ID or an anonymous-identity UUID. Owner IDs
+// never arrive from a request body or path.
 type Repository interface {
-	// ListCircles returns all active circles, newest irrelevant, ordered by
-	// name, each with its live member count. It returns an empty slice (not
-	// nil) when there are none. Membership is a per-caller property and is
-	// filled in by the service, so this needs no owner.
+	// ListCircles returns all active circles ordered by name, each with its
+	// live member count. Membership is a per-caller property filled in by the
+	// service, so this needs no owner.
 	ListCircles(ctx context.Context) ([]Circle, error)
 
 	// GetCircle returns one active circle with its member count, or
 	// ErrCircleNotFound.
 	GetCircle(ctx context.Context, circleID string) (*Circle, error)
 
-	// IsMember reports whether the owner has joined the circle. A missing
-	// circle reports false (existence is checked separately by the service).
+	// IsMember reports whether the owner has joined; a missing circle reports
+	// false, since existence is checked separately by the service.
 	IsMember(ctx context.Context, circleID string, owner middleware.Owner) (bool, error)
 
-	// AddMember records the owner's membership. Returns ErrAlreadyMember on
-	// a duplicate (circle_id, owner) row, for either kind of owner.
+	// AddMember records the owner's membership, or ErrAlreadyMember on a
+	// duplicate (circle_id, owner) row for either kind of owner.
 	AddMember(ctx context.Context, circleID string, owner middleware.Owner) error
 
-	// RemoveMember deletes the owner's membership. Deleting a membership
-	// that does not exist is a no-op success, keeping leave idempotent.
+	// RemoveMember deletes the owner's membership; a membership that does not
+	// exist is a no-op success, keeping leave idempotent.
 	RemoveMember(ctx context.Context, circleID string, owner middleware.Owner) error
 
 	// ListMessages returns the circle's messages newest first, limited to
-	// limit rows, optionally resuming from a created_at cursor (exclusive).
-	// It returns an empty slice (not nil) when the circle has none. Messages
-	// are readable by any member regardless of who wrote them, so the
-	// owner's only role is the membership gate the service applies.
+	// limit rows, resuming from an exclusive created_at cursor when given.
 	ListMessages(ctx context.Context, circleID string, limit int, before *time.Time) ([]CircleMessage, error)
 
-	// CreateMessage stores a message from the owner in the circle and
-	// returns it with the author's display name resolved server-side.
+	// CreateMessage stores a message from the owner and returns it with the
+	// author's display name resolved server-side.
 	CreateMessage(ctx context.Context, circleID string, owner middleware.Owner, content string) (*CircleMessage, error)
 }
 
@@ -69,17 +64,17 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 const circleColumns = "c.id, c.slug, c.name, c.description, c.icon, COUNT(cm.id)::int AS member_count"
 
 // sqlDefaultAuthorName is the last-resort author label, quoted for inlining
-// into the COALESCE that resolves a message author. It reuses the exported
-// DefaultAuthorName so the SQL and the Go-side fallback cannot drift.
+// into the COALESCE, and reuses the exported DefaultAuthorName so the SQL and
+// Go-side fallbacks cannot drift.
 const sqlDefaultAuthorName = "'" + DefaultAuthorName + "'"
 
 // ownerArgs converts an owner into the two bind parameters every owner-scoped
 // statement expects. The boolean reports whether the owner was well-formed; an
 // ill-formed owner must never reach the database.
 func ownerArgs(owner middleware.Owner) (any, any, bool) {
-	// IdentityFromOwner is the single place the exactly-one-owner invariant is
-	// enforced, so an ambiguous owner (both IDs set) is rejected here rather
-	// than silently resolving to whichever branch came first.
+	// IdentityFromOwner is where the exactly-one-owner invariant is enforced,
+	// so an ambiguous owner (both IDs set) is rejected here rather than
+	// silently resolving to whichever branch came first.
 	if _, ok := middleware.IdentityFromOwner(owner); !ok {
 		return nil, nil, false
 	}
@@ -103,10 +98,10 @@ const (
 		WHERE c.id = $1 AND c.is_active = TRUE
 		GROUP BY c.id, c.slug, c.name, c.description, c.icon`
 
-	// A caller holding a UserID can only match rows whose anon_identity_id IS
-	// NULL, and vice versa. The schema's one-owner CHECK means exactly one
-	// column is set on every row, so an owner cannot widen its own scope by
-	// omitting an identity — the same predicate journal uses.
+	// The schema's one-owner CHECK means exactly one column is set per row, so
+	// a caller holding a UserID can only match rows whose anon_identity_id IS
+	// NULL, and vice versa: an owner cannot widen its scope by omitting an
+	// identity. Same predicate journal uses.
 	ownerPredicate = `user_id IS NOT DISTINCT FROM $2 AND anon_identity_id IS NOT DISTINCT FROM $3`
 
 	isMemberSQL = `SELECT EXISTS (
@@ -121,12 +116,10 @@ const (
 	// The before cursor is an exclusive bound on created_at; ORDER BY includes
 	// id as a deterministic tiebreaker for identical timestamps.
 	//
-	// The author name is resolved here rather than in Go so a message never has
-	// to make a second round trip: a registered member posts under their own
-	// display_name, an anonymous session under its server-generated pseudonym.
-	// The one-owner CHECK guarantees at most one join matches, so COALESCE can
-	// never pick a name from the wrong side. Neither owner ID is selected, so
-	// a registered member's user_id cannot leak onto the wire.
+	// The author name is resolved here rather than in Go to avoid a second
+	// round trip. The one-owner CHECK guarantees at most one join matches, so
+	// COALESCE can never pick a name from the wrong side, and no owner ID is
+	// selected, so user_id cannot leak onto the wire.
 	messageSelect = `SELECT m.id,
 		COALESCE(NULLIF(BTRIM(u.display_name), ''), a.anon_name, ` + sqlDefaultAuthorName + `),
 		m.anon_identity_id IS NOT NULL,
@@ -215,9 +208,8 @@ func (r *PostgresRepository) AddMember(ctx context.Context, circleID string, own
 	err := r.pool.QueryRow(ctx, addMemberSQL, circleID, userID, anonID).Scan(&id)
 	if err != nil {
 		var pgErr *pgconn.PgError
-		// Both owner kinds are covered by a partial unique index, so a repeat
-		// join surfaces as the same violation whether the caller is registered
-		// or anonymous.
+		// A partial unique index covers both owner kinds, so a repeat join
+		// violates it whether the caller is registered or anonymous.
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return ErrAlreadyMember
 		}
@@ -278,15 +270,14 @@ func (r *PostgresRepository) CreateMessage(ctx context.Context, circleID string,
 	return message, nil
 }
 
-// scanCircle shares one column decoder between list/get. IsMember is a
-// business property and is never sourced from SQL.
+// scanCircle shares one column decoder between list/get. IsMember is never
+// sourced from SQL: it is a business property the service resolves.
 func scanCircle(s func(dest ...any) error, c *Circle) error {
 	return s(&c.ID, &c.Slug, &c.Name, &c.Description, &c.Icon, &c.MemberCount)
 }
 
-// scanMessage shares one column decoder between list/create. The author name
-// and anonymity flag are resolved in SQL; no owner ID is ever scanned into the
-// wire struct, which is what keeps a registered member's user_id off the API.
+// scanMessage shares one column decoder between list/create. No owner ID is
+// ever scanned into the wire struct, which keeps a member's user_id off the API.
 func scanMessage(s func(dest ...any) error, m *CircleMessage) error {
 	return s(&m.ID, &m.AuthorName, &m.IsAnonymous, &m.Content, &m.ReactionCounts, &m.CreatedAt)
 }

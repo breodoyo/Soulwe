@@ -18,9 +18,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TestPostgresRepositoryIntegration exercises the real repository against a
-// running PostgreSQL. It is excluded from the default build via the
-// "integration" tag and skipped when DATABASE_URL is not set.
+// TestPostgresRepositoryIntegration needs a running PostgreSQL (DATABASE_URL)
+// and is excluded from the default build by the "integration" tag.
 func TestPostgresRepositoryIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -120,9 +119,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	})
 }
 
-// TestServiceLoginIntegration exercises the full login flow against a real
-// database: Register persists the user, Login verifies the credentials and
-// returns a signed access token whose claims point at that user.
+// TestServiceLoginIntegration exercises the full login flow against a real database.
 func TestServiceLoginIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -201,10 +198,9 @@ func TestServiceLoginIntegration(t *testing.T) {
 	})
 }
 
-// TestPromoteIntegration exercises the anonymous -> registered promotion
-// against a real PostgreSQL. It starts from a token-bound anonymous identity
-// (no user_id) and verifies the promotion is atomic, idempotence once linked,
-// safe under duplicate emails, and race-free under concurrent attempts.
+// TestPromoteIntegration exercises anonymous -> registered promotion against a
+// real PostgreSQL: atomicity, idempotence once linked, duplicate emails, and
+// concurrent attempts.
 func TestPromoteIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -238,8 +234,8 @@ func TestPromoteIntegration(t *testing.T) {
 
 	originalCreatedAt := identity.CreatedAt
 
-	// Track every row created so cleanup is deterministic even when a subtest
-	// fails early. Deleting the promoted user cascades its linked identity.
+	// Track every created row so cleanup stays deterministic even if a subtest
+	// fails early.
 	var createdEmails []string
 	var createdIdentities []string
 	createdEmails = append(createdEmails, email)
@@ -280,8 +276,7 @@ func TestPromoteIntegration(t *testing.T) {
 			t.Error("expected is_verified to default to false")
 		}
 
-		// The anonymous identity must still exist, still carry its own data,
-		// and now point at the promoted user (user_id populated).
+		// The identity must keep its own data and now point at the promoted user.
 		var linkedUserID *string
 		var storedCreatedAt time.Time
 		var storedName string
@@ -311,7 +306,6 @@ func TestPromoteIntegration(t *testing.T) {
 			t.Fatalf("expected ErrIdentityAlreadyPromoted, got %v", err)
 		}
 
-		// No second user may be created for the rejected attempt.
 		var count int
 		if err := pool.QueryRow(ctx,
 			"SELECT COUNT(*) FROM users WHERE email = $1", otherEmail).Scan(&count); err != nil {
@@ -337,7 +331,6 @@ func TestPromoteIntegration(t *testing.T) {
 			t.Fatalf("expected ErrEmailTaken, got %v", err)
 		}
 
-		// The loser identity must remain unlinked (no partial state).
 		var linkedUserID *string
 		if err := pool.QueryRow(ctx,
 			"SELECT user_id FROM anon_identities WHERE id = $1", second.ID).Scan(&linkedUserID); err != nil {
@@ -391,7 +384,6 @@ func TestPromoteIntegration(t *testing.T) {
 			t.Errorf("expected exactly one winning promote, got %d", winners)
 		}
 
-		// Exactly one user may exist across all the race emails.
 		var created int
 		if err := pool.QueryRow(ctx,
 			"SELECT COUNT(*) FROM users WHERE email = ANY($1)", emails).Scan(&created); err != nil {
@@ -413,9 +405,8 @@ func TestPromoteIntegration(t *testing.T) {
 	})
 }
 
-// TestUpdateProfileIntegration exercises the profile update repository method
-// against a real PostgreSQL: partial-field updates, clearing the display name,
-// persistence on reload, and hard exclusion of soft-deleted accounts.
+// TestUpdateProfileIntegration covers partial-field updates, clearing the
+// display name, persistence on reload, and exclusion of soft-deleted accounts.
 func TestUpdateProfileIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -444,8 +435,7 @@ func TestUpdateProfileIntegration(t *testing.T) {
 	t.Run("UpdateProfile sets both optional fields", func(t *testing.T) {
 		displayName := "  Bree  "
 		languagePref := "SW"
-		// The repository stores values verbatim; trimming/normalising is the
-		// service's job. Passing raw values tests only persistence.
+		// The repository stores values verbatim; trimming is the service's job.
 		updated, err := repo.UpdateProfile(ctx, u.ID, &displayName, &languagePref)
 		if err != nil {
 			t.Fatalf("UpdateProfile returned error: %v", err)

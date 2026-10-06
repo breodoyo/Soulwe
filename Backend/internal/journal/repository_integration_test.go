@@ -18,22 +18,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ownerFor is a registered owner for the given id, keeping these tests
-// readable now that a journal entry may belong to a user OR an anonymous
-// session.
 func ownerFor(userID string) middleware.Owner { return middleware.Owner{UserID: userID} }
 
-// integrationKey is a fixed 32-byte key used only by these tests. Production
-// keys come from JOURNAL_ENCRYPTION_KEY and are never present in code.
+// integrationKey is a fixed test-only key; production keys come from the env.
 const (
 	integrationKey  = "0123456789abcdef0123456789abcdef"
 	integrationText = "Integration diary: the rain finally stopped and the town smelled of wet earth."
 )
 
-// TestPostgresRepositoryIntegration exercises the journal repository against a
-// running PostgreSQL. It is excluded from the default build via the
-// "integration" tag and skipped when DATABASE_URL is not set. Two users are
-// created so ownership isolation and cascade deletes can be verified.
+// TestPostgresRepositoryIntegration exercises the repository against a running
+// PostgreSQL; it needs the "integration" tag and DATABASE_URL. Two users allow
+// ownership isolation and cascade deletes to be verified.
 func TestPostgresRepositoryIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {

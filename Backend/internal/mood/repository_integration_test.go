@@ -16,11 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TestPostgresRepositoryIntegration exercises the mood repository against a
-// running PostgreSQL. It is excluded from the default build via the
-// "integration" tag and skipped when DATABASE_URL is not set. Two users and two
-// anonymous identities are created so ownership isolation can be verified in
-// both directions.
+// TestPostgresRepositoryIntegration needs DATABASE_URL and the "integration" tag.
 func TestPostgresRepositoryIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -55,8 +51,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		return u.ID
 	}
 
-	// An anonymous identity is seeded directly: the check-in path under test
-	// only needs the row, not the session-minting service.
+	// Seeded directly: only the row is needed, not the session-minting service.
 	seededAnonIDs := make([]string, 0, 2)
 	seedAnon := func() string {
 		var id string
@@ -117,9 +112,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		if len(logs) != 5 {
 			t.Fatalf("expected 5 logs, got %d", len(logs))
 		}
-		// "Heavy" was created first, then Grateful/At peace/Better/Okay. With
-		// logged_at ordering (same-second inserts resolved by id DESC) the most
-		// recent insert should lead.
+		// Same-second inserts are ordered by id DESC, so the last insert leads.
 		for i := 1; i < len(logs); i++ {
 			if logs[i-1].LoggedAt.Before(logs[i].LoggedAt) {
 				t.Errorf("list not newest-first at index %d: %v before %v",
@@ -222,9 +215,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		}
 	})
 
-	// The anonymous path is the reason mood_logs.user_id became nullable, and
-	// it is where a NULL owner column meets the row scanner. These subtests are
-	// the only ones that can catch a scanner that cannot read a NULL.
+	// The only subtests that can catch a scanner that cannot read a NULL owner column.
 	t.Run("an anonymous session's check-ins round-trip", func(t *testing.T) {
 		anonID := seedAnon()
 		owner := middleware.Owner{AnonIdentityID: anonID}
@@ -268,8 +259,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		}
 	})
 
-	// A registered row has anon_identity_id NULL and an anonymous row has
-	// user_id NULL, so reading either one exercises the nullable owner column.
+	// A registered row has anon_identity_id NULL, exercising the nullable column.
 	t.Run("a registered owner's check-ins survive the anonymous column", func(t *testing.T) {
 		logs, err := repo.ListByOwner(ctx, middleware.Owner{UserID: ownerID}, 100)
 		if err != nil {

@@ -9,37 +9,29 @@ import (
 	"Backend/internal/middleware"
 )
 
-// Service is the circles business-logic boundary. It owns the input
-// validation, the membership gate (message reads/writes require membership),
-// and the identity plumbing — every operation is scoped to the authenticated
-// owner, a registered user or an anonymous session, and never accepts one from a
-// request body. It never constructs SQL and never exposes owner IDs, device
-// UUIDs, or token hashes on the wire.
+// Service is the circles business-logic boundary: it owns input validation and
+// the membership gate for message reads/writes, and scopes every operation to
+// the owner resolved by the identity middleware (never one from a request body).
+// It never constructs SQL and never exposes owner IDs on the wire.
 type Service interface {
 	// List returns all active circles with live member counts, ordered by name.
 	List(ctx context.Context) ([]Circle, error)
 
-	// Get returns one circle with its member count and whether the owner has
-	// joined. Returns ErrCircleNotFound for a missing or inactive circle.
+	// Get returns one circle with the owner's membership, or ErrCircleNotFound.
 	Get(ctx context.Context, owner middleware.Owner, circleID string) (*Circle, error)
 
-	// Join adds the owner to the circle. Returns ErrCircleNotFound when the
-	// circle is missing or inactive and ErrAlreadyMember on a duplicate.
+	// Join adds the owner, returning ErrAlreadyMember on a duplicate.
 	Join(ctx context.Context, owner middleware.Owner, circleID string) error
 
-	// Leave removes the owner's membership. Leaving a circle the owner never
-	// joined is a no-op success; ErrCircleNotFound when the circle is missing
-	// or inactive.
+	// Leave removes the owner's membership; leaving a circle never joined is a no-op success.
 	Leave(ctx context.Context, owner middleware.Owner, circleID string) error
 
-	// ListMessages returns the circle's messages newest first, clamped to a
-	// sane page size, optionally resuming from a created_at cursor. Members
-	// only: returns ErrNotMember (or ErrCircleNotFound) to non-members.
+	// ListMessages returns messages newest first, resuming from an exclusive
+	// created_at cursor; non-members get ErrNotMember or ErrCircleNotFound.
 	ListMessages(ctx context.Context, owner middleware.Owner, circleID string, limit int, before *time.Time) ([]CircleMessage, error)
 
-	// SendMessage validates content, verifies membership, and stores the
-	// message authored by the owner. Returns ErrCircleNotFound, ErrNotMember,
-	// or ErrInvalidContent.
+	// SendMessage stores a message for the owner, or returns ErrInvalidContent,
+	// ErrCircleNotFound, or ErrNotMember.
 	SendMessage(ctx context.Context, owner middleware.Owner, circleID, content string) (*CircleMessage, error)
 }
 
@@ -47,7 +39,6 @@ type service struct {
 	circles Repository
 }
 
-// NewService wires the circles service to a repository.
 func NewService(circles Repository) *service {
 	return &service{circles: circles}
 }
@@ -124,9 +115,9 @@ func (s *service) SendMessage(ctx context.Context, owner middleware.Owner, circl
 	return message, nil
 }
 
-// requireMember gates message reads/writes behind membership. A missing or
-// inactive circle surfaces as ErrCircleNotFound (404); an owner that has not
-// joined surfaces as ErrNotMember (403).
+// requireMember gates message reads/writes behind membership: a missing or
+// inactive circle surfaces as ErrCircleNotFound (404), a non-member as
+// ErrNotMember (403).
 func (s *service) requireMember(ctx context.Context, owner middleware.Owner, circleID string) error {
 	isMember, err := s.circles.IsMember(ctx, circleID, owner)
 	if err != nil {
@@ -152,14 +143,9 @@ func validateContent(content string) error {
 	return nil
 }
 
-// normalizeMessage keeps the documented wire invariants: reaction_counts is the
-// empty object rather than JSON null when a row predates any reactions, and an
-// author label is never blank.
-//
-// The SQL already resolves a missing registered display_name to
-// DefaultAuthorName, so the name guard is belt-and-braces for a fake or
-// hand-built repository — an empty author_name on the wire would render as an
-// unnamed bubble with no way to tell who is speaking.
+// normalizeMessage keeps two wire invariants: reaction_counts is {} rather than
+// JSON null, and author_name is never blank (belt-and-braces against a fake or
+// hand-built repository, since the SQL already falls back to DefaultAuthorName).
 func normalizeMessage(m *CircleMessage) {
 	if m.ReactionCounts == nil {
 		m.ReactionCounts = map[string]int{}
@@ -169,5 +155,4 @@ func normalizeMessage(m *CircleMessage) {
 	}
 }
 
-// ensure the concrete service satisfies the interface.
 var _ Service = (*service)(nil)

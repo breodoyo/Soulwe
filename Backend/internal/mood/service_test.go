@@ -10,13 +10,8 @@ import (
 	"Backend/internal/middleware"
 )
 
-// owner is a registered owner for the given id, used to keep the service
-// tests readable now that check-ins are scoped to a registered user OR an
-// anonymous session.
 func owner(userID string) middleware.Owner { return middleware.Owner{UserID: userID} }
 
-// fakeRepository is an in-memory Repository used to unit-test the service
-// without a real PostgreSQL connection.
 type fakeRepository struct {
 	logs       []MoodLog
 	createErr  error
@@ -168,7 +163,6 @@ func TestServiceList(t *testing.T) {
 	t.Run("returns only the user's logs", func(t *testing.T) {
 		repo := seed()
 		svc := NewService(repo)
-		// A second user's check-in must never leak into user-1's list.
 		if _, err := svc.Create(context.Background(), owner("user-2"), "Better"); err != nil {
 			t.Fatalf("user-2 Create returned error: %v", err)
 		}
@@ -190,8 +184,6 @@ func TestServiceList(t *testing.T) {
 	t.Run("never mixes an anonymous session's logs into a user's list", func(t *testing.T) {
 		repo := seed()
 		svc := NewService(repo)
-		// An anonymous check-in exists in the same table; a registered user
-		// must not see it, and vice versa.
 		anon := middleware.Owner{AnonIdentityID: "anon-1"}
 		if _, err := svc.Create(context.Background(), anon, "Heavy"); err != nil {
 			t.Fatalf("anonymous Create returned error: %v", err)

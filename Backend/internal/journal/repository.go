@@ -12,8 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Repository defines the persistence operations the journal domain needs.
-// Implementations only touch the database; they contain no business logic.
+// Repository defines the journal domain's persistence operations.
 //
 // Every method is scoped by Owner, which carries exactly one identity (a
 // registered user or an anonymous session). Ownership predicates compare the
@@ -21,31 +20,28 @@ import (
 // exactly one owner, so a caller cannot widen the scope by omitting its own
 // identity. Journalling should not require registering.
 type Repository interface {
-	// Create inserts an entry and fills in the database generated fields
-	// (id, created_at) on the passed value.
+	// Create inserts an entry and fills in the generated fields (id, created_at).
 	Create(ctx context.Context, entry *JournalEntry) error
 
-	// ListByOwner returns the owner's entries, newest first, limited to limit
-	// rows. An optional before cursor resumes the page from an earlier
-	// created_at (exclusive). It returns an empty slice (not nil) when the
+	// ListByOwner returns the owner's entries newest first; the optional before
+	// cursor is an exclusive created_at bound. It returns an empty slice when the
 	// owner has none.
 	ListByOwner(ctx context.Context, owner middleware.Owner, limit int, before *time.Time) ([]JournalEntry, error)
 
 	// GetByID returns the owner's entry by ID, or ErrJournalEntryNotFound.
 	GetByID(ctx context.Context, owner middleware.Owner, entryID string) (*JournalEntry, error)
 
-	// Update applies the merged values carried on entry (always non-nil for
-	// the content fields) and returns the refreshed row. contentChanged tells
-	// the SQL whether content fields and word_count should be replaced and the
-	// stale ai_reflection cleared. Returns ErrJournalEntryNotFound when the
-	// entry is not the owner's.
+	// Update applies the merged values on entry and returns the refreshed row.
+	// contentChanged tells the SQL whether content fields and word_count should be
+	// replaced and the stale ai_reflection cleared. Returns
+	// ErrJournalEntryNotFound when the entry is not the owner's.
 	Update(ctx context.Context, owner middleware.Owner, entryID string, entry *JournalEntry, contentChanged bool) error
 
-	// UpdateReflection stores a freshly generated reflection on the owner's
-	// entry. Returns ErrJournalEntryNotFound when the entry is not the owner's.
+	// UpdateReflection stores a reflection on the owner's entry, or returns
+	// ErrJournalEntryNotFound when the entry is not the owner's.
 	UpdateReflection(ctx context.Context, owner middleware.Owner, entryID, reflection string) error
 
-	// Delete permanently removes the owner's entry. Returns
+	// Delete permanently removes the owner's entry, or returns
 	// ErrJournalEntryNotFound when the entry is not the owner's.
 	Delete(ctx context.Context, owner middleware.Owner, entryID string) error
 }
@@ -60,14 +56,12 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
 
-// Columns for SELECT / RETURNING. Encrypted content is returned alongside the
-// metadata; decryption is a service-layer concern.
+// Columns for SELECT / RETURNING; decryption is a service-layer concern.
 const journalColumns = `id, user_id, anon_identity_id, content_enc, content_iv, mood_tags, prompt_used, ai_reflection, word_count, created_at`
 
 // ownerPredicate scopes a statement to a single identity. The NULL comparison
 // is what makes this safe: with exactly-one-owner enforced by the schema, a
-// caller holding a UserID can only match rows whose anon_identity_id IS NULL,
-// and vice versa.
+// caller holding a UserID can only match rows whose anon_identity_id IS NULL.
 const ownerPredicate = `user_id IS NOT DISTINCT FROM $1 AND anon_identity_id IS NOT DISTINCT FROM $2`
 
 const (
@@ -76,8 +70,7 @@ const (
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, created_at`
 
-	// The before cursor is an exclusive bound on created_at; ORDER BY includes
-	// id as a deterministic tiebreaker for identical timestamps.
+	// The before cursor is an exclusive created_at bound; id breaks ties.
 	listJournalsSQL = "SELECT " + journalColumns +
 		` FROM journal_entries WHERE ` + ownerPredicate +
 		` ORDER BY created_at DESC, id DESC LIMIT $3`
@@ -89,9 +82,8 @@ const (
 	getJournalSQL = "SELECT " + journalColumns +
 		` FROM journal_entries WHERE id = $3 AND ` + ownerPredicate
 
-	// When content changed, replace the ciphertext/nonce/count and drop the
-	// stale reflection. Otherwise keep the content untouched and preserve the
-	// reflection.
+	// On a content change, replace ciphertext/nonce/count and drop the stale
+	// reflection; otherwise keep both.
 	updateJournalSQL = `
 		UPDATE journal_entries SET
 			content_enc    = CASE WHEN $7 THEN $4 ELSE content_enc END,
@@ -108,14 +100,11 @@ const (
 	updateReflectionSQL = `UPDATE journal_entries SET ai_reflection = $4 WHERE id = $3 AND ` + ownerPredicate + ` RETURNING id`
 )
 
-// ownerArgs converts an owner into the two bind parameters every statement
-// expects. The boolean reports whether the owner was well-formed; an
-// ill-formed owner must never reach the database.
+// ownerArgs converts an owner into the two bind parameters every statement expects.
 func ownerArgs(owner middleware.Owner) (any, any, bool) {
 	// IdentityFromOwner is the single place the exactly-one-owner invariant is
-	// enforced, so an ambiguous owner (both IDs set) is rejected here instead
-	// of silently resolving to whichever branch came first. For the journal
-	// that matters twice over: the owner also keys the ciphertext AAD.
+	// enforced, so an ambiguous owner is rejected here instead of silently
+	// resolving to whichever branch came first.
 	if _, ok := middleware.IdentityFromOwner(owner); !ok {
 		return nil, nil, false
 	}
@@ -125,7 +114,6 @@ func ownerArgs(owner middleware.Owner) (any, any, bool) {
 	return nil, owner.AnonIdentityID, true
 }
 
-// entryOwner reads the owner columns off an entry being written.
 func entryOwner(entry *JournalEntry) (any, any, bool) {
 	return ownerArgs(middleware.Owner{UserID: entry.UserID, AnonIdentityID: entry.AnonIdentityID})
 }
@@ -249,12 +237,9 @@ func (r *PostgresRepository) UpdateReflection(ctx context.Context, owner middlew
 	return nil
 }
 
-// scanEntry shares one column decoder between list/get/update. pgx's Row.Scan
-// and Rows.Scan both satisfy the func(...any) error shape.
-//
-// The two owner columns are mutually exclusive, so exactly one of them is NULL.
-// pgx refuses to scan a NULL into a plain *string ("cannot scan NULL into
-// *string"), so they are decoded as **string and then flattened onto the entry.
+// scanEntry shares one column decoder between list/get/update: pgx's Row.Scan and
+// Rows.Scan both satisfy the func(...any) error shape. The mutually exclusive
+// owner columns decode as **string, since pgx cannot scan NULL into *string.
 func scanEntry(s func(dest ...any) error, e *JournalEntry) error {
 	var userID, anonID *string
 	if err := s(&e.ID, &userID, &anonID, &e.ContentEnc, &e.ContentIV, &e.MoodTags, &e.PromptUsed, &e.AIReflection, &e.WordCount, &e.CreatedAt); err != nil {

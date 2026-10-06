@@ -5,32 +5,19 @@ import (
 	"time"
 )
 
-// ValidMoods is the product's canonical mood vocabulary. The values match the
-// marker text used across the Soulwe app and are stored verbatim in the
-// mood_logs.mood column (the column is free-form TEXT; validation happens at
-// the application boundary so the schema stays unchanged).
+// ValidMoods is the canonical mood vocabulary; mood_logs.mood is free-form TEXT.
 var ValidMoods = []string{"Heavy", "Okay", "Better", "At peace", "Grateful"}
 
-// validMoodSet indexes ValidMoods for O(1) membership checks.
 var validMoodSet = makeSet(ValidMoods)
 
-// Sentinel errors returned by the mood domain. Handlers map these to safe,
-// client-facing HTTP responses; they never contain user input.
 var (
 	// ErrInvalidMood reports a mood value outside the product vocabulary.
 	ErrInvalidMood = errors.New("invalid mood value")
-	// ErrInvalidOwner reports an owner that is neither exactly a registered user
-	// nor exactly an anonymous session. It is a programming-error guard: the
-	// HTTP layer refuses such a request before the service is reached.
+	// ErrInvalidOwner is a programming-error guard: HTTP rejects it before the service.
 	ErrInvalidOwner = errors.New("mood: request has no single owner")
 )
 
-// MoodLog mirrors the mood_logs table (db/migrations/004_create_mood_logs.up.sql,
-// extended by 017_add_anon_ownership). Exactly one of UserID / AnonIdentityID is
-// populated, so a check-in belongs to either a registered user or an anonymous
-// session and never to neither. Neither owner column is serialized back to the
-// client — ownership is derived from the authenticated identity and the
-// response carries only id, mood, and logged_at.
+// MoodLog mirrors mood_logs; exactly one of UserID / AnonIdentityID is set.
 type MoodLog struct {
 	ID             string    `json:"id"`
 	UserID         string    `json:"-"`
@@ -39,7 +26,6 @@ type MoodLog struct {
 	LoggedAt       time.Time `json:"logged_at"`
 }
 
-// IsValidMood reports whether mood is one of the documented values.
 func IsValidMood(mood string) bool {
 	return validMoodSet[mood]
 }

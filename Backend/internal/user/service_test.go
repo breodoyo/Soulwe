@@ -14,14 +14,14 @@ import (
 
 // fakeRepository is an in-memory Repository used to unit-test the service
 // without a real PostgreSQL connection. identities maps an anonymous identity
-// ID to its linked user ID (nil means the identity is not yet promoted).
+// ID to its linked user ID (nil means not yet promoted).
 type fakeRepository struct {
 	users      map[string]*User
 	byID       map[string]*User
 	identities map[string]*string
-	promoteErr error // injectable failure for the Promote path
-	updateErr  error // injectable failure for the UpdateProfile path
-	findByErr  error // injectable failure for the FindByID path
+	promoteErr error
+	updateErr  error
+	findByErr  error
 }
 
 func newFakeRepository() *fakeRepository {
@@ -32,7 +32,6 @@ func newFakeRepository() *fakeRepository {
 	}
 }
 
-// seedIdentity registers an unlinked anonymous identity so Promote can find it.
 func seedIdentity(repo *fakeRepository, identityID string) {
 	repo.identities[identityID] = nil
 }
@@ -93,7 +92,6 @@ func (f *fakeRepository) Promote(_ context.Context, identityID, email, passwordH
 	return u, nil
 }
 
-// failingTokenManager always fails to sign, for the JWT-signing error path.
 type failingTokenManager struct{}
 
 func (failingTokenManager) SignAccessToken(string) (string, error) {
@@ -123,13 +121,11 @@ func (f *fakeRepository) UpdateProfile(_ context.Context, userID string, display
 	return u, nil
 }
 
-// raiseIdentity is a tiny helper to set an identity's linked user ID directly.
 func raiseIdentity(repo *fakeRepository, identityID, userID string) {
 	repo.identities[identityID] = &userID
 }
 
-// newTestTokenManager returns a real JWT manager bound to a fixed test-only
-// secret, so the service tests exercise actual token signing.
+// newTestTokenManager uses a real JWT manager so tests exercise actual signing.
 func newTestTokenManager() *auth.Manager {
 	m, err := auth.NewManager("unit-test-secret-that-is-not-shared-anywhere")
 	if err != nil {
@@ -182,7 +178,7 @@ func TestServiceRegisterRejectsInvalidEmail(t *testing.T) {
 		"not-an-email",
 		"@example.com",
 		"user @example.com",
-		strings.Repeat("a", 320) + "@example.com", // exceeds the 320-char cap
+		strings.Repeat("a", 320) + "@example.com",
 	}
 	for _, email := range cases {
 		_, err := svc.Register(context.Background(), email, "a-strong-password")
@@ -358,7 +354,6 @@ func TestServicePromote(t *testing.T) {
 		if sub := parseSubject(t, result.AccessToken); sub != result.User.ID {
 			t.Errorf("expected token subject %q, got %q", result.User.ID, sub)
 		}
-		// The anonymous identity must now be linked to the new user.
 		if linked := repo.identities["22222222-2222-2222-2222-222222222222"]; linked == nil || *linked != result.User.ID {
 			t.Errorf("expected the anonymous identity to be linked to the new user")
 		}
@@ -451,8 +446,7 @@ func TestServicePromote(t *testing.T) {
 	})
 }
 
-// seedUser registers a user directly in the fake repository so profile tests
-// can query it without going through Register (which hashes passwords).
+// seedUser inserts a user directly, bypassing Register's password hashing.
 func seedUser(repo *fakeRepository, u *User) {
 	repo.users[u.Email] = u
 	repo.byID[u.ID] = u

@@ -30,7 +30,6 @@ func testCodec(t *testing.T) *cipher.AESGCM {
 	return c
 }
 
-// fakeReflection is a configurable fake for the ReflectionGenerator seam.
 type fakeReflection struct {
 	out    string
 	err    error
@@ -52,16 +51,12 @@ func (f *fakeReflection) GenerateReflection(ctx context.Context, content string,
 	return f.out, nil
 }
 
-// owner is a registered owner for the given id, keeping these tests readable
-// now that a journal entry may belong to a user OR an anonymous session.
 func owner(userID string) middleware.Owner { return middleware.Owner{UserID: userID} }
 
-// anon is an anonymous session owner.
 func anon(anonID string) middleware.Owner { return middleware.Owner{AnonIdentityID: anonID} }
 
-// ownerKey namespaces an owner so a user and an anonymous session can never
-// collide in the fake repository's index, mirroring the real schema's
-// one-owner-per-row guarantee.
+// ownerKey namespaces owners so a user and an anonymous session can never collide
+// in the fake repository's index, mirroring the schema's one-owner-per-row rule.
 func ownerKey(o middleware.Owner) string {
 	if o.Registered() {
 		return "user:" + o.UserID
@@ -79,8 +74,8 @@ func ownedBy(e *JournalEntry, o middleware.Owner) bool {
 	return ownerKeyOf(e) == ownerKey(o)
 }
 
-// fakeRepository is an in-memory Repository. It stores the encrypted content
-// verbatim (like PostgreSQL) so tests can assert plaintext never reaches it.
+// fakeRepository is an in-memory Repository that stores encrypted content
+// verbatim, like PostgreSQL, so tests can assert plaintext never reaches it.
 type fakeRepository struct {
 	mu      sync.Mutex
 	entries map[string]*JournalEntry // by id
@@ -520,8 +515,7 @@ func TestGetDecryptsOwnEntry(t *testing.T) {
 	}
 }
 
-// An anonymous session is a full journal owner: writing an entry must not
-// require registering, and the entries must stay as private as a user's.
+// An anonymous session is a full owner: its entries must stay as private as a user's.
 func TestAnonymousSessionOwnership(t *testing.T) {
 	t.Run("encrypts under the anonymous owner's AAD and round-trips", func(t *testing.T) {
 		repo := newFakeRepository()
@@ -568,9 +562,7 @@ func TestAnonymousSessionOwnership(t *testing.T) {
 		}
 		stored := repo.stored(session, created.ID)
 
-		// A user whose ID happens to equal the anonymous identity must not be
-		// able to decrypt the content, which is what the "anon:" AAD prefix
-		// guarantees.
+		// A user whose ID equals the anonymous identity must not decrypt, which the "anon:" AAD prefix guarantees.
 		if _, err := codec.Decrypt(stored.ContentEnc, stored.ContentIV, []byte("anon-1")); err == nil {
 			t.Error("a bare-ID AAD decrypted an anonymous entry; the anon namespace is not applied")
 		}
@@ -598,8 +590,7 @@ func TestAnonymousSessionOwnership(t *testing.T) {
 		if len(aList) != 1 {
 			t.Fatalf("expected only anon-1's entry, got %d", len(aList))
 		}
-		// List responses deliberately strip ownership, so identify the entry by
-		// its ID against what anon-1 created and what the others did not.
+		// List responses strip ownership, so identify the entry by its ID instead.
 		if stored := repo.stored(sessionA, aList[0].ID); stored == nil {
 			t.Errorf("list returned an entry anon-1 does not own: %+v", aList[0])
 		}
@@ -828,7 +819,6 @@ func TestPlaintextNeverLeaksOutOfService(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	// The create response must not carry plaintext, ciphertext, or user_id.
 	if entry.Content != "" {
 		t.Error("create response must not include content")
 	}
@@ -839,7 +829,6 @@ func TestPlaintextNeverLeaksOutOfService(t *testing.T) {
 		t.Error("create response must not include user_id")
 	}
 
-	// List responses must stay plaintext-free too.
 	entries, err := svc.List(context.Background(), owner("user-1"), 0, nil)
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -848,7 +837,6 @@ func TestPlaintextNeverLeaksOutOfService(t *testing.T) {
 		t.Error("list response must not include content or ciphertext")
 	}
 
-	// Service-facing errors must not embed the journal text.
 	if _, err := svc.Reflect(context.Background(), owner("user-1"), entry.ID); err != nil {
 		if strings.Contains(err.Error(), secretText) {
 			t.Error("reflect error must not contain journal content")

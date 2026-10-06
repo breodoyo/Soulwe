@@ -17,11 +17,8 @@ import (
 )
 
 // TestPostgresRepositoryIntegration exercises the circles repository against a
-// running PostgreSQL. It is excluded from the default build via the
-// "integration" tag and skipped when DATABASE_URL is not set. A throwaway
-// circle, two anonymous identities, and two registered users are seeded
-// directly so member counts, both kinds of message authorship, the neutral
-// fallback for an unnamed account, and ownership gating can be verified.
+// running PostgreSQL. Excluded from the default build via the "integration"
+// tag and skipped when DATABASE_URL is not set.
 func TestPostgresRepositoryIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -40,7 +37,6 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	repo := NewPostgresRepository(pool)
 	nonce := time.Now().UnixNano()
 
-	// Seed one circle and two anonymous identities.
 	var circleID string
 	if err := pool.QueryRow(ctx,
 		`INSERT INTO circles (slug, name, description, icon)
@@ -63,8 +59,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	identityA := seedIdentity(fmt.Sprintf("Anon A-%d", nonce))
 	identityB := seedIdentity(fmt.Sprintf("Anon B-%d", nonce))
 
-	// Seed two registered users. The second has no display name, so the
-	// DefaultAuthorName fallback is exercised against the real COALESCE.
+	// The second user has no display name, exercising the real COALESCE fallback.
 	userSeq := 0
 	seedUser := func(name *string) string {
 		userSeq++
@@ -154,7 +149,6 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		if err := repo.RemoveMember(ctx, circleID, ownerA); err != nil {
 			t.Fatalf("RemoveMember: %v", err)
 		}
-		// Idempotent leave: removing again is a no-op.
 		if err := repo.RemoveMember(ctx, circleID, ownerA); err != nil {
 			t.Errorf("second RemoveMember should be a no-op, got %v", err)
 		}
@@ -171,8 +165,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		if err != nil || !ok {
 			t.Errorf("expected IsMember true for the registered member, got %t (%v)", ok, err)
 		}
-		// The membership must be stored against user_id, and the anonymous
-		// column must be NULL so the one-owner CHECK holds.
+		// The one-owner CHECK requires the unused owner column to be NULL.
 		var userID, anonID *string
 		if err := pool.QueryRow(ctx,
 			`SELECT user_id::text, anon_identity_id::text FROM circle_members
@@ -186,7 +179,6 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 			t.Errorf("expected a NULL anon_identity_id for a registered member, got %q", *anonID)
 		}
 
-		// An anonymous member and a registered member are distinct rows.
 		if err := repo.AddMember(ctx, circleID, ownerA); err != nil {
 			t.Fatalf("anonymous AddMember alongside a registered one: %v", err)
 		}
@@ -202,9 +194,8 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	})
 
 	t.Run("an ill-formed owner never reaches the database", func(t *testing.T) {
-		// Neither identity set, then both set: middleware.IdentityFromOwner
-		// refuses both, so the repository must error rather than write a row
-		// that the one-owner CHECK would reject.
+		// Neither identity set, then both set: IdentityFromOwner refuses both, so the
+		// repository must error rather than write a row the one-owner CHECK rejects.
 		for _, bad := range []middleware.Owner{
 			{},
 			{UserID: namedUser, AnonIdentityID: identityA},
@@ -251,7 +242,6 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 			t.Error("expected a non-nil, empty reaction_counts from the column default")
 		}
 
-		// The stored author is the seeded anonymous identity, never a real user.
 		var authorID string
 		if err := pool.QueryRow(ctx,
 			"SELECT anon_identity_id FROM circle_messages WHERE id = $1", msg.ID).Scan(&authorID); err != nil {
@@ -276,7 +266,6 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		if msg.IsAnonymous {
 			t.Error("a registered author must not be labelled anonymous")
 		}
-		// user_id is stored, but must not be selectable into the wire struct.
 		var stored string
 		if err := pool.QueryRow(ctx,
 			"SELECT user_id FROM circle_messages WHERE id = $1", msg.ID).Scan(&stored); err != nil {
@@ -286,8 +275,6 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 			t.Errorf("expected the message to be owned by the named user, got %q", stored)
 		}
 
-		// A registered member with no display name gets the neutral label
-		// rather than the email local part.
 		if err := repo.AddMember(ctx, circleID, unnamedOwner); err != nil {
 			t.Fatalf("unnamed AddMember: %v", err)
 		}
@@ -363,8 +350,6 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	})
 
 	t.Run("deleting the circle cascades memberships and messages", func(t *testing.T) {
-		// identityA's membership survived from the create-message subtest;
-		// add identityB directly so two memberships exist before the delete.
 		var createdID string
 		if err := pool.QueryRow(ctx,
 			`INSERT INTO circle_members (circle_id, anon_identity_id)

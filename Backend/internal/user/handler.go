@@ -12,13 +12,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Handler owns the HTTP surface of the users domain. It validates input,
-// calls the service layer, and writes responses — never the database.
+// Handler owns the HTTP surface of the users domain.
 type Handler struct {
 	svc Service
 }
 
-// NewHandler returns a Handler bound to the given service.
 func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
@@ -28,26 +26,21 @@ type registerRequest struct {
 	Password string `json:"password"`
 }
 
-// promoteRequest is the body of POST /api/v1/auth/anonymous/promote. The
-// anonymous identity comes from the request's bearer token, not the body.
+// promoteRequest is the POST /api/v1/auth/anonymous/promote body; the identity
+// comes from the request's bearer token, not the body.
 type promoteRequest struct {
 	Email       string  `json:"email"`
 	Password    string  `json:"password"`
 	DisplayName *string `json:"display_name"`
 }
 
-// updateProfileRequest is the body of PATCH /api/v1/users/me. Both fields are
-// optional pointers so an omitted field leaves the stored value untouched.
-// Password, email, and other account attributes are intentionally not part of
-// this request and are ignored even if a client sends them.
+// updateProfileRequest is the PATCH /api/v1/users/me body; pointers mark
+// optional fields, and password/email/is_verified are never accepted.
 type updateProfileRequest struct {
 	DisplayName  *string `json:"display_name"`
 	LanguagePref *string `json:"language_pref"`
 }
 
-// Me handles GET /api/v1/auth/me. The auth middleware has already validated
-// the Bearer token and stored the user ID in the request context, so this
-// handler only echoes it back — a minimal demonstration that protection works.
 func (h *Handler) Me(c *gin.Context) {
 	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
@@ -57,7 +50,6 @@ func (h *Handler) Me(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"user_id": userID})
 }
 
-// Login handles POST /api/v1/auth/login.
 func (h *Handler) Login(c *gin.Context) {
 	var req registerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -84,7 +76,6 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 }
 
-// Register handles POST /api/v1/auth/register.
 func (h *Handler) Register(c *gin.Context) {
 	var req registerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -113,10 +104,6 @@ func (h *Handler) Register(c *gin.Context) {
 	}
 }
 
-// Promote handles POST /api/v1/auth/anonymous/promote. The anonymous auth
-// middleware has already validated the Bearer token and stored the identity ID
-// in the request context, so the handler only reads it from there — it never
-// sees or logs the raw anonymous token.
 func (h *Handler) Promote(c *gin.Context) {
 	identityID, ok := middleware.AnonIdentityIDFromContext(c)
 	if !ok {
@@ -158,10 +145,6 @@ func (h *Handler) Promote(c *gin.Context) {
 	}
 }
 
-// GetProfile handles GET /api/v1/users/me. The registered-JWT middleware has
-// already stored the authenticated user ID in the context; the handler never
-// accepts a user ID from the request, so a user can only ever read their own
-// profile.
 func (h *Handler) GetProfile(c *gin.Context) {
 	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
@@ -182,9 +165,6 @@ func (h *Handler) GetProfile(c *gin.Context) {
 	}
 }
 
-// UpdateProfile handles PATCH /api/v1/users/me. Only the supported profile
-// fields (display_name, language_pref) are read from the body; id, email,
-// password, is_verified, and created_at are never accepted from the client.
 func (h *Handler) UpdateProfile(c *gin.Context) {
 	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
@@ -218,8 +198,6 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 	}
 }
 
-// respondError writes the documented error envelope:
-// {"error": {"code": "...", "message": "...", "field": "..."}}.
 func respondError(c *gin.Context, status int, code, message, field string) {
 	body := gin.H{
 		"error": gin.H{

@@ -24,9 +24,6 @@ const (
 
 var testNow = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
-// Owners of both kinds, used side by side so the tests can show that circles
-// serve a registered member and an anonymous session through the same code
-// path without ever collapsing the two.
 var (
 	anonOneOwner = middleware.Owner{AnonIdentityID: anonOne}
 	anonTwoOwner = middleware.Owner{AnonIdentityID: anonTwo}
@@ -37,9 +34,8 @@ var (
 func strPtr(s string) *string { return &s }
 
 // ownerKey identifies an owner of either kind for the in-memory maps. The
-// prefix keeps the two kinds in separate namespaces, mirroring the schema's
-// separate user_id and anon_identity_id columns: a registered user and an
-// anonymous session can never collide on one key.
+// prefix keeps the kinds in separate namespaces, mirroring the schema's
+// separate user_id and anon_identity_id columns, so the two never collide.
 func ownerKey(owner middleware.Owner) string {
 	if _, ok := middleware.IdentityFromOwner(owner); !ok {
 		return ""
@@ -50,9 +46,6 @@ func ownerKey(owner middleware.Owner) string {
 	return "anon:" + owner.AnonIdentityID
 }
 
-// fakeRepository is an in-memory Repository. Circles, memberships, and
-// messages are keyed by UUID so the service's wording can be asserted without
-// a database.
 type fakeRepository struct {
 	mu         sync.Mutex
 	circles    map[string]*Circle
@@ -73,8 +66,7 @@ func newFakeRepository() *fakeRepository {
 		members:   map[string]map[string]bool{},
 		messages:  map[string][]CircleMessage{},
 		anonNames: map[string]string{anonOne: "Anon Baobab", anonTwo: "Anon Willow"},
-		// userTwo deliberately has no display name, so the service's
-		// DefaultAuthorName fallback is exercised.
+		// userTwo has no display name, exercising the DefaultAuthorName fallback.
 		authorName: map[string]string{
 			"user:" + userOne: "Bree",
 		},
@@ -167,8 +159,7 @@ func (f *fakeRepository) CreateMessage(ctx context.Context, circleID string, own
 		CreatedAt:      testNow.Add(time.Duration(f.messageSeq) * time.Second),
 	}
 	if owner.Anonymous() {
-		// Mirrors the SQL, which falls back to the server-generated pseudonym
-		// for an anonymous author and the display_name for a registered one.
+		// Mirrors the SQL: an anonymous author falls back to the pseudonym.
 		m.AuthorName = f.anonNames[owner.AnonIdentityID]
 	}
 	f.messages[circleID] = append(f.messages[circleID], m)
@@ -421,9 +412,9 @@ func TestService_SendAndListMessages(t *testing.T) {
 	})
 }
 
-// TestService_RegisteredAndAnonymousTogether covers the feature this migration
-// added: a circle serves a signed-in member and an anonymous session through
-// the same routes, each under its own identity and its own display name.
+// TestService_RegisteredAndAnonymousTogether covers a circle serving a
+// signed-in member and an anonymous session through the same code path, each
+// under its own identity and display name.
 func TestService_RegisteredAndAnonymousTogether(t *testing.T) {
 	svc := NewService(newFakeRepository())
 	ctx := context.Background()
@@ -471,7 +462,6 @@ func TestService_RegisteredAndAnonymousTogether(t *testing.T) {
 			t.Error("an anonymous author must be labelled anonymous")
 		}
 
-		// Both authors are readable by both members: a shared room is the point.
 		for _, reader := range []middleware.Owner{userOneOwner, anonOneOwner} {
 			messages, err := svc.ListMessages(ctx, reader, circleA, 10, nil)
 			if err != nil {
@@ -500,15 +490,12 @@ func TestService_RegisteredAndAnonymousTogether(t *testing.T) {
 	})
 
 	t.Run("memberships never cross the identity boundary", func(t *testing.T) {
-		// anonTwo never joined, and userOne's membership must not let it in.
 		if _, err := svc.ListMessages(ctx, anonTwoOwner, circleA, 10, nil); !errors.Is(err, ErrNotMember) {
 			t.Errorf("expected ErrNotMember for an anonymous non-member, got %v", err)
 		}
 		if _, err := svc.SendMessage(ctx, anonTwoOwner, circleA, "intruder"); !errors.Is(err, ErrNotMember) {
 			t.Errorf("expected ErrNotMember sending as an anonymous non-member, got %v", err)
 		}
-		// The same holds with the roles reversed: an anonymous membership does
-		// not admit a registered user, even a different person entirely.
 		if err := svc.Join(ctx, anonTwoOwner, circleB); err != nil {
 			t.Fatalf("join circle B: %v", err)
 		}
@@ -522,7 +509,6 @@ func TestService_RegisteredAndAnonymousTogether(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Get: %v", err)
 		}
-		// userOne, anonOne and userTwo have all joined circle A.
 		if circle.MemberCount != 3 {
 			t.Errorf("expected 3 members across both identity kinds, got %d", circle.MemberCount)
 		}
@@ -536,7 +522,6 @@ func TestService_RegisteredAndAnonymousTogether(t *testing.T) {
 		if after.MemberCount != 2 {
 			t.Errorf("expected 2 members after the registered member left, got %d", after.MemberCount)
 		}
-		// Leaving again is still a no-op, and still only affects that owner.
 		if err := svc.Leave(ctx, userOneOwner, circleA); err != nil {
 			t.Fatalf("repeat registered leave: %v", err)
 		}
@@ -548,9 +533,8 @@ func TestService_RegisteredAndAnonymousTogether(t *testing.T) {
 	})
 }
 
-// TestService_NormalizeMessageAuthorName pins the defensive fallback: a
-// repository that hands back a blank author label must not produce a nameless
-// bubble on the wire.
+// TestService_NormalizeMessageAuthorName pins the fallback: a repository
+// handing back a blank author label must not produce a nameless bubble.
 func TestService_NormalizeMessageAuthorName(t *testing.T) {
 	m := &CircleMessage{AuthorName: "   ", ReactionCounts: nil}
 	normalizeMessage(m)

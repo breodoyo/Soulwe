@@ -8,59 +8,39 @@ import (
 	"strings"
 )
 
-// TokenManager issues signed JWT access tokens for authenticated users.
-// It is satisfied by *auth.Manager; the interface keeps the JWT package out
-// of the users domain so the layers stay decoupled.
+// TokenManager issues signed JWT access tokens; the interface keeps the auth
+// package out of the users domain.
 type TokenManager interface {
 	SignAccessToken(userID string) (string, error)
 }
 
 // Service is the authentication business-logic boundary for registered users.
 type Service interface {
-	// Register hashes the password, creates the user, and returns the
-	// persisted user (never including the password hash).
 	Register(ctx context.Context, email, password string) (*User, error)
 
-	// FindByEmail returns the user matching the normalized email.
 	FindByEmail(ctx context.Context, email string) (*User, error)
 
-	// VerifyPassword finds the user by email and checks the password.
-	// It returns ErrBadCredentials when the email is unknown or the
-	// password does not match, avoiding user enumeration.
+	// VerifyPassword returns ErrBadCredentials for an unknown email *and* a bad
+	// password, so responses cannot be used to enumerate accounts.
 	VerifyPassword(ctx context.Context, email, password string) (*User, error)
 
-	// Login verifies the credentials and returns the authenticated user
-	// together with a freshly signed JWT access token.
 	Login(ctx context.Context, email, password string) (*LoginResult, error)
 
-	// Promote upgrades an anonymous identity to a registered account: it
-	// validates the credentials, persists the user and the identity link
-	// atomically, and returns the persisted user with a freshly signed JWT.
-	// It returns ErrIdentityAlreadyPromoted when the identity is already
-	// linked and ErrEmailTaken when the email is already registered.
+	// Promote validates the credentials, then persists the user and the identity
+	// link atomically; it returns ErrIdentityAlreadyPromoted or ErrEmailTaken.
 	Promote(ctx context.Context, identityID, email, password string, displayName *string) (*PromotionResult, error)
 
-	// GetProfile returns the authenticated user's public profile, or
-	// ErrUserNotFound when the id does not belong to a non-deleted user.
 	GetProfile(ctx context.Context, userID string) (*User, error)
 
-	// UpdateProfile applies validated profile changes and returns the updated
-	// user. displayName nil means "leave unchanged"; a non-nil pointer sets the
-	// name ("" clears it to NULL). languagePref nil means "leave unchanged";
-	// a non-nil pointer sets the language code. It returns ErrUserNotFound or a
-	// validation sentinel when the service rejects the new values.
+	// UpdateProfile applies validated changes; nil pointer fields are left unchanged.
 	UpdateProfile(ctx context.Context, userID string, displayName, languagePref *string) (*User, error)
 }
 
-// LoginResult is the successful outcome of a login: the authenticated user
-// and the access token they must send on subsequent requests.
 type LoginResult struct {
 	User        *User
 	AccessToken string
 }
 
-// PromotionResult is the successful outcome of promoting an anonymous
-// identity: the newly created registered user and the access token.
 type PromotionResult struct {
 	User        *User
 	AccessToken string
@@ -71,7 +51,6 @@ type service struct {
 	tokens TokenManager
 }
 
-// NewService wires the authentication service to a user repository.
 func NewService(users Repository, tokens TokenManager) *service {
 	return &service{users: users, tokens: tokens}
 }
@@ -123,9 +102,6 @@ func (s *service) VerifyPassword(ctx context.Context, email, password string) (*
 	return u, nil
 }
 
-// Login reuses VerifyPassword for credential checks, so the anti-enumeration
-// behaviour is identical: unknown emails and wrong passwords both surface as
-// ErrBadCredentials. Only after a successful check is an access token signed.
 func (s *service) Login(ctx context.Context, email, password string) (*LoginResult, error) {
 	u, err := s.VerifyPassword(ctx, email, password)
 	if err != nil {
@@ -140,12 +116,6 @@ func (s *service) Login(ctx context.Context, email, password string) (*LoginResu
 	return &LoginResult{User: u, AccessToken: accessToken}, nil
 }
 
-// Promote turns an authenticated anonymous identity into a registered account.
-// The service owns the business rules (email/password validation, optional
-// display_name normalization, password hashing) and only issues a JWT after
-// the repository confirms the user and the identity link were persisted
-// atomically. It never deletes or mutates the anonymous identity beyond the
-// user_id link performed by the repository.
 func (s *service) Promote(ctx context.Context, identityID, email, password string, displayName *string) (*PromotionResult, error) {
 	email = normalizeEmail(email)
 	if !validEmail(email) {
@@ -186,8 +156,6 @@ func (s *service) Promote(ctx context.Context, identityID, email, password strin
 	return &PromotionResult{User: u, AccessToken: accessToken}, nil
 }
 
-// GetProfile returns the authenticated user's profile. The user ID always
-// comes from the verified JWT context, never from client input.
 func (s *service) GetProfile(ctx context.Context, userID string) (*User, error) {
 	u, err := s.users.FindByID(ctx, userID)
 	if err != nil {
@@ -196,10 +164,7 @@ func (s *service) GetProfile(ctx context.Context, userID string) (*User, error) 
 	return u, nil
 }
 
-// UpdateProfile validates and applies profile changes. Field pointers mirror
-// the PATCH request: nil fields are untouched, an explicitly provided display
-// name is trimmed (blank names clear the stored value), and an explicitly
-// provided language code must be one of the supported set.
+// UpdateProfile validates and applies changes; a blank display name clears it.
 func (s *service) UpdateProfile(ctx context.Context, userID string, displayName, languagePref *string) (*User, error) {
 	var name *string
 	if displayName != nil {
@@ -231,13 +196,11 @@ func (s *service) UpdateProfile(ctx context.Context, userID string, displayName,
 	return u, nil
 }
 
-// normalizeEmail trims surrounding whitespace and lowercases the address so
-// the unique email constraint behaves predictably.
+// normalizeEmail lowercases and trims so the unique email constraint behaves predictably.
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
-// validEmail rejects empty, oversized, and malformed addresses.
 func validEmail(email string) bool {
 	if email == "" || len(email) > 320 {
 		return false
