@@ -1,10 +1,4 @@
-// Access helpers for Soulwe's feature-based access model.
-//
-// Soulwe is publicly browsable: any page can be opened without an account, so
-// no route redirects a guest to /login. Authentication is requested per
-// feature instead — a page that mixes public browsing with the user's own data
-// renders SignInPrompt in place of just the protected part, so a guest can look
-// around and then choose to sign in.
+// Soulwe is publicly browsable: no route redirects a guest, and authentication is requested per feature via SignInPrompt.
 
 import type { ReactNode } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
@@ -24,14 +18,7 @@ function AuthLoader() {
   )
 }
 
-// The "this one action needs an account" notice.
-//
-// It is never rendered on page load and never wraps or hides page content —
-// only a page that is *entirely* the user's own data would do that, and that
-// case is better served by a plain empty state. In practice it appears at the
-// moment a visitor attempts a genuinely authenticated action (checking in,
-// booking a therapist, saving a breathing session). Pass `compact` there so it
-// reads as a small aside about that action.
+// The "this one action needs an account" notice; it never renders on page load and never wraps page content.
 export function SignInPrompt({
   title,
   message,
@@ -72,8 +59,7 @@ export function SignInPrompt({
   )
 }
 
-// Wraps public pages (login/register) that don't make sense for a signed-in
-// user; authenticated visitors are sent back to the app.
+// Sends signed-in visitors away from pages meant only for guests.
 export function GuestOnly({ children }: { children: ReactNode }) {
   const { status } = useAuth()
 

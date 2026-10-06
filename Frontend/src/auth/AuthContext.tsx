@@ -1,18 +1,4 @@
-// Central authentication state for Soulwe.
-//
-// The provider owns the auth status machine:
-//   loading        → restoring the session, nothing renders yet
-//   authenticated  → a valid session exists (user is populated)
-//   unauthenticated→ no account session. Soulwe is still fully usable: the
-//                    personal features (journal, check-ins, breathing history)
-//                    run against an anonymous session that this provider
-//                    bootstraps, and pages that need an account (booking a
-//                    therapist, the profile) ask for a sign-in in place rather
-//                    than redirecting.
-//
-// Registration creates an account but returns no token (the backend contract),
-// so it does not change the auth status. Logging in stores the token, and
-// /auth/me + /users/me restore the session after a page refresh.
+// 'unauthenticated' is still fully usable: personal features run against an anonymous session this provider bootstraps, and registration returns no token.
 
 import {
   createContext,
@@ -52,7 +38,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // Validate the stored token, then hydrate the full profile.
       await api.auth.me()
       const { user } = await api.auth.profile()
       setUser(user)
@@ -71,8 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void restoreSession()
   }, [restoreSession])
 
-  // Any authenticated request that is later rejected with 401
-  // (expired/invalid token) returns the app to the unauthenticated state.
+  // Any 401 on an authenticated request (expired/invalid token) drops to unauthenticated.
   useEffect(() => {
     setUnauthorizedHandler(() => {
       setUser(null)
@@ -81,15 +65,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => setUnauthorizedHandler(null)
   }, [])
 
-  // Signing out must not strand an anonymous session: the personal features
-  // keep working exactly as they did before the user logged in, under the
-  // anonymous session already in localStorage.
+  // Signing out must not strand the anonymous session the personal features use.
   useEffect(() => {
     if (status !== 'unauthenticated') return
     void ensureAnonSession().catch(() => {
-      // Best-effort only. If the server is unreachable, the individual personal
-      // request will surface the real error where it actually matters, and
-      // ensureAnonSession is single-flight, so no storm of retries is spawned.
+      // Best-effort: the real error surfaces at the personal request, and this is single-flight.
     })
   }, [status])
 

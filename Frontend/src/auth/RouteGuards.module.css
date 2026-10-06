@@ -32,8 +32,6 @@
   50%       { transform: scale(0.92); opacity: 0.7; }
 }
 
-/* ── In-page sign-in prompt ── */
-
 .prompt {
   display: flex;
   flex-direction: column;
@@ -110,9 +108,7 @@
   color: var(--subtle);
 }
 
-/* Compact form, for the point where a protected *action* is attempted. The
-   sign-in is about that one action, so it reads as a small aside rather than
-   a wall the visitor has to get past to keep browsing. */
+/* Compact: the sign-in is about one action, so it reads as a small aside. */
 .promptCompact {
   padding: var(--space-4);
   gap: var(--space-2);

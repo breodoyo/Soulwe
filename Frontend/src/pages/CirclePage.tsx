@@ -11,10 +11,7 @@ import styles from './CirclePage.module.css'
 const MESSAGE_PAGE_SIZE = 25
 const MAX_MESSAGE_LENGTH = 1000
 
-// circles.icon holds a stable key, not a glyph — emoji were replaced by
-// migration 019_circle_icon_keys because they render inconsistently across
-// platforms and cannot be tinted. An unknown or null key falls back to a
-// generic message icon so a circle is never left without a mark.
+// Stable keys (migration 019_circle_icon_keys), not glyphs; unknown or null falls back to a generic icon.
 const CIRCLE_ICONS: Record<string, typeof MessageCircle> = {
   grief: Feather,
   work: Briefcase,
@@ -37,10 +34,7 @@ function initialsOf(name: string): string {
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 }
 
-// Deterministic per-author colour so a message's bubble matches its avatar.
-// For an anonymous author this stays pseudonym-based — it is keyed on the
-// server-generated name, never on an identity — while a registered member's
-// bubble is keyed on the name they publish.
+// Deterministic per-author colour so a bubble matches its avatar, keyed on the name and never on an identity.
 function avatarColor(name: string): string {
   let hash = 0
   for (let i = 0; i < name.length; i++) {
@@ -61,13 +55,11 @@ function formatMessageTime(iso: string): string {
 }
 
 export default function CirclePage() {
-  // Circles accept either credential. A signed-in member posts under their own
-  // display name, so the promises this page makes — and the label on the
-  // composer — depend on which identity is actually in play.
+  // Circles take either credential, so the composer's label depends on which identity is in play.
   const { status: authStatus } = useAuth()
   const signedIn = authStatus === 'authenticated'
 
-  // Anonymous session lifecycle
+  // Anonymous session state
   const [sessionState, setSessionState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [sessionError, setSessionError] = useState<string | null>(null)
   const [sessionTick, setSessionTick] = useState(0)
@@ -107,33 +99,15 @@ export default function CirclePage() {
 
   const [sessionNotice, setSessionNotice] = useState<string | null>(null)
 
-  // The anonymous token may have been invalidated by the server (e.g. rotated
-  // by another device). Drop it, return to the circle list, and mint a fresh
-  // session on the next pass.
-  //
-  // `err` decides whether that is warranted, because a 401 does not say whose
-  // session ended. An `auth: 'either'` request sends the registered JWT when
-  // there is one, and api.ts has already cleared that token by the time this
-  // runs — so checking storage here would read "no registered token" and
-  // wrongly wipe a still-valid anonymous session. The error carries the
-  // credential that was actually rejected, so trust that instead.
-  //
-  // `setError` is the caller's own error state. Every caller returns straight
-  // after this, so whatever is not written here is never shown: a signed-out
-  // member would otherwise be left staring at a permanent spinner, an empty
-  // thread that looks like a circle nobody has posted in, or a dead button.
+  // Handles a lost session: `err.credential` decides which, since api.ts has
+  // already cleared the rejected token from storage.
   const handleSessionLost = (err: unknown, setError: (message: string) => void) => {
     if (isApiError(err) && err.credential === 'registered') {
-      // The account session ended. api.ts cleared the JWT and the auth
-      // provider has already moved the UI to signed out, and any anonymous
-      // session is still good, so there is nothing to refresh into.
+      // The account session ended; any anonymous session is still good.
       setError('Your session has ended. Sign in again to keep browsing circles.')
       return
     }
-    // 'none' would mean the request went out with no credential at all, which
-    // should not happen after the bootstrap below. It lands here too, so a
-    // guest who lost their session always recovers rather than failing
-    // silently.
+    // Also catches 'none', so a guest who lost their session always recovers.
     clearAnonToken()
     setSessionNotice('Your anonymous session was renewed. Please open the circle again.')
     setSessionTick(t => t + 1)
@@ -145,10 +119,7 @@ export default function CirclePage() {
     setSessionError(null)
     void (async () => {
       try {
-        // Circles accept either credential, so a signed-in member needs no
-        // anonymous session at all. Minting one for them would leave a stray
-        // identity behind that they never asked for, so only a guest boots
-        // one here.
+        // Only a guest boots an anonymous session; minting one for a member would strand an identity.
         if (!getAccessToken()) {
           await ensureAnonSession()
         }
@@ -214,8 +185,7 @@ export default function CirclePage() {
         limit: MESSAGE_PAGE_SIZE,
         before: cursor,
       })
-      // The API returns newest first; flip each page so the thread reads
-      // oldest → newest, with the newest message at the bottom.
+      // The API returns newest first; each page is flipped so the newest lands at the bottom.
       const block = [...res.messages].reverse()
       if (mode === 'initial') {
         setMessages(block)
@@ -225,8 +195,7 @@ export default function CirclePage() {
       setNextCursor(res.next_cursor)
     } catch (err) {
       if (isApiError(err) && err.status === 401) {
-        // Route the message to whichever pane was loading, so the failure
-        // lands where the user is looking instead of being swallowed.
+        // Send the failure to whichever pane was loading.
         if (mode === 'initial') handleSessionLost(err, setMessagesError)
         else handleSessionLost(err, setOlderError)
         return

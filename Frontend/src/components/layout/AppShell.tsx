@@ -62,10 +62,7 @@ const tabs = [
   { to: '/profile',   label: 'Profile',   swahili: 'Wasifu',  Icon: ProfileIcon   },
 ]
 
-// The session badge is the app's answer to "am I anonymous right now?": a
-// guest always sees "Anonymous session" and a way in, a registered user sees
-// their own name and a way out. It is driven by the real auth status, so it can
-// never claim a signed-in visitor is browsing anonymously.
+// The app's answer to "am I anonymous right now?"; driven by real auth status, so it cannot misreport.
 function SessionBadge() {
   const { status, user } = useAuth()
 
@@ -92,11 +89,7 @@ export default function AppShell() {
   const { pathname } = useLocation()
   const firstRender = useRef(true)
 
-  // Route changes in a single-page app leave focus on the link that was
-  // activated, so assistive tech still believes the user is on the previous
-  // page. Move focus to the main landmark after each navigation so the next
-  // Tab starts from the new content. Skipped on mount, which must not steal
-  // focus from the browser or a deep link.
+  // Route changes leave focus on the activated link, so focus moves to the main landmark — skipped on mount to avoid stealing it.
   useEffect(() => {
     if (firstRender.current) {
       firstRender.current = false
@@ -109,11 +102,9 @@ export default function AppShell() {
   return (
     <div className={styles.shell}>
 
-      {/* First tab stop: lets keyboard users bypass the nav and session badge.
-          Hidden until focused, then pinned to the top. */}
+      {/* First tab stop: hidden until focused, then pinned to the top. */}
       <a className={styles.skipLink} href="#main-content">Skip to main content</a>
 
-      {/* Top nav — mobile only */}
       <header className={styles.topnav} role="banner">
         <Link to="/" className={styles.brand} aria-label="Go to Soulwe home page">
           <div className={styles.brandMark} aria-hidden="true">
@@ -139,16 +130,13 @@ export default function AppShell() {
         </div>
       </header>
 
-      {/* Page content. tabIndex -1 so route changes can move focus here without
-          making the landmark reachable by Tab. */}
+      {/* tabIndex -1 lets route changes focus it without making it a Tab stop. */}
       <main className={styles.content} id="main-content" tabIndex={-1}>
         <Outlet />
       </main>
 
-      {/* Tab bar — mobile bottom / desktop left sidebar */}
       <nav className={styles.tabbar} aria-label="Main navigation">
 
-        {/* Desktop sidebar brand — real link, not CSS pseudo-element */}
         <Link to="/" className={styles.sidebarBrand} aria-label="Go to Soulwe landing page">
           <div className={styles.brandMark} aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
@@ -175,7 +163,6 @@ export default function AppShell() {
           </NavLink>
         ))}
 
-        {/* Desktop sidebar session state — real, not a CSS pseudo-element */}
         <div className={styles.sidebarSession}>
           <SessionBadge />
           {isGuest ? (
@@ -186,7 +173,6 @@ export default function AppShell() {
           ) : null}
         </div>
 
-        {/* Desktop sidebar logout */}
         {!isGuest && (
           <button className={styles.sidebarLogout} onClick={logout} aria-label="Log out">
             <span className={styles.tabIcon} aria-hidden="true">

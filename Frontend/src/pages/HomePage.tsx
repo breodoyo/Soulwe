@@ -53,10 +53,7 @@ function formatLoggedAt(iso: string): string {
 export default function HomePage() {
   const navigate = useNavigate()
   const { status } = useAuth()
-  // Browsing is always allowed. This page is complete for a guest: the
-  // greeting, affirmation and quick links are all public, and so is checking in
-  // — a guest's check-ins belong to their anonymous session. Only the account
-  // dashboard, which is built around a profile, needs an account.
+  // Complete for a guest too: only the account dashboard needs an account.
   const hasAccount = status === 'authenticated'
 
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
@@ -71,8 +68,7 @@ export default function HomePage() {
   useEffect(() => {
     let cancelled = false
     setFeedError(null)
-    // The dashboard carries the user's profile, so it is registered-only. The
-    // check-in history is not: a guest gets their own, anonymous one.
+    // The dashboard is registered-only; check-in history works for a guest too.
     const feed = hasAccount
       ? Promise.all([api.dashboard.get(), api.moods.list({ limit: 12 })]).then(([dash, moodsRes]) => ({
           dash,
@@ -141,10 +137,7 @@ export default function HomePage() {
   const lastCheckin = latestMood ? formatLoggedAt(latestMood.logged_at) : '—'
   const recent = checkins.slice(0, 5)
 
-  // A failed dashboard load replaces the page, because the page's own subject
-  // is the account. A guest has no dashboard: their check-in history is a
-  // secondary detail, so a failure there stays inline and the affirmation and
-  // quick links — which need no credential at all — keep working.
+  // A failed dashboard load replaces the page; a guest's is inline, since their history is a detail.
   if (feedError && hasAccount && !dashboard) {
     return (
       <div className={styles.page}>

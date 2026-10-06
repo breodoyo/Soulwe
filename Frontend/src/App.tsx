@@ -12,15 +12,7 @@ import TherapistPage from '@/pages/TherapistPage'
 import BreathePage from '@/pages/BreathePage'
 import ProfilePage from '@/pages/ProfilePage'
 
-// Soulwe is publicly browsable. No route redirects a guest to /login: the
-// landing page, the shell, and every page inside it open for anyone. Features
-// that store the user's own data gate just that part of the page in place
-// (see SignInPrompt), and therapist communication is the one action family
-// that needs a registered account.
-// A single-page app never reloads, so the tab title would stay whatever
-// index.html shipped. Set it per route so the title always names the page the
-// user is actually on, and so a screen reader announcing a new page has
-// something to read out.
+// Set per route: an SPA never reloads, so a screen reader announcing a new page has nothing to read out otherwise.
 const pageTitles: Record<string, string> = {
   '/':          'Soulwe — A home for your soul',
   '/login':     'Log in — Soulwe',
@@ -43,12 +35,10 @@ export default function App() {
   return (
     <Routes>
 
-      {/* Public */}
       <Route path="/" element={<LandingPage />} />
       <Route path="/login"    element={<GuestOnly><LoginPage /></GuestOnly>} />
       <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />
 
-      {/* App area (shared shell) — browsable by guests and anonymous users */}
       <Route element={<AppShell />}>
         <Route path="/home"      element={<HomePage />} />
         <Route path="/journal"   element={<JournalPage />} />

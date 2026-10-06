@@ -16,9 +16,7 @@ interface BreathingConfig {
   phases: Phase[]
 }
 
-// Voice guidance scripts (frontend copy — the backend only exposes durations).
-// Timings and display metadata come from the API; only slugs '478' and 'box'
-// exist in the curated catalog, so these scripts keyed by slug cover all seeds.
+// Frontend-only voice copy; the backend exposes durations only.
 interface ScriptSet { inhale: string; hold: string; exhale: string; rest?: string }
 
 const SCRIPTS: Record<string, ScriptSet> = {
@@ -35,8 +33,7 @@ const SCRIPTS: Record<string, ScriptSet> = {
   },
 }
 
-// The catalog stores three durations (inhale/hold/exhale); the curated 'box'
-// exercise extends that pattern with a second hold, mirroring its seed data.
+// The catalog stores three durations; 'box' adds a second hold, mirroring its seed data.
 function buildConfig(ex: BreathingExercise): BreathingConfig {
   const s = SCRIPTS[ex.slug] ?? SCRIPTS['478']
   const phases: Phase[] = [
@@ -79,9 +76,7 @@ function speak(text: string) {
 
 export default function BreathePage() {
   const { status } = useAuth()
-  // The exercise is public and so is saving it: a guest's history belongs to
-  // their anonymous session. Only the note about where that history is kept
-  // depends on having an account.
+  // Saving works signed out too; a guest's history belongs to their anonymous session.
   const hasAccount = status === 'authenticated'
 
   const [exercises, setExercises]       = useState<BreathingConfig[] | null>(null)
@@ -100,19 +95,13 @@ export default function BreathePage() {
   const startedAtRef   = useRef(0)
   const recordingRef   = useRef(false)
 
-  // Latest-value refs so the long-lived timer effect never reads stale data
-  // without having to list every stable value as a dependency.
+  // Latest-value refs so the long-lived timer effect never reads stale data.
   const configRef = useRef<BreathingConfig | null>(null)
   configRef.current = exercises?.find(e => e.id === selectedId) ?? null
   const voiceOnRef = useRef(voiceOn)
   voiceOnRef.current = voiceOn
 
-  // The countdown that the interval ticks down. This mirrors `secs` but is the
-  // value the timer actually reads: a setState updater must stay pure, because
-  // React is free to call it more than once (StrictMode does exactly that in
-  // development, and concurrent rendering can re-invoke it in production).
-  // Deriving the phase change from `prev` inside the updater would therefore
-  // count breaths twice and speak every instruction twice.
+  // What the timer reads, mirroring `secs`; deriving the phase from `prev` in a setState updater would count breaths and speech twice.
   const secsRef = useRef(0)
 
   const config = configRef.current
@@ -171,11 +160,7 @@ export default function BreathePage() {
     setSelectedId(id)
   }
 
-  // A session is only recorded on the user's explicit Stop — the backend's
-  // POST /breathing/sessions records a completed session. Runs finished with
-  // zero breaths (or abandoned by switching technique) are not recorded.
-  // A guest's session belongs to their anonymous session, so this is never
-  // skipped for want of an account.
+  // Recorded only on an explicit Stop; runs with zero breaths are not, and never skipped for want of an account.
   const recordSession = async () => {
     const exerciseId = configRef.current?.id
     if (!exerciseId || breathCount < 1) return
@@ -223,15 +208,13 @@ export default function BreathePage() {
         setSecs(remaining)
         return
       }
-      // The phase is over. Everything that must happen exactly once lives here
-      // in the interval body, not inside a setState updater.
+      // Everything that must happen exactly once lives here, not in a setState updater.
       if (timerRef.current) clearInterval(timerRef.current)
       const nextIdx   = phaseIdx + 1
       const nextPhase = phases[nextIdx % phases.length]
       if (nextPhase.label === 'Inhale') setBreathCount(c => c + 1)
       if (voiceOnRef.current) speak(nextPhase.instruction)
-      // Advancing the phase re-runs this effect and reseeds the countdown, but
-      // set it here too so the number never flashes to 0 in between.
+      // Reseeded by the effect, but set here too so the number never flashes to 0.
       secsRef.current = nextPhase.duration
       setSecs(nextPhase.duration)
       setPhaseIdx(nextIdx)
@@ -386,11 +369,7 @@ export default function BreathePage() {
 
       {/* Technique selector */}
       {exercises !== null && exercises.length > 0 && (
-        // These are toggle buttons, not list items. `role="listitem"` on a
-        // button overrides its implicit role, which hid the control from
-        // assistive tech as an actionable element and made the `aria-pressed`
-        // below invalid. A labelled group describes them accurately and leaves
-        // the markup (and therefore the flex/gap layout) untouched.
+        // A labelled group, not list items: role="listitem" on a button overrides its implicit role and invalidates aria-pressed.
         <div className={styles.techniqueList} role="group" aria-label="Breathing techniques">
           {exercises.map((t, i) => (
             <button
