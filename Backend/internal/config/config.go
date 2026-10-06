@@ -10,7 +10,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Config encapsulates all environment configuration for the Soulwe backend.
 type Config struct {
 	Port             string
 	Env              string
@@ -23,9 +22,7 @@ type Config struct {
 	AnthropicKey     string
 }
 
-// Load reads settings from the .env file (if present) and system environment variables.
 func Load() *Config {
-	// Attempt to load .env; if it fails (e.g. production container), continue with environment variables.
 	if err := godotenv.Load(); err != nil {
 		log.Println("Note: No .env file loaded, reading configuration directly from system environment")
 	}
@@ -66,8 +63,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// getEnv retrieves the value of the environment variable named by key,
-// or returns fallback if the variable is empty or not present.
 func getEnv(key, fallback string) string {
 	if val, ok := os.LookupEnv(key); ok && val != "" {
 		return val

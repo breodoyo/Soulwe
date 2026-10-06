@@ -1,7 +1,6 @@
-// Package ai provides the server-side Anthropic Claude client used to generate
-// journal reflections. Only the minimal journal text needed for a reflection
-// is sent; credentials, database details, and user identity are never
-// transmitted, and journal content is never logged.
+// Package ai provides the server-side Claude client that generates reflections.
+// Only the journal text a reflection needs is sent; credentials, database details
+// and user identity never leave the backend, and content is never logged.
 package ai
 
 import (
@@ -30,8 +29,7 @@ const (
 	// MaxTokens bounds the reflection length so requests stay fast and cheap.
 	MaxTokens = 220
 
-	// RequestTimeout bounds a single reflection call. The client also honours
-	// the caller's context deadline when it is shorter.
+	// RequestTimeout bounds one reflection call; a shorter caller deadline wins.
 	RequestTimeout = 30 * time.Second
 
 	contentType = "application/json"
@@ -56,8 +54,7 @@ type messagesResponse struct {
 	} `json:"content"`
 }
 
-// Client calls the Anthropic Messages API. It holds only the API key and model
-// name; it never stores or logs journal content.
+// Client holds only the API key and model; it never stores or logs content.
 type Client struct {
 	apiKey string
 	model  string
@@ -87,10 +84,8 @@ func NewClientForTests(endpoint, apiKey, model string) *Client {
 	}
 }
 
-// GenerateReflection sends the journal text to Claude and returns the trimmed
-// reflection. It returns ErrNotConfigured when no API key is set and a generic
-// error on any transport or API failure. Journal content never appears in the
-// returned error.
+// GenerateReflection returns the trimmed reflection, or ErrNotConfigured when no
+// API key is set. Journal content never appears in the returned error.
 func (c *Client) GenerateReflection(ctx context.Context, content string, moodTags []string) (string, error) {
 	if strings.TrimSpace(c.apiKey) == "" {
 		return "", ErrNotConfigured
@@ -129,8 +124,7 @@ func (c *Client) GenerateReflection(ctx context.Context, content string, moodTag
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		// Drain a small amount so the connection can be reused, but never echo
-		// the response body (or anything else) into the returned error.
+		// Drain a little so the connection can be reused, but never echo the body.
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		return "", fmt.Errorf("ai: upstream returned status %d", resp.StatusCode)
 	}
@@ -148,9 +142,6 @@ func (c *Client) GenerateReflection(ctx context.Context, content string, moodTag
 	return "", errors.New("ai: upstream returned no text")
 }
 
-// reflectionPrompt wraps the journal content with a short instruction. Only the
-// user's own words and self-chosen mood tags are included — never credentials,
-// database details, or encryption keys.
 func reflectionPrompt(content string, moodTags []string) string {
 	var b strings.Builder
 	b.WriteString("Reflect on the following journal entry.\n\n")
