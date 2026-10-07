@@ -5,6 +5,8 @@
   align-items: center;
   gap: var(--space-6);
   text-align: center;
+  max-width: var(--max-content);
+  margin: 0 auto;
 }
 
 .header { width: 100%; }

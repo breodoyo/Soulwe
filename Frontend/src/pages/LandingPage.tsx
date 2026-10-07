@@ -46,14 +46,11 @@ const circles = [
   { icon: Sprout,          name: 'Young adults'         },
 ]
 
-// One page. The hero is exclusive: it holds the entire first screen and
-// nothing shares that viewport. Every section the nav links to — features,
-// circles, therapists — is briefed on the page itself.
+// One page: the hero holds the entire first screen and nothing shares that viewport.
 export default function LandingPage() {
   return (
     <div className={styles.page}>
 
-      {/* ── Nav ── */}
       <nav className={styles.nav} aria-label="Main">
         <div className={styles.navBrand}>
           <div className={styles.navMark}>
@@ -70,19 +67,15 @@ export default function LandingPage() {
           {/* Signing in is always a choice, never a gate on browsing. */}
           <Link to="/login" className={styles.navLink}>Log in</Link>
         </div>
-        {/* These are navigations, not actions: real links so they are reachable
-            with the keyboard, exposed as links to assistive tech, and
-            middle-click/cmd-clickable like any other internal link. */}
+        {/* Real links, not actions: keyboard reachable and cmd-clickable like any internal link. */}
         <Link className={styles.navCta} to="/home">
           Start your journey
         </Link>
       </nav>
 
-      {/* The landing page had no main landmark, so screen-reader users had no
-          single element to jump to and no way to skip the nav. */}
+      {/* The page had no main landmark, so there was no way to skip the nav. */}
       <main id="main-content">
 
-      {/* ── Hero ── */}
       <section className={styles.hero}>
         <div className={styles.heroLeft}>
           <h1 className={styles.heroHeading}>
@@ -132,25 +125,19 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* The hero fills the screen, so it needs to say that there is more
-            below it. This is the one cue that turns a full-height hero into
-            the first step of a scroll rather than a dead end. */}
+        {/* The full-height hero needs one cue that there is more below. */}
         <a className={styles.scrollCue} href="#features">
           <span className={styles.scrollCueText}>See what&rsquo;s inside</span>
           <span className={styles.scrollCueArrow} aria-hidden="true">&darr;</span>
         </a>
       </section>
 
-      {/* ── Features ── */}
       <section className={styles.features} id="features">
         <div className={styles.inner}>
           <span className={styles.eyebrow}>What Soulwe gives you</span>
           <h2 className={styles.sectionHeading}>Everything in one quiet place.</h2>
           <div className={styles.featuresScroller}>
-            {/* A single horizontally scrolling row. The tabIndex makes the
-                track focusable so it can be scrolled with the keyboard, and
-                the group role plus label announce it as a scrollable region
-                rather than as five loose cards. */}
+            {/* tabIndex and role="group" make the sideways-scrolling track keyboard scrollable and announced as one region. */}
             <div
               className={styles.featuresTrack}
               tabIndex={0}
@@ -174,7 +161,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Circles ── */}
       <section className={styles.circlesSection} id="circles">
         <div className={styles.inner}>
           <span className={styles.eyebrowLight}>Community circles</span>
@@ -202,7 +188,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Therapists ── */}
       <section className={styles.therapists} id="therapists">
         <div className={styles.therapistsInner}>
           <div className={styles.therapistsLeft}>
@@ -245,9 +230,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Supporting detail, after the three sections the nav links to ── */}
 
-      {/* ── Stats bar ── */}
       <div className={styles.statsBar}>
         {[
           { num: '8',    label: 'Support circles'     },
@@ -262,7 +245,6 @@ export default function LandingPage() {
         ))}
       </div>
 
-      {/* ── Problem ── */}
       <section className={styles.problem}>
         <div className={styles.inner}>
           <span className={styles.eyebrow}>Why Soulwe exists</span>
@@ -296,7 +278,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Final CTA ── */}
       <section className={styles.finalCta}>
         <div className={styles.finalCtaInner}>
           <div className={styles.finalCtaMark}>
@@ -322,7 +303,6 @@ export default function LandingPage() {
 
       </main>
 
-      {/* ── Footer ── */}
       <footer className={styles.footer}>
         <div className={styles.footerInner}>
           <div className={styles.footerBrand}>

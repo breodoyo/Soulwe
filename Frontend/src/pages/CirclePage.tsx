@@ -369,6 +369,7 @@ export default function CirclePage() {
   if (sessionState === 'error') {
     return (
       <div className={styles.page}>
+        <img src="/circle.png.jpg" alt="Community circle" className={styles.heroImage} />
         <div className={styles.header}>
           <h1 className={styles.heading}>Community circles</h1>
           <p className={styles.sub}>Peer support, African voices, safe space — <em>salama</em></p>
@@ -389,6 +390,7 @@ export default function CirclePage() {
       {/* Circle list */}
       {!activeCircleId && (
         <>
+          <img src="/circle.png.jpg" alt="Community circle" className={styles.heroImage} />
           <div className={styles.header}>
             <h1 className={styles.heading}>Community circles</h1>
             <p className={styles.sub}>Peer support, African voices, safe space — <em>salama</em></p>

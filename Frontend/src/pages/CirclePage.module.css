@@ -1,6 +1,24 @@
-.page { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-5); }
+/* Full-bleed page: the hero image spans the whole screen, everything else is
+   centred at the standard content width. */
+.page { padding: 0 0 var(--space-5) 0; display: flex; flex-direction: column; gap: var(--space-5); width: 100%; }
+.page > *:not(.heroImage) {
+  width: 100%;
+  max-width: var(--max-content);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--space-4);
+  padding-right: var(--space-4);
+}
+.page > *:not(.heroImage):first-child { margin-top: var(--space-4); }
 
 .header { }
+.heroImage {
+  width: 100%;
+  height: 260px;
+  object-fit: cover;
+  object-position: center 62%;
+  display: block;
+}
 .heading { font-family: var(--font-display); font-size: var(--text-xl); color: var(--ink); margin-bottom: 3px; }
 .sub { font-size: var(--text-sm); color: var(--muted); }
 .sub em { font-style: italic; color: var(--sage-deep); }
@@ -290,14 +308,16 @@
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Desktop ── */
+/* The hero stays full-bleed, so only the bottom padding scales up — no top or
+   side padding, which would leave white space around the image. */
 @media (min-width: 768px) {
   .page {
-    padding: var(--space-8) var(--space-8);
+    padding-bottom: var(--space-8);
   }
 }
 
 @media (min-width: 1280px) {
   .page {
-    padding: var(--space-10) var(--space-10);
+    padding-bottom: var(--space-10);
   }
 }

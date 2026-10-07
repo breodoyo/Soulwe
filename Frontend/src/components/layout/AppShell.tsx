@@ -136,16 +136,6 @@ export default function AppShell() {
       </main>
 
       <nav className={styles.tabbar} aria-label="Main navigation">
-
-        <Link to="/" className={styles.sidebarBrand} aria-label="Go to Soulwe landing page">
-          <div className={styles.brandMark} aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-              <path d="M12 21C12 21 4 13.5 4 8.5a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5-8 12.5-8 12.5z" />
-            </svg>
-          </div>
-          <span className={styles.brandName}>Soulwe</span>
-        </Link>
-
         {tabs.map(({ to, label, swahili, Icon }) => (
           <NavLink
             key={to}
@@ -162,26 +152,6 @@ export default function AppShell() {
             <span className={styles.tabSwahili}>{swahili}</span>
           </NavLink>
         ))}
-
-        <div className={styles.sidebarSession}>
-          <SessionBadge />
-          {isGuest ? (
-            <div className={styles.sidebarAuthLinks}>
-              <Link className={styles.sidebarAuthLink} to="/login">Log in</Link>
-              <Link className={styles.sidebarAuthLink} to="/register">Register</Link>
-            </div>
-          ) : null}
-        </div>
-
-        {!isGuest && (
-          <button className={styles.sidebarLogout} onClick={logout} aria-label="Log out">
-            <span className={styles.tabIcon} aria-hidden="true">
-              <LogoutIcon />
-            </span>
-            <span className={styles.tabLabel}>Log out</span>
-          </button>
-        )}
-
       </nav>
 
     </div>

@@ -115,17 +115,12 @@ export default function JournalPage() {
   })
 
   useEffect(() => {
-    // Journal entries are personal data. The list has to be re-fetched whenever
-    // the credential changes, not only when `tick` is bumped: signing in,
-    // signing out, or switching accounts all left the previous identity's
-    // entries sitting on screen. `user?.id` also covers switching from one
-    // registered account straight to another.
+    // Entries are personal, so the list refetches whenever the credential changes.
     if (status === 'loading') return
     let cancelled = false
     setListLoading(true)
     setListError(null)
-    // Drop the old identity's entries immediately rather than leaving them up
-    // for the duration of the refetch.
+    // Drop the old identity's entries rather than leaving them up during the refetch.
     setEntries([])
     setNextCursor(null)
     api.journal

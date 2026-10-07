@@ -12,9 +12,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
-  // Which field the validation error belongs to. Each check below is specific to
-  // one input, so only that input is marked aria-invalid — a rejected signup
-  // (e.g. email already in use) leaves every field individually valid.
+  // Each check targets one input, so a rejected signup leaves every field valid.
   const [invalidField, setInvalidField] = useState<'email' | 'password' | 'confirm' | null>(null)
   const [submitting, setSubmitting] = useState(false)
 

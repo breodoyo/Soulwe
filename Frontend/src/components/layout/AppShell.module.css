@@ -180,32 +180,37 @@
   50%       { opacity: 0.3; }
 }
 
+/* Full width: each page constrains its own content so a page can opt into
+   full-bleed children (see CirclePage's hero image). */
 .content {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-bottom: calc(var(--tab-height) + var(--space-4));
+  padding-bottom: var(--space-6);
   -webkit-overflow-scrolling: touch;
-  max-width: var(--max-content);
   width: 100%;
-  margin: 0 auto;
 }
 
 .tabbar {
   display: flex;
-  position: fixed;
-  bottom: 0;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  position: sticky;
+  top: var(--nav-height);
   left: 0;
   right: 0;
   height: var(--tab-height);
   background: var(--bg);
-  border-top: 1px solid var(--border-soft);
-  z-index: 20;
-  padding-bottom: env(safe-area-inset-bottom, 0);
+  border-bottom: 1px solid var(--border-soft);
+  z-index: 15;
+  padding: 0 var(--space-4);
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tab {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -215,7 +220,9 @@
   text-decoration: none;
   transition: color var(--duration-base) var(--ease);
   position: relative;
-  padding-top: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tab::before {
@@ -268,47 +275,37 @@
 }
 
 @media (min-width: 768px) {
-
-  /* The shell owns its scrolling: the sidebar is fixed-height and .content is the scroll pane. This lock used to live on body/#root, which also clipped the landing page. */
   .shell {
-    flex-direction: row;
-    height: 100dvh;
-    overflow: hidden;
-  }
-
-  .topnav {
-    display: none;
+    flex-direction: column;
+    height: auto;
+    overflow: visible;
   }
 
   .tabbar {
     position: sticky;
-    top: 0;
-    bottom: auto;
-    left: auto;
-    right: auto;
-    order: 1;
-    flex-direction: column;
-    width: var(--sidebar-width);
-    height: 100dvh;
-    background: var(--bg-mid);
-    border-top: none;
-    border-right: 1px solid var(--border-soft);
-    padding-bottom: 0;
-    justify-content: flex-start;
-    align-items: stretch;
+    top: var(--nav-height);
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: var(--tab-height);
+    flex-direction: row;
+    background: var(--bg);
+    border-right: none;
+    border-bottom: 1px solid var(--border-soft);
+    justify-content: center;
+    align-items: center;
     flex-shrink: 0;
-    /* Must scroll, not clip: on a short viewport the logout control would otherwise be unreachable. */
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .tabbar::before {
-  display: none;
-}
+    display: none;
+  }
 
-.sidebarBrand {
-  display: none;
-}
+  .sidebarBrand {
+    display: none;
+  }
 
 @media (min-width: 768px) {
   .sidebarBrand {
@@ -386,12 +383,6 @@
     overflow-y: auto;
     max-width: none;
     margin: 0;
-  }
-
-  .content > * {
-    max-width: var(--max-content);
-    margin-left: auto;
-    margin-right: auto;
   }
 
   .tab {

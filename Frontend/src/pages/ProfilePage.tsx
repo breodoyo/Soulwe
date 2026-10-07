@@ -24,9 +24,7 @@ function formatMemberSince(iso: string): string {
 
 export default function ProfilePage() {
   const { status } = useAuth()
-  // A profile is by definition the user's own account data. The page itself
-  // stays open to guests — for them it is simply an empty state, and the
-  // request below is never sent without a session.
+  // Account data by definition; for a guest this is just an empty state.
   const hasAccount = status === 'authenticated'
 
   const [profile, setProfile] = useState<User | null>(null)
@@ -116,10 +114,7 @@ export default function ProfilePage() {
           </button>
         </section>
       ) : !hasAccount ? (
-        // A profile is the user's own account data, so there is genuinely
-        // nothing to show a guest here. That is stated plainly as an empty
-        // state — the page still opens, and a guest's journal, check-ins and
-        // breathing history all work without one.
+        // Plainly an empty state: the page still opens and a guest's other data still works.
         <section className={styles.card}>
           <p className={styles.sub}>Browsing anonymously</p>
           <p className={styles.hint}>
