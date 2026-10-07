@@ -14,9 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// fakeService embeds the Service interface so the handler tests only need to
-// stub the methods under test; the remaining methods fall back to their
-// zero-value result.
+// fakeService embeds Service so tests only stub the methods under test.
 type fakeService struct {
 	Service
 	createSessionFunc func(ctx context.Context, deviceUUID string) (*Session, error)

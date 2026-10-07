@@ -13,10 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TestAnonSessionIntegration exercises the anonymous session flow against a
-// real PostgreSQL. It is excluded from the default build via the
-// "integration" tag and skipped when DATABASE_URL is not set. It requires the
-// 011_add_anon_session_identity migration to have been applied.
+// TestAnonSessionIntegration needs a running PostgreSQL (DATABASE_URL), the
+// "integration" tag, and migration 011_add_anon_session_identity applied.
 func TestAnonSessionIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -65,7 +63,6 @@ func TestAnonSessionIntegration(t *testing.T) {
 			t.Error("the raw token was stored verbatim — only a hash should be stored")
 		}
 
-		// device_uuid saved on the identity; cleanup later.
 		cleanup(t, pool, session.AnonymousID)
 	})
 
@@ -87,7 +84,6 @@ func TestAnonSessionIntegration(t *testing.T) {
 			t.Error("expected the token to rotate on a repeated device call")
 		}
 
-		// The rotated id is now authenticated by the new token only.
 		if id, ok, err := svc.Authenticate(ctx, first.Token); err != nil || ok {
 			t.Errorf("old token must no longer authenticate: ok=%v err=%v", ok, err)
 			_ = id
@@ -154,15 +150,13 @@ func TestAnonSessionIntegration(t *testing.T) {
 		}
 	})
 
-	// The deferred cleanup intentionally outlives anonymousID only when it was
-	// set in the first subtest; later subtests clean up after themselves.
+	// Only needed when the first subtest set anonymousID; later ones clean up after themselves.
 	if anonymousID != "" {
 		cleanup(t, pool, anonymousID)
 	}
 }
 
-// cleanup removes the anon_identities row created for the test. It is safe to
-// defer at subtest scope: DELETE by id returns no rows for already-deleted ids.
+// cleanup is safe to defer at subtest scope: DELETE by id is a no-op once gone.
 func cleanup(t *testing.T, pool *pgxpool.Pool, id string) {
 	t.Helper()
 	if _, err := pool.Exec(context.Background(),

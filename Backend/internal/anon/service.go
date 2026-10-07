@@ -7,32 +7,26 @@ import (
 	"strings"
 )
 
-// maxCreateAttempts bounds retries on the UNIQUE constraints. An insert can
-// collide on anon_name, token_hash, or device_uuid; a fresh random name and
-// token are tried again each loop, making collisions effectively impossible.
+// maxCreateAttempts bounds retries on the UNIQUE constraints; a fresh random
+// name and token are tried each loop, making collisions effectively impossible.
 const maxCreateAttempts = 5
 
-// Session is the successful outcome of creating an anonymous session: the raw
-// token the client must present on subsequent requests, plus the identity ID
-// of the underlying anon_identities row (anonymous_id).
+// Session is a successful session creation: the raw token the client presents
+// on subsequent requests, plus the identity ID (anonymous_id).
 type Session struct {
 	Token       string
 	AnonymousID string
 }
 
-// Service is the anonymous-session business-logic boundary. Implementations
-// authenticate raw tokens, rotate tokens idempotently per device, and never
-// leak the raw token back to the repository.
+// Service is the anonymous-session business-logic boundary.
 type Service interface {
-	// CreateSession mints a fresh anonymous token and the identity that owns
-	// it. When the client re-registers with the same device UUID, the same
-	// identity (and hence the same anonymous_id) is reused and its token is
-	// rotated, keeping the endpoint idempotent per device.
+	// CreateSession mints a token and its identity; a repeat call with the same
+	// device UUID reuses that identity and rotates the token, keeping the
+	// endpoint idempotent per device.
 	CreateSession(ctx context.Context, deviceUUID string) (*Session, error)
 
-	// Authenticate checks a raw anonymous token and returns the identity ID
-	// when valid. The boolean reports whether the token matched; ok=false
-	// means the token is unknown (not an internal failure).
+	// Authenticate returns the identity ID for a valid raw token. ok=false
+	// means the token is unknown, not an internal failure.
 	Authenticate(ctx context.Context, rawToken string) (identityID string, ok bool, err error)
 }
 
@@ -40,7 +34,6 @@ type service struct {
 	identities Repository
 }
 
-// NewService wires the anonymous session service to an identity repository.
 func NewService(identities Repository) *service {
 	return &service{identities: identities}
 }
@@ -48,8 +41,8 @@ func NewService(identities Repository) *service {
 func (s *service) CreateSession(ctx context.Context, deviceUUID string) (*Session, error) {
 	deviceUUID = strings.TrimSpace(deviceUUID)
 
-	// Idempotency: a repeated call from the same device reuses its existing
-	// identity and rotates the token, so anonymous_id stays stable.
+	// A repeat call from the same device reuses its identity, so the
+	// anonymous_id stays stable.
 	if deviceUUID != "" {
 		if existing, err := s.identities.FindByDeviceUUID(ctx, deviceUUID); err == nil {
 			session, err := s.rotate(ctx, existing.ID)
@@ -84,9 +77,8 @@ func (s *service) CreateSession(ctx context.Context, deviceUUID string) (*Sessio
 			}
 
 			// A concurrent request may have created this device's identity
-			// after our initial lookup, racing our insert on the device_uuid
-			// unique index. Re-check before retrying so we rotate the
-			// winner's identity instead of exhausting retries with a 500.
+			// after our lookup, racing us on the device_uuid unique index.
+			// Re-check so we rotate the winner instead of exhausting retries.
 			if deviceUUID != "" {
 				if existing, lookupErr := s.identities.FindByDeviceUUID(ctx, deviceUUID); lookupErr == nil {
 					session, rotateErr := s.rotate(ctx, existing.ID)
@@ -107,8 +99,7 @@ func (s *service) CreateSession(ctx context.Context, deviceUUID string) (*Sessio
 	return nil, fmt.Errorf("anon create session: %w", ErrIdentityConflict)
 }
 
-// rotate assigns a fresh token hash to an existing identity without touching
-// its anonymous_id or anon_name.
+// rotate assigns a fresh token hash, leaving anonymous_id and anon_name alone.
 func (s *service) rotate(ctx context.Context, identityID string) (*Session, error) {
 	for attempt := 0; attempt < maxCreateAttempts; attempt++ {
 		raw, err := GenerateRawToken()

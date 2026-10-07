@@ -5,10 +5,8 @@ import (
 	"time"
 )
 
-// Booking statuses, matching the CHECK constraint in migration 014. A booking
-// is created pending, can only be cancelled while pending, and conservative
-// interpretations of the other statuses (confirmed, completed) are left to
-// future phases that add therapist-side flows.
+// Booking statuses, matching the CHECK constraint in migration 014. A booking is
+// created pending and only cancellable while pending.
 const (
 	StatusPending   = "pending"
 	StatusConfirmed = "confirmed"
@@ -16,9 +14,8 @@ const (
 	StatusCompleted = "completed"
 )
 
-// SessionDuration is the assumed length of a booked therapy session. The
-// schema stores only a start time, so "overlapping sessions" for the same user
-// are detected around this fixed window.
+// SessionDuration is the assumed session length. The schema stores only a start
+// time, so "overlapping sessions" are detected around this fixed window.
 const SessionDuration = 60 * time.Minute
 
 // Sentinel errors returned by the bookings domain. Handlers map each to a safe
@@ -50,10 +47,9 @@ var (
 	ErrScheduledInPast = errors.New("scheduled_at must be in the future")
 )
 
-// Booking is the wire shape of one session booking. The owner is carried on
-// the struct for repository writes and scoping but is never serialized; the
-// therapist is represented by id plus display_name (from therapists.full_name)
-// so list/get responses are self-describing without exposing owner identity.
+// Booking is the wire shape of one session booking. UserID is carried for
+// repository writes and scoping but never serialized; the therapist is exposed
+// as id plus display_name (therapists.full_name).
 type Booking struct {
 	ID          string    `json:"id"`
 	UserID      string    `json:"-"`

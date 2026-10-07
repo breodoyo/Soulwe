@@ -13,11 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TestPostgresRepositoryIntegration exercises the therapists repository against
-// a running PostgreSQL. It is excluded from the default build via the
-// "integration" tag and skipped when DATABASE_URL is not set. Therapists and
-// their language rows are seeded via SQL and removed by the deferred cleanup
-// (therapist_languages cascades on therapist delete).
+// TestPostgresRepositoryIntegration needs DATABASE_URL and the "integration" tag.
 func TestPostgresRepositoryIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -165,7 +161,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	})
 
 	t.Run("List honors the before cursor", func(t *testing.T) {
-		// Cici is the newest; ask for rows strictly older than her created_at.
+		// Strictly older than Cici, the newest.
 		cursor := base.Add(2 * time.Hour)
 		therapists, err := repo.List(ctx, ListOptions{}, 10, &cursor)
 		if err != nil {

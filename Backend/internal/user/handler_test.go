@@ -349,8 +349,7 @@ func TestHandlerMeRoute(t *testing.T) {
 	})
 }
 
-// performPromote seeds the identity into the context as the middleware would;
-// an empty identityID simulates an unauthenticated request.
+// performPromote seeds the identity ID into the context; "" simulates no auth.
 func performPromote(t *testing.T, svc Service, body, identityID string) *httptest.ResponseRecorder {
 	t.Helper()
 	handler := NewHandler(svc)

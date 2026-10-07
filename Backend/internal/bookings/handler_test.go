@@ -18,8 +18,6 @@ import (
 
 const handlerUserID = "11111111-1111-1111-1111-111111111111"
 
-// fakeService embeds the Service interface so handler tests only stub the
-// methods under test.
 type fakeService struct {
 	Service
 	createFunc func(ctx context.Context, userID, therapistID string, scheduledAt time.Time) (*Booking, error)
@@ -56,10 +54,9 @@ func (f *fakeService) Cancel(ctx context.Context, userID, bookingID string) (*Bo
 	return f.cancelFunc(ctx, userID, bookingID)
 }
 
-// requestRouterPath builds a router that simulates the AuthRequired middleware
-// by stamping UserIDKey into the Gin context, then serves the request. An
-// empty userID leaves the context unstamped, exercising the handler's 401 path.
-// An optional body feeds POST/PATCH routes.
+// requestRouterPath simulates the AuthRequired middleware by stamping UserIDKey
+// into the Gin context; an empty userID leaves it unstamped, exercising the 401
+// path.
 func requestRouterPath(t *testing.T, method, route, requestPath, userID string, body io.Reader, handler func(c *gin.Context)) *httptest.ResponseRecorder {
 	t.Helper()
 	router := gin.New()

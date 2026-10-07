@@ -26,16 +26,14 @@ type registerRequest struct {
 	Password string `json:"password"`
 }
 
-// promoteRequest is the POST /api/v1/auth/anonymous/promote body; the identity
-// comes from the request's bearer token, not the body.
+// promoteRequest is the promote body; identity comes from the bearer token.
 type promoteRequest struct {
 	Email       string  `json:"email"`
 	Password    string  `json:"password"`
 	DisplayName *string `json:"display_name"`
 }
 
-// updateProfileRequest is the PATCH /api/v1/users/me body; pointers mark
-// optional fields, and password/email/is_verified are never accepted.
+// updateProfileRequest marks optional PATCH /users/me fields with pointers.
 type updateProfileRequest struct {
 	DisplayName  *string `json:"display_name"`
 	LanguagePref *string `json:"language_pref"`

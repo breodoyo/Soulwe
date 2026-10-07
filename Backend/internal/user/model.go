@@ -31,8 +31,7 @@ var (
 	ErrInvalidLanguagePref = errors.New("invalid language preference")
 )
 
-// validLanguagePrefs holds the supported codes; the schema stores free-form
-// TEXT, so validation lives here at the application boundary.
+// validLanguagePrefs holds the supported codes; the column itself is free-form.
 var validLanguagePrefs = map[string]bool{
 	"en":  true,
 	"sw":  true,

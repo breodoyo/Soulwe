@@ -14,10 +14,9 @@ import (
 )
 
 // TestPostgresRepositoryIntegration exercises the bookings repository against a
-// running PostgreSQL. It is excluded from the default build via the
-// "integration" tag and skipped when DATABASE_URL is not set. Users and
-// therapists are seeded via SQL with fixed ids; the deferred cleanup removes
-// them and the bookings rows cascade away.
+// running PostgreSQL. Excluded from the default build via the "integration"
+// tag and skipped when DATABASE_URL is not set. Users and therapists are seeded
+// with fixed ids; the deferred cleanup removes them and bookings cascade away.
 func TestPostgresRepositoryIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -85,8 +84,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		return time.Date(2026, 10, 1, hour, 0, 0, 0, time.UTC)
 	}
 
-	// cancelledID points at the booking cancelled in the SetStatus subtest; the
-	// following subtests reuse it as a known non-pending, foreign-scoped row.
+	// cancelledID is a known non-pending, foreign-scoped row reused by later subtests.
 	var cancelledID string
 
 	t.Run("Create inserts a pending booking and fills generated fields", func(t *testing.T) {
@@ -126,8 +124,8 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	})
 
 	t.Run("HasActiveOverlap detects overlapping sessions for the same user", func(t *testing.T) {
-		// u1 holds 10:00 (rebooked above). 10:30 overlaps it; 11:00 is exactly
-		// the boundary and does not; 12:00 is clean.
+		// u1 holds 10:00; 10:30 overlaps it, 11:00 is the exact non-overlapping
+		// boundary, and 12:00 is clean.
 		overlap, err := repo.HasActiveOverlap(ctx, u1, at(10).Add(30*time.Minute))
 		if err != nil {
 			t.Fatalf("HasActiveOverlap returned error: %v", err)
@@ -184,8 +182,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	})
 
 	t.Run("ListByUserID returns only the user's bookings newest-first", func(t *testing.T) {
-		// Seed a second user's booking (u2) and multiple u1 bookings, with
-		// explicit created_at so the ordering is deterministic.
+		// Explicit created_at values keep the ordering deterministic.
 		seed := func(user, therapist string, at time.Time, created time.Time, status string) string {
 			var id string
 			if err := pool.QueryRow(ctx, `
@@ -338,10 +335,10 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 }
 
 // TestPostgresRepositoryWindowGuardIntegration exercises the migration 015
-// guarantees: any two ACTIVE bookings whose [scheduled_at, +60m) windows
-// overlap must be rejected by the database itself, so concurrent requests
-// cannot sneak overlapping sessions in. It is excluded from the default build
-// via the "integration" tag and skipped when DATABASE_URL is not set.
+// guarantees: the database itself rejects any two ACTIVE bookings whose
+// [scheduled_at, +60m) windows overlap, so concurrent requests cannot sneak
+// overlapping sessions in. Excluded from the default build via the "integration"
+// tag and skipped when DATABASE_URL is not set.
 func TestPostgresRepositoryWindowGuardIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -351,9 +348,9 @@ func TestPostgresRepositoryWindowGuardIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// Keep the concurrent exclusion subtests fast: a lost GiST race resolves
-	// via deadlock detection (default 1s), and the repository retries it as a
-	// clean conflict. Bounding detection here avoids multi-second waits.
+	// Bounding deadlock detection keeps the concurrent exclusion subtests fast: a
+	// lost GiST race resolves via deadlock detection (default 1s) and the
+	// repository retries it as a clean conflict.
 	cfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		t.Fatalf("failed to parse DATABASE_URL: %v", err)
@@ -495,9 +492,8 @@ func TestPostgresRepositoryWindowGuardIntegration(t *testing.T) {
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
-				// Slots 10:00, 10:12, 10:24, 10:36, 10:48 all sit inside the
-				// [10:00, 11:00) baseline window (max spread 48 min < 60), so
-				// every pair overlaps and at most one can win.
+				// Slots 10:00-10:48 all sit inside the [10:00, 11:00) baseline
+				// (max spread 48 min < 60), so every pair overlaps.
 				<-start
 				errs[i] = create(users[i%len(users)], t1, at(7, 10, 12*i))
 			}(i)
@@ -534,8 +530,8 @@ func TestPostgresRepositoryWindowGuardIntegration(t *testing.T) {
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
-				// u1 firing 10:00, 10:12, 10:24, ... at different therapists;
-				// every window overlaps the [10:00, 11:00) baseline.
+				// u1 firing 10:00-10:48 at different therapists; every window
+				// overlaps the [10:00, 11:00) baseline.
 				<-start
 				errs[i] = create(u1, therapists[i%len(therapists)], at(8, 10, 12*i))
 			}(i)
@@ -563,7 +559,6 @@ func TestPostgresRepositoryWindowGuardIntegration(t *testing.T) {
 	})
 }
 
-// mustBookingFor resolves a booking id for the given user+therapist pair.
 func mustBookingFor(ctx context.Context, t *testing.T, repo Repository, userID, therapistID string) string {
 	bookings, err := repo.ListByUserID(ctx, userID)
 	if err != nil {

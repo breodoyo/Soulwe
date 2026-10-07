@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// fakeRepo embeds the Repository interface so service tests only stub the
-// methods under test.
 type fakeRepo struct {
 	Repository
 	createFunc    func(ctx context.Context, b *Booking) error

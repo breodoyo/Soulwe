@@ -12,18 +12,16 @@ import (
 )
 
 // Repository defines the persistence operations the therapists domain needs.
-// Implementations only touch the database; they contain no business logic. The
-// therapist directory is a public catalog, so reads are never scoped to a user
-// and there is no concept of ownership to enforce.
+// The directory is a public catalog, so reads are never scoped to a user and
+// there is no ownership to enforce.
 type Repository interface {
-	// List returns the therapist directory newest first, limited to limit
-	// rows, optionally filtered by language and/or specialty (case-insensitive
-	// substring) and resumed from a created_at cursor (exclusive). It returns
-	// an empty slice (not nil) when nothing matches.
+	// List returns the directory newest first, limited to limit rows, optionally
+	// filtered by language and/or specialty and resumed from an exclusive
+	// created_at cursor. Returns an empty slice (not nil) when nothing matches.
 	List(ctx context.Context, opts ListOptions, limit int, before *time.Time) ([]Therapist, error)
 
-	// Get returns a single therapist by id, or ErrTherapistNotFound. Existence
-	// is not scoped to is_active: a previously-listed therapist still resolves.
+	// Get returns a single therapist by id, or ErrTherapistNotFound. Existence is
+	// not scoped to is_active, so a previously-listed therapist still resolves.
 	Get(ctx context.Context, therapistID string) (*Therapist, error)
 }
 
@@ -32,16 +30,13 @@ type PostgresRepository struct {
 	pool *pgxpool.Pool
 }
 
-// NewPostgresRepository returns a Repository backed by the given pool.
 func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
 
 // therapistColumns is the select list shared by list and get. Languages are
-// aggregated into a single array via a correlated subquery; specialties are
-// normalized to a non-null array so the scanned Go slice is never nil. Only
-// public profile columns are selected — internal ones (credentials, years_exp,
-// photo_url, location, free_sessions) never travel this far.
+// aggregated into a single array and specialties are normalized to a non-null
+// array so the scanned Go slice is never nil.
 const therapistColumns = `t.id, t.full_name, t.bio,
 	COALESCE(t.specialties, ARRAY[]::TEXT[]),
 	t.price_kes, t.is_active, t.is_online_only, t.created_at,
@@ -73,8 +68,7 @@ func (r *PostgresRepository) List(ctx context.Context, opts ListOptions, limit i
 		query += "\n\tWHERE " + strings.Join(clauses, " AND ")
 	}
 
-	// created_at DESC with an id tiebreaker makes "newest first" deterministic
-	// even when several therapists were inserted in the same second.
+	// The id tiebreaker makes "newest first" deterministic for same-second inserts.
 	query += "\n\tORDER BY t.created_at DESC, t.id DESC"
 	args = append(args, limit)
 	query += fmt.Sprintf(` LIMIT $%d`, len(args))
@@ -114,8 +108,8 @@ func (r *PostgresRepository) Get(ctx context.Context, therapistID string) (*Ther
 	return th, nil
 }
 
-// scanTherapist shares one column decoder between list and get. Currency is a
-// fixed product constant, applied at decode time rather than read from the DB.
+// scanTherapist shares one column decoder between list and get; currency is a
+// fixed product constant applied at decode time.
 func scanTherapist(s func(dest ...any) error, th *Therapist) error {
 	th.Currency = SessionCurrency
 	return s(&th.ID, &th.DisplayName, &th.Bio, &th.Specialties, &th.SessionPrice,

@@ -19,7 +19,6 @@ func therapist(name string, createdAt time.Time) *Therapist {
 	}
 }
 
-// fakeRepository implements Repository for service tests.
 type fakeRepository struct {
 	mu         sync.Mutex
 	therapists []Therapist

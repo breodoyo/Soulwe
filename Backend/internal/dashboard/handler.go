@@ -16,15 +16,12 @@ type Handler struct {
 	svc Service
 }
 
-// NewHandler returns a Handler bound to the given service.
 func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// Get handles GET /api/v1/dashboard. It returns the authenticated user's
-// wellness snapshot: their safe profile, latest mood, a small recent mood
-// collection, and their total mood check-in count. When the user has no mood
-// check-ins, latest_mood is null, recent_moods is [], and the count is 0.
+// Get handles GET /api/v1/dashboard. With no check-ins the response carries
+// latest_mood null, recent_moods [], and a count of 0.
 func (h *Handler) Get(c *gin.Context) {
 	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
@@ -50,8 +47,6 @@ func (h *Handler) Get(c *gin.Context) {
 	}
 }
 
-// respondError writes the documented error envelope:
-// {"error": {"code": "...", "message": "...", "field": "..."}}.
 func respondError(c *gin.Context, status int, code, message, field string) {
 	body := gin.H{
 		"error": gin.H{

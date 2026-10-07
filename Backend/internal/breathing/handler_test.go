@@ -19,9 +19,8 @@ import (
 const testUserID = "11111111-1111-1111-1111-111111111111"
 const testAnonID = "33333333-3333-3333-3333-333333333333"
 
-// The two owner shapes a request can arrive as: finishing a breathing
-// exercise should not require registering, so an anonymous session is a
-// first-class owner alongside a registered user.
+// Finishing a breathing exercise need not require registering, so an anonymous
+// session is a first-class owner alongside a registered user.
 var (
 	registeredOwner = middleware.Owner{UserID: testUserID}
 	anonOwner       = middleware.Owner{AnonIdentityID: testAnonID}
@@ -29,8 +28,6 @@ var (
 
 const testExerciseID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
-// fakeService embeds the Service interface so handler tests only need to
-// stub the methods under test.
 type fakeService struct {
 	Service
 	listExercisesFunc func(ctx context.Context, limit int) ([]Exercise, error)
@@ -67,17 +64,16 @@ func (f *fakeService) ListSessions(ctx context.Context, owner middleware.Owner, 
 	return f.listSessionsFunc(ctx, owner, limit)
 }
 
-// requestRouter builds a router that simulates the IdentityRequired middleware by
-// stamping OwnerKey into the Gin context, then serves the request. The route
-// pattern (with :id placeholders) and the concrete request path are supplied
-// separately.
+// requestRouter simulates the IdentityRequired middleware by stamping OwnerKey
+// into the Gin context. The route pattern (with :id placeholders) and the
+// concrete request path are supplied separately.
 func requestRouter(t *testing.T, method, routePattern, requestPath, body string, owner middleware.Owner, handler func(c *gin.Context)) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
-		// An ill-formed owner is treated as "no identity", mirroring how the real
-		// middleware would simply not have set the key.
+		// An ill-formed owner is treated as "no identity", mirroring the real
+		// middleware simply not having set the key.
 		if _, ok := middleware.IdentityFromOwner(owner); ok {
 			c.Set(middleware.OwnerKey, owner)
 		}

@@ -5,18 +5,16 @@ import (
 	"time"
 )
 
-// Service is the bookings business-logic boundary. It owns the validation and
-// conflict rules (future-times, active therapist, overlap detection); the
-// repository owns the SQL. Both layers defend against double-booking: the
-// service's overlap pre-check gives the common serial cases a fast path, and
-// the database constraints (unique indexes for exact minutes plus GiST EXCLUDE
-// guards for overlapping 60-minute windows) make the guarantee hold under any
-// concurrency.
+// Service is the bookings business-logic boundary, owning the validation and
+// conflict rules (future-times, active therapist, overlap detection). Both
+// layers defend against double-booking: the overlap pre-check is a fast path for
+// the common serial case, and the database constraints (partial unique indexes
+// for exact minutes plus GiST EXCLUDE guards for overlapping 60-minute windows)
+// make the guarantee hold under any concurrency.
 type Service interface {
-	// Create books a pending session for the user with an active therapist,
-	// validating that scheduled_at is in the future and does not collide with
-	// another live booking (an overlapping 60-minute window for the same user,
-	// or for the same therapist regardless of user).
+	// Create books a pending session, validating that scheduled_at is in the
+	// future and does not collide with another live booking (an overlapping
+	// 60-minute window for the same user, or for the same therapist).
 	Create(ctx context.Context, userID, therapistID string, scheduledAt time.Time) (*Booking, error)
 
 	// List returns the user's own bookings newest first.
@@ -34,7 +32,6 @@ type service struct {
 	bookings Repository
 }
 
-// NewService wires the bookings service to a bookings repository.
 func NewService(bookings Repository) *service {
 	return &service{bookings: bookings}
 }

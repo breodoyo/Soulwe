@@ -8,28 +8,23 @@ import (
 	"Backend/internal/middleware"
 )
 
-// Service is the breathing business-logic boundary. Implementations own
-// exercise resolution, session assembly, and list-page clamping; they never
-// construct SQL.
+// Service is the breathing business-logic boundary: exercise resolution,
+// session assembly, and list-page clamping, never SQL.
 type Service interface {
-	// ListExercises returns the curated catalog in its defined order, clamped
-	// to a sane page size. It returns an empty slice (not nil) when the
-	// catalog is empty.
+	// ListExercises returns the curated catalog in its defined order, clamped to
+	// a sane page size.
 	ListExercises(ctx context.Context, limit int) ([]Exercise, error)
 
 	// GetExercise returns one catalog exercise, or ErrExerciseNotFound.
 	GetExercise(ctx context.Context, exerciseID string) (*Exercise, error)
 
-	// RecordSession records a completed breathing session for the given owner,
-	// which may be a registered user or an anonymous session. The exercise
-	// must exist (ErrExerciseNotFound otherwise); its technique and name are
-	// stamped onto the session. The owner always comes from the authenticated
-	// identity context, never from client input.
+	// RecordSession records a session for the given owner, which may be a
+	// registered user or an anonymous session. The exercise must exist
+	// (ErrExerciseNotFound otherwise) and its technique and name are stamped on.
 	RecordSession(ctx context.Context, owner middleware.Owner, exerciseID string, breaths, durationS int, completed bool) (*Session, error)
 
 	// ListSessions returns the owner's breathing history newest first, clamped
-	// to a sane page size. It returns an empty slice (not nil) when the owner
-	// has none.
+	// to a sane page size.
 	ListSessions(ctx context.Context, owner middleware.Owner, limit int) ([]Session, error)
 }
 
@@ -37,7 +32,6 @@ type service struct {
 	repo Repository
 }
 
-// NewService wires the breathing service to a breathing repository.
 func NewService(repo Repository) *service {
 	return &service{repo: repo}
 }
@@ -55,9 +49,8 @@ func (s *service) GetExercise(ctx context.Context, exerciseID string) (*Exercise
 }
 
 func (s *service) RecordSession(ctx context.Context, owner middleware.Owner, exerciseID string, breaths, durationS int, completed bool) (*Session, error) {
-	// The owner is stamped onto the row as a single column, so an ambiguous
-	// owner (both identities set) would silently write as one of them. Reject
-	// it here rather than guessing which identity meant the request.
+	// An ambiguous owner (both identities set) would silently write as one of
+	// them, so it is rejected rather than guessed.
 	if _, ok := middleware.IdentityFromOwner(owner); !ok {
 		return nil, ErrInvalidOwner
 	}

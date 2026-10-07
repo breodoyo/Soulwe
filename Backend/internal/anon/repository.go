@@ -12,30 +12,23 @@ import (
 )
 
 // Repository defines the persistence operations the anonymous session domain
-// needs. Implementations only touch the database; they contain no business
-// logic. All token_hash arguments are already SHA-256 hashes — never raw
-// tokens.
+// needs. All token arguments are already SHA-256 hashes, never raw tokens.
 type Repository interface {
-	// Create inserts a new anonymous identity and fills in the database
-	// generated fields (id, created_at, last_seen_at) on the passed value.
-	// It returns ErrIdentityConflict when anon_name, token_hash, or
-	// device_uuid collides with a unique constraint.
+	// Create fills in the database-generated fields on the passed value and
+	// returns ErrIdentityConflict on a unique-constraint collision.
 	Create(ctx context.Context, identity *AnonIdentity) error
 
-	// FindByTokenHash returns the identity whose token_hash matches, or
-	// ErrIdentityNotFound.
+	// FindByTokenHash returns the identity matching the hash, or ErrIdentityNotFound.
 	FindByTokenHash(ctx context.Context, tokenHash string) (*AnonIdentity, error)
 
-	// FindByDeviceUUID returns the identity bound to a device UUID, or
-	// ErrIdentityNotFound.
+	// FindByDeviceUUID returns the identity bound to a device UUID, or ErrIdentityNotFound.
 	FindByDeviceUUID(ctx context.Context, deviceUUID string) (*AnonIdentity, error)
 
 	// UpdateLastSeen stamps the identity's last_seen_at to now.
 	UpdateLastSeen(ctx context.Context, id string) error
 
-	// RotateToken reassigns a fresh token hash to an existing identity and
-	// stamps last_seen_at, used when the same device re-registers so its
-	// identity and anon_name stay stable while the token rotates.
+	// RotateToken reassigns a fresh token hash and stamps last_seen_at, so a
+	// re-registering device keeps its identity and anon_name.
 	RotateToken(ctx context.Context, id, tokenHash string) error
 }
 
@@ -44,7 +37,6 @@ type PostgresRepository struct {
 	pool *pgxpool.Pool
 }
 
-// NewPostgresRepository returns a Repository backed by the given pool.
 func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
@@ -64,9 +56,8 @@ const (
 	rotateTokenSQL    = "UPDATE anon_identities SET token_hash = $2, last_seen_at = NOW() WHERE id = $1"
 )
 
-// Create inserts a new anonymous identity, leaving user_id NULL. Anonymous
-// sessions never carry a registered user; the column stays NULL until a
-// future phase links the identity to an account.
+// Create inserts an anonymous identity with user_id NULL; the column stays NULL
+// until the identity is linked to an account.
 func (r *PostgresRepository) Create(ctx context.Context, identity *AnonIdentity) error {
 	err := r.pool.QueryRow(ctx, createIdentitySQL,
 		identity.DeviceUUID, identity.AnonName, identity.TokenHash,
@@ -121,10 +112,8 @@ func (r *PostgresRepository) RotateToken(ctx context.Context, id, tokenHash stri
 	return nil
 }
 
-// translateCreateError maps a unique-violation result to ErrIdentityConflict.
-// anon_name is NOT NULL UNIQUE, so a collision can surface from any of the
-// three unique constraints; the service retries with fresh name + fresh token
-// regardless of which one fired.
+// translateCreateError maps a unique violation to ErrIdentityConflict. Any of
+// the three unique constraints can fire, so the caller retries on all of them.
 func translateCreateError(err error) error {
 	if err == nil {
 		return nil

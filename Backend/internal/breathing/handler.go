@@ -12,29 +12,26 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// uuidPattern accepts the canonical 8-4-4-4-12 UUID layout, matching the shape
-// used across the API. It is a shape check, not a cryptographic guarantee.
+// uuidPattern accepts the canonical 8-4-4-4-12 UUID layout used across the API.
+// It is a shape check, not a cryptographic guarantee.
 var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-// Handler owns the HTTP surface of the breathing domain. It validates input,
-// calls the service layer, and writes responses — never the database. The
-// exercise catalog is shared public data, so browsing techniques requires no
-// credentials. Recording and listing sessions are registered-user features, so
-// the authenticated JWT is required there; session ownership is derived from
-// the JWT context and is never taken from the request body.
+// Handler owns the HTTP surface of the breathing domain: it validates input,
+// calls the service layer, and writes responses, never the database. The
+// exercise catalog is shared public data, so browsing needs no credentials;
+// recording and listing sessions do, and ownership always comes from the
+// identity context, never the request body.
 type Handler struct {
 	svc Service
 }
 
-// NewHandler returns a Handler bound to the given service.
 func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
 // recordSessionRequest is the body of POST /breathing/sessions. Completed is
-// optional and defaults to true: recording a session through this endpoint
-// means the user finished the exercise. The user ID is never part of the
-// body — it comes from the JWT context.
+// optional and defaults to true: recording through this endpoint means the user
+// finished the exercise. The user ID is never part of the body.
 type recordSessionRequest struct {
 	ExerciseID string `json:"exercise_id"`
 	Breaths    int    `json:"breaths"`
@@ -42,8 +39,7 @@ type recordSessionRequest struct {
 	Completed  *bool  `json:"completed"`
 }
 
-// ListExercises handles GET /breathing/exercises. It returns the curated
-// catalog in its defined order, honoring an optional ?limit= query parameter.
+// ListExercises handles GET /breathing/exercises, honoring an optional ?limit=.
 func (h *Handler) ListExercises(c *gin.Context) {
 	limit, err := parseLimit(c)
 	if err != nil {
@@ -62,8 +58,7 @@ func (h *Handler) ListExercises(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"exercises": exercises})
 }
 
-// GetExercise handles GET /breathing/exercises/:id. It returns one catalog
-// exercise, or 404 for a missing one.
+// GetExercise handles GET /breathing/exercises/:id, or 404 for a missing one.
 func (h *Handler) GetExercise(c *gin.Context) {
 	id := c.Param("id")
 	if !uuidPattern.MatchString(id) {
@@ -134,10 +129,9 @@ func (h *Handler) RecordSession(c *gin.Context) {
 	}
 }
 
-// ListSessions handles GET /breathing/sessions. It returns the authenticated
-// owner's breathing history, newest first, honoring an optional ?limit= query
-// parameter. The owner always comes from the identity context, so this can
-// never list another identity's sessions.
+// ListSessions handles GET /breathing/sessions, newest first, honoring an
+// optional ?limit=. The owner always comes from the identity context, so this
+// can never list another identity's sessions.
 func (h *Handler) ListSessions(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -162,8 +156,8 @@ func (h *Handler) ListSessions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"sessions": sessions})
 }
 
-// parseLimit reads the optional ?limit query parameter. Absent or empty means
-// "use the service default"; a non-integer value is a client error.
+// parseLimit reads the optional ?limit query parameter; empty means "use the
+// service default" and a non-integer value is a client error.
 func parseLimit(c *gin.Context) (int, error) {
 	raw := c.Query("limit")
 	if raw == "" {

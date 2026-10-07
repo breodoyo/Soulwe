@@ -12,27 +12,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Handler owns the HTTP surface of the therapists domain. It validates input,
-// calls the service layer, and writes responses — never the database. The
-// directory is public catalog data with no owner, so reading it requires no
-// credentials at all; therapist communication (bookings) is the registered-only
-// half of the feature and lives in the bookings domain.
+// Handler serves the public therapist directory; bookings live in their own domain.
 type Handler struct {
 	svc Service
 }
 
-// NewHandler returns a Handler bound to the given service.
 func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// uuidPattern accepts the canonical 8-4-4-4-12 UUID layout, matching the shape
-// used across the API. It is a shape check, not a cryptographic guarantee.
+// A shape check, not a cryptographic guarantee.
 var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-// List handles GET /api/v1/therapists. It returns the public therapist
-// directory newest first, honoring optional ?limit, ?before (cursor),
-// ?language, and ?specialty query parameters.
+// List handles GET /api/v1/therapists.
 func (h *Handler) List(c *gin.Context) {
 	limit, err := parseLimit(c)
 	if err != nil {
@@ -98,8 +90,6 @@ func nextCursor(therapists []Therapist, limit int) *time.Time {
 	return &last
 }
 
-// parseLimit reads the optional ?limit query parameter. Absent or empty means
-// "use the service default"; a non-integer value is a client error.
 func parseLimit(c *gin.Context) (int, error) {
 	raw := c.Query("limit")
 	if raw == "" {
@@ -128,8 +118,6 @@ func parseBefore(c *gin.Context) (*time.Time, error) {
 	return &before, nil
 }
 
-// respondError writes the documented error envelope:
-// {"error": {"code": "...", "message": "...", "field": "..."}}.
 func respondError(c *gin.Context, status int, code, message, field string) {
 	body := gin.H{
 		"error": gin.H{

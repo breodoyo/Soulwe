@@ -10,12 +10,9 @@ import (
 	"Backend/internal/middleware"
 )
 
-// owner is a registered owner for the given id, keeping these tests readable
-// now that a recorded session may belong to a user OR an anonymous session.
+// owner builds a registered Owner; sessions may also belong to an anonymous one.
 func owner(userID string) middleware.Owner { return middleware.Owner{UserID: userID} }
 
-// fakeRepository is an in-memory Repository used to unit-test the service
-// without a real PostgreSQL connection.
 type fakeRepository struct {
 	exercises []Exercise
 	sessions  []Session

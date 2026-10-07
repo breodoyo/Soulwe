@@ -5,31 +5,23 @@ import (
 	"time"
 )
 
-// List pagination defaults, matching the documented convention (default 20,
-// maximum 50) shared with the other authenticated collections.
+// List pagination defaults, shared with the other authenticated collections.
 const (
 	DefaultListLimit = 20
 	MaxListLimit     = 50
 )
 
-// SessionCurrency is the currency of every therapist's session price. The
-// schema's pricing column is literally price_kes, so prices are always
-// denominated in Kenyan Shillings and no currency column needs to be stored.
+// The pricing column is literally price_kes, so no currency column is stored.
 const SessionCurrency = "KES"
 
-// Sentinel errors returned by the therapist domain. Handlers map these to safe
-// HTTP responses; they never embed database details.
 var (
 	// ErrTherapistNotFound reports a profile lookup that matched no therapist.
 	ErrTherapistNotFound = errors.New("therapist not found")
 )
 
 // Therapist is the public wire shape for therapist discovery and profiles.
-// Only public profile facts are serialized: id, display_name (from full_name),
-// bio, languages, specialties, session_price, currency, and the availability
-// flags. Schema internals that stay off the wire (credentials, years_exp,
-// photo_url, location, free_sessions) are deliberately never selected into the
-// response.
+// Schema internals that stay off the wire (credentials, years_exp, photo_url,
+// location, free_sessions) are never selected into the response.
 type Therapist struct {
 	ID           string    `json:"id"`
 	DisplayName  string    `json:"display_name"`
@@ -44,16 +36,14 @@ type Therapist struct {
 }
 
 // ListOptions carries the optional directory filters for therapist discovery.
-// A filter applies only when non-empty and matches case-insensitively against
-// a language row (or a specialty array element) containing the search text.
+// A non-empty filter matches case-insensitively against a language row or a
+// specialty array element containing the search text.
 type ListOptions struct {
 	Language  string
 	Specialty string
 }
 
-// ClampLimit applies the documented page-size defaults/ceiling to a raw
-// client-supplied limit. Non-positive values fall back to the default; large
-// values are capped rather than rejected.
+// ClampLimit applies the page-size defaults/ceiling to a raw limit.
 func ClampLimit(limit int) int {
 	if limit <= 0 {
 		return DefaultListLimit

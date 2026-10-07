@@ -9,12 +9,11 @@ import (
 	"Backend/internal/user"
 )
 
-// RecentMoodLimit is how many recent check-ins the dashboard surfaces beside
-// the latest one. A deliberately small "recent activity" snapshot.
+// RecentMoodLimit is how many recent check-ins sit beside the latest one.
 const RecentMoodLimit = 5
 
-// Dashboard is the authenticated wellness snapshot returned by GET
-// /api/v1/dashboard. It is assembled only from the user's own records.
+// Dashboard is the wellness snapshot returned by GET /api/v1/dashboard,
+// assembled only from the user's own records.
 type Dashboard struct {
 	User              *user.User
 	LatestMood        *mood.MoodLog
@@ -22,13 +21,11 @@ type Dashboard struct {
 	MoodCheckinsCount int64
 }
 
-// Service is the dashboard business-logic boundary. It composes the existing
-// user and mood services and contains no SQL; it exists so handlers never
-// call multiple services directly.
+// Service is the dashboard business-logic boundary, composing the user and
+// mood services so handlers never call multiple services directly.
 type Service interface {
-	// Get builds the wellness snapshot for the authenticated user's ID. The
-	// user ID always comes from the JWT context, never from client input.
-	// It returns the user's ErrUserNotFound when the account no longer exists.
+	// Get builds the wellness snapshot for a user ID taken from the JWT
+	// context, and returns ErrUserNotFound when the account no longer exists.
 	Get(ctx context.Context, userID string) (*Dashboard, error)
 }
 
@@ -37,7 +34,6 @@ type service struct {
 	moods mood.Service
 }
 
-// NewService wires a dashboard service to the user and mood services.
 func NewService(users user.Service, moods mood.Service) *service {
 	return &service{users: users, moods: moods}
 }
@@ -48,10 +44,7 @@ func (s *service) Get(ctx context.Context, userID string) (*Dashboard, error) {
 		return nil, err
 	}
 
-	// The dashboard is a registered-only surface (it includes the account
-	// profile), so the mood queries are scoped to this user specifically. An
-	// anonymous session must never see another identity's check-ins through
-	// the aggregation path.
+	// Scoped to this user so no other identity's check-ins leak in.
 	owner := middleware.Owner{UserID: userID}
 
 	latest, err := s.moods.Latest(ctx, owner)

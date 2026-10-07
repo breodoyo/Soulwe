@@ -15,9 +15,9 @@ import (
 // statement expects. The boolean reports whether the owner was well-formed; an
 // ill-formed owner must never reach the database.
 func ownerArgs(owner middleware.Owner) (any, any, bool) {
-	// IdentityFromOwner is the single place the exactly-one-owner invariant is
-	// enforced, so an ambiguous owner (both IDs set) is rejected here instead
-	// of silently resolving to whichever branch came first.
+	// IdentityFromOwner is where the exactly-one-owner invariant is enforced,
+	// so an ambiguous owner (both IDs set) is rejected here instead of
+	// silently resolving to whichever branch came first.
 	if _, ok := middleware.IdentityFromOwner(owner); !ok {
 		return nil, nil, false
 	}
@@ -30,12 +30,10 @@ func ownerArgs(owner middleware.Owner) (any, any, bool) {
 // Repository defines the persistence operations the breathing domain needs.
 // Implementations only touch the database; they contain no business logic.
 // Every session read/write is scoped by Owner, which carries exactly one
-// identity (a registered user or an anonymous session), so a caller can never
-// observe or write another identity's sessions.
+// identity, so a caller can never observe or write another identity's sessions.
 type Repository interface {
 	// ListExercises returns the curated catalog in its defined (insertion)
-	// order, limited to limit rows. It returns an empty slice (not nil) when
-	// the catalog is empty.
+	// order, limited to limit rows.
 	ListExercises(ctx context.Context, limit int) ([]Exercise, error)
 
 	// GetExercise returns a single catalog exercise by id, or
@@ -47,7 +45,7 @@ type Repository interface {
 	CreateSession(ctx context.Context, session *Session) error
 
 	// ListSessionsByOwner returns the owner's sessions, newest first, limited to
-	// limit rows. It returns an empty slice (not nil) when the owner has none.
+	// limit rows.
 	ListSessionsByOwner(ctx context.Context, owner middleware.Owner, limit int) ([]Session, error)
 }
 
@@ -56,7 +54,6 @@ type PostgresRepository struct {
 	pool *pgxpool.Pool
 }
 
-// NewPostgresRepository returns a Repository backed by the given pool.
 func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
@@ -75,10 +72,9 @@ const (
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, user_id, anon_identity_id, technique, breaths, duration_s, completed, created_at, exercise_id`
 
-	// The LEFT JOIN keeps legacy device sessions (NULL exercise_id) listable
-	// with a nil display name. created_at DESC with an id tiebreaker makes
-	// "newest first" deterministic even when several sessions share a
-	// timestamp.
+	// The LEFT JOIN keeps legacy device sessions (NULL exercise_id) listable with
+	// a nil display name. created_at DESC with an id tiebreaker makes "newest
+	// first" deterministic when timestamps collide.
 	listSessionsSQL = `SELECT s.id, s.user_id, s.anon_identity_id, s.technique, e.name,
 		s.breaths, s.duration_s, s.completed, s.created_at, s.exercise_id
 		FROM breathing_sessions s
@@ -166,12 +162,8 @@ func (r *PostgresRepository) ListSessionsByOwner(ctx context.Context, owner midd
 }
 
 // scanCreatedSession decodes the RETURNING clause of createSessionSQL, which
-// has no exercise name to give back.
-//
-// The two owner columns are mutually exclusive, so exactly one of them is NULL.
-// pgx refuses to scan a NULL into a plain *string ("cannot scan NULL into
-// *string"), so they are decoded as **string and then flattened onto the
-// session.
+// has no exercise name. Exactly one owner column is NULL, which pgx refuses to
+// scan into a plain *string, so both are decoded as **string and flattened.
 func scanCreatedSession(s func(dest ...any) error, session *Session) error {
 	var userID, anonID *string
 	if err := s(&session.ID, &userID, &anonID, &session.Technique, &session.Breaths,
@@ -183,7 +175,7 @@ func scanCreatedSession(s func(dest ...any) error, session *Session) error {
 }
 
 // scanListedSession decodes a row of listSessionsSQL, which adds the exercise
-// name from the LEFT JOIN.
+// name from the LEFT JOIN; the same NULL owner column quirk applies.
 func scanListedSession(s func(dest ...any) error, session *Session) error {
 	var userID, anonID *string
 	if err := s(&session.ID, &userID, &anonID, &session.Technique, &session.Name,
@@ -195,8 +187,8 @@ func scanListedSession(s func(dest ...any) error, session *Session) error {
 	return nil
 }
 
-// assignOwner copies the two scanned owner columns onto the session, leaving the
-// unset side as the empty string.
+// assignOwner flattens the two scanned owner columns onto the session, leaving
+// the unset side as the empty string.
 func assignOwner(userID, anonID *string, dstUser, dstAnon *string) {
 	if userID != nil {
 		*dstUser = *userID

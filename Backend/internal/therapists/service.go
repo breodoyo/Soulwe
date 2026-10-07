@@ -5,12 +5,10 @@ import (
 	"time"
 )
 
-// Service is the therapist-discovery business-logic boundary. Implementations
-// own list-page clamping; they never construct SQL.
+// Service is the therapist-discovery business-logic boundary.
 type Service interface {
-	// List returns the therapist directory newest first, clamped to a sane
-	// page size and optionally filtered by language/specialty. It returns an
-	// empty slice (not nil) when nothing matches.
+	// List returns the directory newest first, clamped to a sane page size and
+	// optionally filtered by language/specialty. Empty slice (not nil) on no match.
 	List(ctx context.Context, opts ListOptions, limit int, before *time.Time) ([]Therapist, error)
 
 	// Get returns one therapist's public profile, or ErrTherapistNotFound.
@@ -21,7 +19,6 @@ type service struct {
 	therapists Repository
 }
 
-// NewService wires the therapist service to a therapist repository.
 func NewService(therapists Repository) *service {
 	return &service{therapists: therapists}
 }

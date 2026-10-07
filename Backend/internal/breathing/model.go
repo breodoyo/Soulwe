@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// List pagination defaults, matching the documented convention (default 20,
-// maximum 50) shared with the other authenticated collections.
+// List pagination defaults, matching the convention (default 20, maximum 50)
+// shared with the other authenticated collections.
 const (
 	DefaultListLimit = 20
 	MaxListLimit     = 50
@@ -25,9 +25,7 @@ var (
 )
 
 // Exercise is the public wire shape for breathing-exercise discovery. Only
-// public catalog facts are serialized: id, slug, name, description,
-// technique, and the guided phase durations. created_at is a schema internal
-// and stays off the wire.
+// public catalog facts are serialized; created_at stays off the wire.
 type Exercise struct {
 	ID          string    `json:"id"`
 	Slug        string    `json:"slug"`
@@ -40,16 +38,12 @@ type Exercise struct {
 	CreatedAt   time.Time `json:"-"`
 }
 
-// Session mirrors a breathing_sessions row (db/migrations/009, extended by
-// 017_add_anon_ownership). Exactly one of UserID / AnonIdentityID is populated,
-// so a recorded session belongs either to a registered user or to an
-// anonymous session — finishing a breathing exercise should not require
-// registering. Neither owner column is serialized back to the client;
-// ownership is derived from the authenticated identity.
-//
-// Name is the denormalized exercise display name, joined from the catalog for
-// history reads and stamped directly when recording a session; it is nil for
-// legacy device sessions without an exercise link.
+// Session mirrors a breathing_sessions row. Exactly one of UserID /
+// AnonIdentityID is populated, so a session belongs to a registered user or an
+// anonymous one — finishing an exercise need not require registering. Neither
+// owner column is serialized. Name is the denormalized exercise display name,
+// joined for history reads and stamped when recording; nil for legacy device
+// sessions without an exercise link.
 type Session struct {
 	ID             string    `json:"id"`
 	UserID         string    `json:"-"`
@@ -63,9 +57,8 @@ type Session struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-// ClampLimit applies the documented page-size defaults/ceiling to a raw
-// client-supplied limit. Non-positive values fall back to the default; large
-// values are capped rather than rejected.
+// ClampLimit applies the page-size defaults/ceiling to a raw client-supplied
+// limit: non-positive falls back to the default, large is capped not rejected.
 func ClampLimit(limit int) int {
 	if limit <= 0 {
 		return DefaultListLimit

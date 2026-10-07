@@ -12,15 +12,13 @@ import (
 )
 
 // Repository defines the persistence operations the users domain needs.
-// Implementations only touch the database; they contain no business logic.
 type Repository interface {
 	Create(ctx context.Context, u *User) error
 	FindByEmail(ctx context.Context, email string) (*User, error)
 	FindByID(ctx context.Context, id string) (*User, error)
 	// Promote atomically creates a user and links the anonymous identity to it.
 	Promote(ctx context.Context, identityID, email, passwordHash string, displayName *string, languagePref string) (*User, error)
-	// UpdateProfile writes only the passed fields; displayName pointing at ""
-	// clears the stored display name.
+	// UpdateProfile writes only passed fields; a "" displayName clears it.
 	UpdateProfile(ctx context.Context, userID string, displayName, languagePref *string) (*User, error)
 }
 
@@ -33,8 +31,7 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
 
-// userColumns lists the columns every SELECT below returns; deleted_at IS NULL
-// keeps soft-deleted accounts invisible to lookups.
+// userColumns lists the columns every SELECT below returns; deleted_at IS NULL hides soft-deletes.
 const userColumns = "id, email, password_hash, display_name, language_pref, is_verified, created_at, updated_at, deleted_at"
 
 const (
@@ -46,8 +43,7 @@ const (
 	findUserByEmailSQL = "SELECT " + userColumns + ` FROM users WHERE email = $1 AND deleted_at IS NULL`
 	findUserByIDSQL    = "SELECT " + userColumns + ` FROM users WHERE id = $1 AND deleted_at IS NULL`
 
-	// updateProfileSQL writes a column only when the caller asked for it
-	// ($2/$4 booleans), so nil leaves it untouched while &"" clears it to NULL.
+	// updateProfileSQL writes a column only when asked: nil leaves it, &"" clears it to NULL.
 	updateProfileSQL = `
 		UPDATE users SET
 			display_name = CASE WHEN $2::boolean THEN NULLIF($3, '')::text ELSE display_name END,
@@ -57,8 +53,7 @@ const (
 		RETURNING ` + userColumns
 )
 
-// Create inserts a new user, filling in the database-generated fields.
-// User input is always bound as a query parameter, never concatenated.
+// Create inserts a new user, binding all input as query parameters.
 func (r *PostgresRepository) Create(ctx context.Context, u *User) error {
 	err := r.pool.QueryRow(ctx, createUserSQL,
 		u.Email, u.PasswordHash, u.DisplayName, u.LanguagePref,
@@ -108,11 +103,7 @@ func (r *PostgresRepository) FindByID(ctx context.Context, id string) (*User, er
 	return u, nil
 }
 
-// Promote creates a user AND links the anonymous identity in one transaction,
-// so neither half-state (user without a link, link without a user) can exist.
-// The identity row is locked FOR UPDATE, so concurrent attempts serialize and
-// the loser gets ErrIdentityAlreadyPromoted instead of an orphaned user.
-// Returns ErrEmailTaken when the email is already registered.
+// Promote links a user and an anonymous identity in one FOR UPDATE transaction.
 func (r *PostgresRepository) Promote(ctx context.Context, identityID, email, passwordHash string, displayName *string, languagePref string) (*User, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {

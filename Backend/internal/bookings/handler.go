@@ -13,34 +13,30 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Handler owns the HTTP surface of the bookings domain. It validates input,
-// calls the service layer, and writes responses — never the database. Every
-// route is a registered-user feature (JWT required) and every read is scoped
-// to the authenticated user, so one person's bookings are never exposed to
-// another.
+// Handler owns the HTTP surface of the bookings domain: it validates input,
+// calls the service layer, and writes responses, never the database. Every route
+// requires a registered-user JWT and every read is scoped to the caller, so one
+// person's bookings are never exposed to another.
 type Handler struct {
 	svc Service
 }
 
-// NewHandler returns a Handler bound to the given service.
 func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// uuidPattern accepts the canonical 8-4-4-4-12 UUID layout, matching the shape
-// used across the API. It is a shape check, not a cryptographic guarantee.
+// uuidPattern accepts the canonical 8-4-4-4-12 UUID layout used across the API.
+// It is a shape check, not a cryptographic guarantee.
 var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 // createBookingRequest is the body of POST /therapists/:id/bookings.
-// scheduled_at is captured as a raw string so a malformed timestamp maps to a
-// precise 400 with the field name, rather than a generic bind error.
+// scheduled_at is a raw string so a malformed timestamp maps to a precise 400
+// with the field name rather than a generic bind error.
 type createBookingRequest struct {
 	ScheduledAt string `json:"scheduled_at"`
 }
 
-// Create handles POST /api/v1/therapists/:id/bookings. It validates the
-// therapist id and the scheduled time, then books a pending session for the
-// authenticated user.
+// Create handles POST /api/v1/therapists/:id/bookings.
 func (h *Handler) Create(c *gin.Context) {
 	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
@@ -96,8 +92,7 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 }
 
-// List handles GET /api/v1/bookings. It returns the authenticated user's own
-// bookings newest first.
+// List handles GET /api/v1/bookings, returning the caller's bookings newest first.
 func (h *Handler) List(c *gin.Context) {
 	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
@@ -115,9 +110,8 @@ func (h *Handler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"bookings": bookings})
 }
 
-// Get handles GET /api/v1/bookings/:id. It returns the booking only when it
-// belongs to the authenticated user; anyone else's id is indistinguishable
-// from a missing one (404).
+// Get handles GET /api/v1/bookings/:id. A booking belonging to anyone else is
+// indistinguishable from a missing one (404).
 func (h *Handler) Get(c *gin.Context) {
 	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
@@ -145,9 +139,8 @@ func (h *Handler) Get(c *gin.Context) {
 	}
 }
 
-// Cancel handles PATCH /api/v1/bookings/:id/cancel. Only a pending booking can
-// be cancelled; a cancelled/completed one is a conflict, and anything that is
-// not the caller's is a 404.
+// Cancel handles PATCH /api/v1/bookings/:id/cancel. A non-pending booking is a
+// conflict; anything not the caller's is a 404.
 func (h *Handler) Cancel(c *gin.Context) {
 	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {

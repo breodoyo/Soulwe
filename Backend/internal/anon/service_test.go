@@ -7,10 +7,8 @@ import (
 	"testing"
 )
 
-// fakeRepository is an in-memory Repository used to unit-test the service
-// without a real PostgreSQL connection. token_hash values are stored as
-// provided (already hashed), and anon_name uniqueness mimics the UNIQUE
-// constraint on the real table.
+// fakeRepository is an in-memory Repository that mimics the real table's
+// UNIQUE constraints on anon_name and token_hash.
 type fakeRepository struct {
 	byTokenHash  map[string]*AnonIdentity
 	byDeviceUUID map[string]*AnonIdentity
@@ -19,11 +17,10 @@ type fakeRepository struct {
 	lastSeenAt   map[string]bool
 	rotations    int
 	creates      int
-	conflicts    int // number of Create calls that should collide, to test retries
+	conflicts    int // upcoming Create calls that should collide
 
-	// deviceCreatedRacing simulates a concurrent request that created this
-	// device's identity between our initial FindByDeviceUUID and this insert.
-	// The first Create for a device fires once and leaves the row behind.
+	// deviceCreatedRacing simulates a concurrent request winning this device's
+	// insert; it fires once and leaves the row behind.
 	deviceCreatedRacing bool
 }
 
@@ -135,7 +132,6 @@ func TestServiceCreateSession(t *testing.T) {
 		if repo.creates != 1 {
 			t.Errorf("expected exactly one create, got %d", repo.creates)
 		}
-		// The raw token must never be persisted; the hash must be.
 		if _, ok := repo.byTokenHash[session.Token]; ok {
 			t.Error("the raw token was stored as the token_hash — only the hash should be stored")
 		}
@@ -170,7 +166,6 @@ func TestServiceCreateSession(t *testing.T) {
 		if repo.rotations != 1 {
 			t.Errorf("expected one token rotation, got %d", repo.rotations)
 		}
-		// Old token must no longer authenticate after the rotation.
 		if _, ok := repo.byTokenHash[HashToken(first.Token)]; ok {
 			t.Error("old token hash should be replaced after rotation")
 		}
@@ -194,10 +189,9 @@ func TestServiceCreateSession(t *testing.T) {
 	})
 
 	t.Run("loses a concurrent create race but reuses the winner's identity", func(t *testing.T) {
-		// Simulate two requests starting with the same new device UUID: our
-		// initial lookup misses, another request inserts first, and our insert
-		// collides on the device_uuid unique index on every retry. The service
-		// must re-check and rotate the winner instead of returning a 500.
+		// Our lookup misses, another request inserts first, and our insert
+		// collides on the device_uuid index on every retry; the service must
+		// re-check and rotate the winner instead of returning a 500.
 		repo := newFakeRepository()
 		repo.deviceCreatedRacing = true
 		svc := NewService(repo)

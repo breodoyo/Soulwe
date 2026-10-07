@@ -13,7 +13,6 @@ import (
 
 const testUserID = "11111111-1111-1111-1111-111111111111"
 
-// fakeUserService stubs only the user.Service methods the dashboard uses.
 type fakeUserService struct {
 	user.Service
 	getProfileFunc func(ctx context.Context, userID string) (*user.User, error)
@@ -23,7 +22,6 @@ func (f *fakeUserService) GetProfile(ctx context.Context, userID string) (*user.
 	return f.getProfileFunc(ctx, userID)
 }
 
-// fakeMoodService stubs only the mood.Service methods the dashboard uses.
 type fakeMoodService struct {
 	mood.Service
 	latestFunc func(ctx context.Context, owner middleware.Owner) (*mood.MoodLog, error)

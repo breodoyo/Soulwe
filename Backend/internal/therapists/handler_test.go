@@ -18,8 +18,6 @@ import (
 
 const testUserID = "11111111-1111-1111-1111-111111111111"
 
-// fakeService embeds the Service interface so handler tests only need to stub
-// the methods under test.
 type fakeService struct {
 	Service
 	listFunc func(ctx context.Context, opts ListOptions, limit int, before *time.Time) ([]Therapist, error)
@@ -40,17 +38,15 @@ func (f *fakeService) Get(ctx context.Context, therapistID string) (*Therapist, 
 	return f.getFunc(ctx, therapistID)
 }
 
-// requestRouter builds a router that simulates the AuthRequired middleware by
-// stamping UserIDKey into the Gin context, then serves the request. An empty
-// userID leaves the context unstamped, exercising the handler's 401 path.
+// requestRouter simulates AuthRequired by stamping UserIDKey; an empty userID
+// leaves the context unstamped, exercising the handler's 401 path.
 func requestRouter(t *testing.T, method, path, userID string, handler func(c *gin.Context)) *httptest.ResponseRecorder {
 	t.Helper()
 	return requestRouterPath(t, method, path, path, userID, handler)
 }
 
-// requestRouterPath is requestRouter with an explicit route pattern and request
-// path, so parameterized routes (e.g. /therapists/:id) can be registered while
-// concrete requests are served.
+// requestRouterPath separates the route pattern from the request path so
+// parameterized routes (e.g. /therapists/:id) can be registered.
 func requestRouterPath(t *testing.T, method, route, requestPath, userID string, handler func(c *gin.Context)) *httptest.ResponseRecorder {
 	t.Helper()
 	router := gin.New()

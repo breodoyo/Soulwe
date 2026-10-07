@@ -8,13 +8,11 @@ import (
 	"regexp"
 )
 
-// tokenByteLength is the cryptographically random entropy backing each
-// anonymous session token (32 bytes ≈ 256 bits).
+// tokenByteLength is the entropy backing each token (32 bytes ≈ 256 bits).
 const tokenByteLength = 32
 
-// GenerateRawToken returns a fresh URL-safe base64 anonymous token built from
-// 32 random bytes. The raw token is shown to the client exactly once; only
-// its SHA-256 hash (see HashToken) is ever stored or looked up.
+// GenerateRawToken returns a fresh URL-safe base64 token from 32 random bytes.
+// The client sees the raw token once; only its SHA-256 hash is ever stored.
 func GenerateRawToken() (string, error) {
 	buf := make([]byte, tokenByteLength)
 	if _, err := rand.Read(buf); err != nil {
@@ -23,20 +21,18 @@ func GenerateRawToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-// HashToken returns the lowercase hex SHA-256 digest of a raw token. This is
-// the value stored in anon_identities.token_hash.
+// HashToken returns the lowercase hex SHA-256 digest stored in token_hash.
 func HashToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
 }
 
-// deviceUUIDPattern accepts the canonical 8-4-4-4-12 UUID layout. Validation
-// only checks shape; we deliberately do not enforce version/variant bits so
-// any client-generated UUID remains acceptable.
+// deviceUUIDPattern accepts the 8-4-4-4-12 layout; version/variant bits are
+// deliberately not enforced so any client-generated UUID stays acceptable.
 var deviceUUIDPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 // ValidDeviceUUID reports whether s is a well-formed UUID. The device UUID is
-// optional metadata recorded for idempotency; it is NOT an auth secret.
+// idempotency metadata, NOT an auth secret.
 func ValidDeviceUUID(s string) bool {
 	return deviceUUIDPattern.MatchString(s)
 }
