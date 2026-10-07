@@ -8,16 +8,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// UserIDKey is the Gin context key under which the authenticated user ID is
-// stored by AuthRequired. Handlers read it via UserIDFromContext.
+// UserIDKey is the Gin context key AuthRequired stores the user ID under.
 const UserIDKey = "user_id"
 
 const bearerPrefix = "Bearer "
 
-// AuthRequired returns Gin middleware that authenticates the request's
-// Bearer access token. On success it stores the authenticated user ID in the
-// request context and lets the handler continue. On any failure it aborts the
-// request with a safe, generic 401 — parsing details are never sent back.
+// AuthRequired authenticates the request's Bearer access token and stores the
+// user ID in the context. Every failure aborts with a generic 401, never
+// sending parsing details back.
 func AuthRequired(tokenManager *auth.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, ok := parseBearerToken(c, tokenManager)
@@ -31,10 +29,8 @@ func AuthRequired(tokenManager *auth.Manager) gin.HandlerFunc {
 	}
 }
 
-// bearerToken extracts the raw credentials from the Authorization header and
-// requires the Bearer scheme with a non-empty token. The boolean reports
-// success; failures are deliberately indistinguishable. It never logs the
-// header or the token. Callers interpret the raw token (JWT vs anonymous).
+// bearerToken extracts a non-empty Bearer credential. Failures are
+// deliberately indistinguishable and the token is never logged.
 func bearerToken(c *gin.Context) (string, bool) {
 	header := c.GetHeader("Authorization")
 	if header == "" {
@@ -52,10 +48,7 @@ func bearerToken(c *gin.Context) (string, bool) {
 	return token, true
 }
 
-// parseBearerToken extracts the token from the Authorization header, requires
-// the Bearer scheme, and validates it against the token manager. The boolean
-// reports success; failures are deliberately indistinguishable. It never logs
-// the header or the token.
+// parseBearerToken validates a Bearer credential as a JWT access token.
 func parseBearerToken(c *gin.Context, tokenManager *auth.Manager) (string, bool) {
 	token, ok := bearerToken(c)
 	if !ok {
@@ -69,8 +62,7 @@ func parseBearerToken(c *gin.Context, tokenManager *auth.Manager) (string, bool)
 	return userID, true
 }
 
-// UserIDFromContext returns the authenticated user ID stored by AuthRequired.
-// The boolean reports whether a non-empty ID was present.
+// UserIDFromContext returns the ID stored by AuthRequired; ok is false when absent.
 func UserIDFromContext(c *gin.Context) (string, bool) {
 	value, ok := c.Get(UserIDKey)
 	if !ok {

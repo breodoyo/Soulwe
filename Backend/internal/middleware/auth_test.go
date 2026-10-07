@@ -17,9 +17,8 @@ import (
 
 const middlewareTestSecret = "unit-test-secret-that-must-be-long-enough-for-signing"
 
-// newProtectedRouter builds a Gin engine with a single protected route. The
-// handler echoes the authenticated user ID from the context, which is how the
-// tests assert that AuthRequired stores it.
+// newProtectedRouter builds a Gin engine with one protected route whose handler
+// echoes the context user ID, which is how tests assert AuthRequired stored it.
 func newProtectedRouter(t *testing.T, tokenManager *auth.Manager) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -35,9 +34,8 @@ func newProtectedRouter(t *testing.T, tokenManager *auth.Manager) *gin.Engine {
 	return r
 }
 
-// signWithSecret signs a token with an explicit method and secret, so tests
-// can build both valid tokens and invalid ones (expired, wrong algorithm,
-// wrong secret, missing subject).
+// signWithSecret lets tests build valid tokens and invalid ones (expired,
+// wrong algorithm, wrong secret, missing subject).
 func signWithSecret(t *testing.T, secret string, method jwt.SigningMethod, claims jwt.RegisteredClaims) string {
 	t.Helper()
 	token := jwt.NewWithClaims(method, claims)

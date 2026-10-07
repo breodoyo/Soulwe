@@ -8,8 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Recovery catches any panic in downstream handlers, logs the stack trace safely,
-// and sends a clean 500 JSON response instead of crashing the server process.
+// Recovery catches any panic in downstream handlers and sends a clean 500 JSON
+// response instead of crashing the server process.
 func Recovery() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {

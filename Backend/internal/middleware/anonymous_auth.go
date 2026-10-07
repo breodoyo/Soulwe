@@ -9,24 +9,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AnonIdentityIDKey is the Gin context key under which the authenticated
-// anonymous identity ID is stored by AnonymousAuthRequired. Handlers read it
-// via AnonIdentityIDFromContext.
+// AnonIdentityIDKey is the Gin context key AnonymousAuthRequired stores the
+// identity ID under.
 const AnonIdentityIDKey = "anon_identity_id"
 
-// AnonymousVerifier authenticates an anonymous bearer token. It is satisfied
-// by the anon domain's Service; the interface keeps the middleware package
-// free of a dependency back onto anon. The raw token must never be stored or
-// logged.
+// AnonymousVerifier authenticates an anonymous bearer token; it keeps the
+// middleware free of a dependency back onto anon. The raw token must never be
+// stored or logged.
 type AnonymousVerifier interface {
 	Authenticate(ctx context.Context, rawToken string) (identityID string, ok bool, err error)
 }
 
-// AnonymousAuthRequired returns Gin middleware that authenticates a Bearer
-// anonymous token. On success it stores the anonymous identity ID in the
-// request context and lets the handler continue. Unknown credentials abort
-// with a safe, generic 401; repository failures abort with a 500. The raw
-// token is never placed in the context, only the identity ID.
+// AnonymousAuthRequired authenticates a Bearer anonymous token and stores the
+// identity ID in the context. Unknown credentials abort with a generic 401,
+// repository failures with a 500. The raw token never enters the context.
 func AnonymousAuthRequired(verifier AnonymousVerifier) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, ok := bearerToken(c)
@@ -56,9 +52,7 @@ func AnonymousAuthRequired(verifier AnonymousVerifier) gin.HandlerFunc {
 	}
 }
 
-// AnonIdentityIDFromContext returns the anonymous identity ID stored by
-// AnonymousAuthRequired. The boolean reports whether a non-empty ID was
-// present.
+// AnonIdentityIDFromContext returns the ID stored by AnonymousAuthRequired.
 func AnonIdentityIDFromContext(c *gin.Context) (string, bool) {
 	value, ok := c.Get(AnonIdentityIDKey)
 	if !ok {
@@ -71,8 +65,7 @@ func AnonIdentityIDFromContext(c *gin.Context) (string, bool) {
 	return identityID, true
 }
 
-// abortUnauthorized writes the shared, deliberately generic 401 response used
-// by both authentication middlewares.
+// abortUnauthorized writes the generic 401 shared by both auth middlewares.
 func abortUnauthorized(c *gin.Context) {
 	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 		"error": gin.H{

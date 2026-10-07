@@ -14,7 +14,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// fakeAnonymousVerifier stubs the middleware's AnonymousVerifier interface.
 type fakeAnonymousVerifier struct {
 	authenticateFunc func(ctx context.Context, rawToken string) (string, bool, error)
 	capturedToken    string
@@ -28,9 +27,9 @@ func (f *fakeAnonymousVerifier) Authenticate(ctx context.Context, rawToken strin
 	return f.authenticateFunc(ctx, rawToken)
 }
 
-// newAnonymousProtectedRouter builds a Gin engine with a single anonymous-
-// protected route. The handler echoes the authenticated identity ID from the
-// context, which is how the tests assert that AnonymousAuthRequired stored it.
+// newAnonymousProtectedRouter builds a Gin engine with one anonymous-protected
+// route whose handler echoes the context identity ID, so tests can assert
+// AnonymousAuthRequired stored it.
 func newAnonymousProtectedRouter(t *testing.T, verifier middleware.AnonymousVerifier) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)

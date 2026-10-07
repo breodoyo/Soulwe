@@ -12,8 +12,6 @@ import (
 
 const testSecret = "unit-test-secret-that-must-be-long-enough-for-signing"
 
-// parseAccessToken verifies and decodes a token using the same secret the
-// manager signs with, mirroring what a future verification step would do.
 func parseAccessToken(t *testing.T, tokenString, secret string) *jwt.RegisteredClaims {
 	t.Helper()
 	claims := &jwt.RegisteredClaims{}
@@ -99,7 +97,6 @@ func TestTokenFailsVerificationWithWrongSecret(t *testing.T) {
 		t.Fatalf("SignAccessToken returned error: %v", err)
 	}
 
-	// A token signed with one secret must not validate under another.
 	bad := &jwt.RegisteredClaims{}
 	if _, err := jwt.ParseWithClaims(token, bad, func(t *jwt.Token) (interface{}, error) {
 		return []byte("a-completely-different-secret"), nil
@@ -108,8 +105,6 @@ func TestTokenFailsVerificationWithWrongSecret(t *testing.T) {
 	}
 }
 
-// signCustomToken signs an HS256 token with the given secret and registered
-// claims, returning the compact JWT. It is only used by tests.
 func signCustomToken(t *testing.T, secret string, claims jwt.RegisteredClaims) string {
 	t.Helper()
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -120,7 +115,6 @@ func signCustomToken(t *testing.T, secret string, claims jwt.RegisteredClaims) s
 	return signed
 }
 
-// validClaims returns the registered claims every happy-path test reuses.
 func validClaims(subject string) jwt.RegisteredClaims {
 	return jwt.RegisteredClaims{
 		Subject:   subject,
@@ -209,7 +203,6 @@ func TestParseAccessTokenRejectsOtherHMACAlgorithm(t *testing.T) {
 		t.Fatalf("NewManager returned error: %v", err)
 	}
 
-	// HS384 is an HMAC variant like HS256 but must still be rejected.
 	token := jwt.NewWithClaims(jwt.SigningMethodHS384, validClaims("user-1"))
 	signed, err := token.SignedString([]byte(testSecret))
 	if err != nil {

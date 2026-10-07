@@ -10,16 +10,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// OwnerKey is the Gin context key under which IdentityRequired stores the
-// resolved owner. Handlers read it via OwnerFromContext.
+// OwnerKey is the Gin context key IdentityRequired stores the Owner under.
 const OwnerKey = "owner"
 
-// Owner is the resolved identity behind a request. Exactly one of the two IDs
-// is ever populated, so a private record can be scoped to whoever made it
-// without the record itself carrying a "which kind of user am I?" flag.
-//
-// The zero value is invalid: callers must use IdentityFromOwner, which rejects
-// an owner with both or neither ID set.
+// Owner is the resolved identity behind a request. Exactly one ID is populated,
+// so a private record can be scoped to whoever made it without carrying a
+// "which kind of user am I?" flag. The zero value is invalid; use
+// IdentityFromOwner, which rejects an owner with both or neither ID set.
 type Owner struct {
 	// UserID is set when the caller presented a registered access token.
 	UserID string
@@ -34,9 +31,8 @@ func (o Owner) Registered() bool { return o.UserID != "" }
 // Anonymous reports whether this owner is an anonymous session.
 func (o Owner) Anonymous() bool { return o.AnonIdentityID != "" }
 
-// ID returns whichever identity ID is set, for use as a cryptographic
-// associated-data key. It is empty only for the invalid zero Owner, which
-// IdentityFromOwner refuses to produce.
+// ID returns whichever identity ID is set, for use as associated-data key
+// material. It is empty only for the invalid zero Owner.
 func (o Owner) ID() string {
 	if o.UserID != "" {
 		return o.UserID
@@ -44,9 +40,9 @@ func (o Owner) ID() string {
 	return o.AnonIdentityID
 }
 
-// IdentityFromOwner validates an owner has exactly one identity and returns it.
-// A caller that somehow constructs an ambiguous or empty owner must not reach
-// the database with it, so this is the single place that invariant is enforced.
+// IdentityFromOwner validates that an owner has exactly one identity. This is
+// the single place that invariant is enforced, so an ambiguous or empty owner
+// never reaches the database.
 func IdentityFromOwner(o Owner) (string, bool) {
 	if o.Registered() == o.Anonymous() {
 		return "", false
@@ -57,23 +53,21 @@ func IdentityFromOwner(o Owner) (string, bool) {
 	return o.AnonIdentityID, true
 }
 
-// RegisteredVerifier is the slice of the auth token manager that
-// IdentityRequired needs. It is an interface so the middleware package depends
-// only on the interface's shape.
+// RegisteredVerifier is the slice of the auth token manager IdentityRequired
+// needs, so the middleware depends only on the interface's shape.
 type RegisteredVerifier interface {
 	ParseAccessToken(token string) (string, error)
 }
 
-// IdentityRequired returns Gin middleware that authenticates the request with
-// EITHER a registered access token or an anonymous session token, and stores
-// the resulting Owner in the request context.
+// IdentityRequired authenticates the request with EITHER a registered access
+// token or an anonymous session token and stores the resolved Owner in the
+// context.
 //
-// This is how Soulwe keeps authentication action-based rather than
-// page-based: a personal feature (journal, mood check-in, breathing history)
-// is usable by both a registered user and an anonymous session, and the row
-// is scoped to whichever identity authenticated. Neither credential is ever
-// accepted for the other domain's data — a registered JWT resolves to a
-// UserID and an anonymous token to an AnonIdentityID, and never both.
+// This keeps authentication action-based rather than page-based: a personal
+// feature (journal, mood check-in, breathing history) is usable by both a
+// registered user and an anonymous session, and the row is scoped to whichever
+// identity authenticated. A registered JWT resolves to a UserID and an
+// anonymous token to an AnonIdentityID, never both.
 //
 // A request with no usable credential aborts with the same generic 401 as the
 // other middlewares. Raw tokens are never placed in the context or logged.
@@ -85,16 +79,16 @@ func IdentityRequired(tokenManager RegisteredVerifier, anon AnonymousVerifier) g
 			return
 		}
 
-		// Registered access token first: it is the stronger identity, and a
-		// caller who has one should never be treated as anonymous.
+		// Registered token first: it is the stronger identity, so a caller who has
+		// one is never treated as anonymous.
 		if userID, err := tokenManager.ParseAccessToken(token); err == nil && strings.TrimSpace(userID) != "" {
 			c.Set(OwnerKey, Owner{UserID: userID})
 			c.Next()
 			return
 		}
 
-		// Without an anonymous verifier (a server built with no anon service)
-		// only the registered path above is available.
+		// No anon verifier (a server built without the anon service): only the
+		// registered path above is available.
 		if anon == nil {
 			abortUnauthorized(c)
 			return
@@ -102,9 +96,9 @@ func IdentityRequired(tokenManager RegisteredVerifier, anon AnonymousVerifier) g
 
 		identityID, ok, err := anon.Authenticate(c.Request.Context(), token)
 		if err != nil {
-			// A repository failure is a server problem, not bad credentials:
-			// report it as such so a client doesn't discard a valid token and
-			// mint a new anonymous session because of a transient fault.
+			// A repository failure is a server problem, not bad credentials, so it is
+			// reported as a 500: a client must not discard a valid token and mint
+			// a new anonymous session over a transient fault.
 			slog.Error("identity authentication failed", slog.String("error", err.Error()))
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 				"error": gin.H{
@@ -124,8 +118,8 @@ func IdentityRequired(tokenManager RegisteredVerifier, anon AnonymousVerifier) g
 	}
 }
 
-// OwnerFromContext returns the owner stored by IdentityRequired. The boolean
-// reports whether a well-formed owner was present.
+// OwnerFromContext returns the Owner stored by IdentityRequired; ok is false
+// unless a well-formed owner was present.
 func OwnerFromContext(c *gin.Context) (Owner, bool) {
 	value, ok := c.Get(OwnerKey)
 	if !ok {

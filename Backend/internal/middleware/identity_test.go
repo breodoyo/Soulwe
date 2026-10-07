@@ -14,9 +14,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// stubVerifier is a RegisteredVerifier that recognizes exactly one token, so a
-// test can present a JWT or a non-JWT and get the two branches the middleware
-// takes.
+// stubVerifier recognizes exactly one token, so a test can drive both branches
+// of the middleware by presenting a JWT or a non-JWT.
 type stubVerifier struct {
 	knownToken string
 	userID     string
@@ -29,9 +28,8 @@ func (s stubVerifier) ParseAccessToken(token string) (string, error) {
 	return s.userID, nil
 }
 
-// stubAnonVerifier is an AnonymousVerifier with a single known token. The other
-// two knobs let a test drive the "unknown token" and "repository failure"
-// branches, which must not be confused with each other.
+// stubAnonVerifier has a single known token; err drives the "repository
+// failure" branch, which must not be confused with "unknown token".
 type stubAnonVerifier struct {
 	knownToken string
 	identityID string
@@ -50,8 +48,8 @@ func (s *stubAnonVerifier) Authenticate(_ context.Context, rawToken string) (str
 	return s.identityID, true, nil
 }
 
-// recordingHandler reports which owner IdentityRequired resolved, so a test can
-// assert the identity type rather than just the status code.
+// recordingHandler captures the resolved owner so tests can assert the identity
+// type, not just the status code.
 type recordingHandler struct {
 	owner middleware.Owner
 	ok    bool
@@ -113,9 +111,8 @@ func TestIdentityRequiredAcceptsEitherCredential(t *testing.T) {
 }
 
 func TestIdentityRequiredPrefersTheRegisteredToken(t *testing.T) {
-	// A token that is simultaneously a valid JWT and a known anonymous token
-	// must resolve to the registered user: the stronger identity wins, so a
-	// signed-in user is never silently demoted to their anonymous session.
+	// A token that is both a valid JWT and a known anonymous token must resolve to
+	// the registered user: a signed-in user is never demoted to their anon session.
 	anon := &stubAnonVerifier{knownToken: "shared-token", identityID: identityTestAnon}
 	verifier := stubVerifier{knownToken: "shared-token", userID: identityTestUser}
 	router, rec := newIdentityRouter(t, verifier, anon)
@@ -168,9 +165,8 @@ func TestIdentityRequiredRejectsBadCredentials(t *testing.T) {
 	}
 }
 
-// A repository failure is the server's problem, not a credential problem. It
-// must be a 500 so a client does not discard a perfectly valid token and mint a
-// new anonymous session because of a transient database fault.
+// A repository failure must be a 500 so a client does not discard a valid token
+// over a transient database fault.
 func TestIdentityRequiredReportsVerifierFailuresAsServerErrors(t *testing.T) {
 	anon := &stubAnonVerifier{err: errors.New("database is down")}
 	router, rec := newIdentityRouter(t, stubVerifier{}, anon)
@@ -191,8 +187,8 @@ func TestIdentityRequiredReportsVerifierFailuresAsServerErrors(t *testing.T) {
 	}
 }
 
-// A server built without the anonymous service must simply not accept anonymous
-// credentials, rather than panicking on a nil verifier.
+// A server without the anonymous service must reject anonymous credentials
+// rather than panicking on a nil verifier.
 func TestIdentityRequiredWithoutAVerifierRejectsAnonymousTokens(t *testing.T) {
 	router, rec := newIdentityRouter(t, stubVerifier{}, nil)
 
@@ -209,8 +205,7 @@ func TestIdentityRequiredWithoutAVerifierRejectsAnonymousTokens(t *testing.T) {
 	}
 }
 
-// The real token manager must satisfy the RegisteredVerifier interface, and a
-// genuinely signed token must resolve end to end.
+// The real token manager must satisfy RegisteredVerifier end to end.
 func TestIdentityRequiredWithTheRealTokenManager(t *testing.T) {
 	manager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
 	if err != nil {
