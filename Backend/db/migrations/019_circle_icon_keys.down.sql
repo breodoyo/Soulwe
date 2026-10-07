@@ -1,5 +1,4 @@
--- Restores the emoji this migration replaced, so a rollback returns the seed to
--- its original state.
+-- Restores the emoji this migration replaced.
 UPDATE circles SET icon = '🌿' WHERE slug = 'grief';
 UPDATE circles SET icon = '💼' WHERE slug = 'work-pressure';
 UPDATE circles SET icon = '🏠' WHERE slug = 'family';

@@ -1,7 +1,5 @@
--- Phase 6.3 hardening: drop the 60-minute-window overlap guards added in
--- 015. The btree_gist extension is intentionally left installed (matching the
--- precedent of pgcrypto in 001, whose DOWN leaves the extension in place);
--- CREATE EXTENSION in the UP file is idempotent.
+-- Drops the 60-minute overlap guards. btree_gist is left installed, matching
+-- pgcrypto in 001; the UP's CREATE EXTENSION is idempotent.
 
 ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_therapist_window_excl;
 ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_user_window_excl;

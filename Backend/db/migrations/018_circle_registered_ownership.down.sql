@@ -1,12 +1,8 @@
--- Reverts 018_circle_registered_ownership: circles go back to requiring an
--- anonymous session.
+-- Reverts 018: circles go back to requiring an anonymous session.
 --
--- A row owned by a registered user cannot survive the loss of its user_id —
--- there is no anonymous identity to re-home it onto, and silently rewriting
--- it would turn a real person's message into a pseudonym or a pseudonym into a
--- real name. So registered-owned rows are removed first, exactly as
--- 017_add_anon_ownership's down migration does for journals, check-ins and
--- breathing sessions. Anonymous rows are untouched.
+-- Registered-owned rows are deleted first (as 017's down does): a real name
+-- cannot be rewritten as a pseudonym, so there is nowhere to re-home them.
+-- Anonymous rows are untouched.
 
 DELETE FROM message_flags  WHERE user_id IS NOT NULL;
 DELETE FROM circle_members WHERE user_id IS NOT NULL;

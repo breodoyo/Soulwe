@@ -9,8 +9,7 @@ import (
 	"time"
 )
 
-// TestOpenPing verifies the connection pool can connect to a running PostgreSQL.
-// Requires a real DATABASE_URL and is skipped when the variable is missing.
+// TestOpenPing needs DATABASE_URL and the "integration" tag.
 func TestOpenPing(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {

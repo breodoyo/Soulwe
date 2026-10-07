@@ -1,18 +1,10 @@
--- Phase 6.4: curated breathing-exercise catalog plus a session link to it.
+-- Curated breathing-exercise catalog. Seed rows reuse the product's existing
+-- technique vocabulary ('478', 'box') to stay compatible with the free-form
+-- breathing_sessions.technique values.
 --
--- breathing_exercises is a read-only catalog of guided breathing exercises.
--- The seed rows reuse the technique vocabulary the product already uses
--- ('478' and 'box'), keeping the catalog compatible with free-form
--- breathing_sessions.technique values. Discovery endpoints expose only the
--- public columns of this table never internal identifiers.
---
--- breathing_sessions (009) already stores completion sessions keyed to a
--- registered user (user_id) or a device (device_uuid), so no session table is
--- created here. This migration only adds an optional exercise link so the
--- "verify the exercise exists" guarantee is also enforced by a foreign key:
--- any row written through the Phase 6.4 API must reference a catalog
--- exercise. Existing device-based rows keep a NULL exercise_id (and their
--- free-form technique), so the released 009 schema stays backward compatible.
+-- 009's session table is reused as-is; this only adds an optional exercise_id
+-- so the "exercise exists" check is also enforced by a foreign key. Existing
+-- device-based rows keep a NULL exercise_id, so 009 stays backward compatible.
 
 CREATE TABLE breathing_exercises (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -26,8 +18,7 @@ CREATE TABLE breathing_exercises (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- The catalog is curated, so discovery lists exercises in their defined
--- (insertion) order rather than newest-first.
+-- Discovery lists the curated catalog in defined order, not newest-first.
 CREATE INDEX idx_breathing_exercises_order
     ON breathing_exercises (created_at, id);
 

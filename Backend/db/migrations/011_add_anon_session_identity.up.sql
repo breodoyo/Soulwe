@@ -1,10 +1,6 @@
--- Phase 3.4: token-bound anonymous sessions.
---
--- anon_identities already covers registered-user (user_id) and device-bound
--- identities, but anonymous sessions authenticate with a bearer token whose
--- SHA-256 hash must be stored for lookup (never the raw token). The original
--- one_identity CHECK required exactly one of user_id/device_uuid, which
--- forbids token-only anonymous sessions that carry no device UUID.
+-- Token-bound anonymous sessions: the bearer token's SHA-256 hash is stored for
+-- lookup (never the raw token). The original one_identity CHECK forbade
+-- token-only sessions carrying no device UUID.
 
 ALTER TABLE anon_identities
     ADD COLUMN token_hash   TEXT,
@@ -20,12 +16,8 @@ CREATE UNIQUE INDEX idx_anon_identities_device_uuid
     ON anon_identities (device_uuid)
     WHERE device_uuid IS NOT NULL;
 
--- Replace one_identity: every identity belongs to a registered user, a
--- session token, or (legacy Phase 2 rows) a device UUID. device_uuid must
--- remain an accepted binding so pre-existing device-bound identities keep
--- satisfying the constraint and the ALTER TABLE cannot fail on old data;
--- token-only anonymous sessions (new in this phase) are covered by token_hash.
--- A row with none of the three is still rejected.
+-- device_uuid stays an accepted binding so legacy device-bound rows keep
+-- satisfying the constraint and this ALTER cannot fail on old data.
 ALTER TABLE anon_identities
     DROP CONSTRAINT one_identity;
 

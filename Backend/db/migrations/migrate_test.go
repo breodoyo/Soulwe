@@ -39,7 +39,6 @@ func TestMigrationsRoundTrip(t *testing.T) {
 	}
 	defer pool.Close()
 
-	// Start from a clean slate.
 	m, err := migrate.New(migrationsPath, databaseURL)
 	if err != nil {
 		t.Fatalf("failed to initialize migrations: %v", err)
@@ -48,13 +47,12 @@ func TestMigrationsRoundTrip(t *testing.T) {
 
 	_ = m.Down()
 
-	// Apply all migrations.
+	// Destructive: rolls the configured database back before applying.
 	err = m.Up()
 	if err != nil {
 		t.Fatalf("failed to apply migrations: %v", err)
 	}
 
-	// Verify the seeded tables exist.
 	expectedTables := []string{
 		"users",
 		"anon_identities",
@@ -84,7 +82,6 @@ func TestMigrationsRoundTrip(t *testing.T) {
 		}
 	}
 
-	// Verify seeded circles.
 	var seedCount int
 	err = pool.QueryRow(ctx, `SELECT COUNT(*) FROM circles`).Scan(&seedCount)
 	if err != nil {
@@ -94,13 +91,11 @@ func TestMigrationsRoundTrip(t *testing.T) {
 		t.Errorf("expected 5 seeded circles, got %d", seedCount)
 	}
 
-	// Roll everything back.
 	err = m.Down()
 	if err != nil {
 		t.Fatalf("failed to roll back migrations: %v", err)
 	}
 
-	// Verify tables are gone.
 	for _, table := range expectedTables {
 		var exists bool
 		err := pool.QueryRow(ctx, `

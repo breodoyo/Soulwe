@@ -1,15 +1,10 @@
--- Reverts 017_add_anon_ownership: personal features go back to requiring a
--- registered user.
---
--- Anonymous rows cannot remain once anon_identity_id is dropped, so they are
--- removed first. These are rows this migration itself introduced (an entry,
--- check-in or session created while signed out); registered rows are
--- untouched.
+-- Reverts 017: personal features go back to requiring a registered user.
+-- Anonymous rows cannot survive the dropped column, so they go first; these
+-- are the rows this migration introduced. Registered rows are untouched.
 
 DELETE FROM journal_entries WHERE user_id IS NULL;
 DELETE FROM mood_logs        WHERE user_id IS NULL;
--- Only the anonymous rows go: breathing_sessions also accepts a pre-existing
--- device_uuid owner, and those rows are not ours to delete.
+-- Pre-existing device_uuid owners are not ours to delete.
 DELETE FROM breathing_sessions WHERE anon_identity_id IS NOT NULL;
 
 -- ── breathing_sessions: restore the original two-column constraint ─────────
