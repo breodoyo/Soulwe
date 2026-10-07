@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
 import { Volume2, VolumeX } from 'lucide-react'
 import { isApiError, type BreathingExercise, type BreathingSession } from '@/types'
 import { api } from '@/lib/api'
-import { useAuth } from '@/auth/AuthContext'
 import styles from './BreathePage.module.css'
 
 interface Phase { label: string; duration: number; instruction: string }
@@ -75,10 +73,6 @@ function speak(text: string) {
 }
 
 export default function BreathePage() {
-  const { status } = useAuth()
-  // Saving works signed out too; a guest's history belongs to their anonymous session.
-  const hasAccount = status === 'authenticated'
-
   const [exercises, setExercises]       = useState<BreathingConfig[] | null>(null)
   const [exercisesError, setExercisesError] = useState<string | null>(null)
   const [reloadTick, setReloadTick]     = useState(0)
@@ -230,163 +224,150 @@ export default function BreathePage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.header}>
-        <h1 className={styles.heading}>Breathe with me</h1>
-        <p className={styles.sub}>
-          A moment of stillness. Even a few breaths change everything — <em>pumzika</em>
-        </p>
-      </div>
-
-      {/* Voice toggle */}
-      <div className={styles.voiceToggle}>
-        <button
-          className={[styles.voiceBtn, voiceOn ? styles.voiceBtnOn : ''].join(' ')}
-          onClick={() => {
-            setVoiceOn(v => !v)
-            window.speechSynthesis?.cancel()
-          }}
-          aria-pressed={voiceOn}
-          aria-label={voiceOn ? 'Turn voice guidance off' : 'Turn voice guidance on'}
-        >
-          {voiceOn
-            ? <><Volume2 aria-hidden="true" className={styles.voiceBtnIcon} /> Voice on</>
-            : <><VolumeX aria-hidden="true" className={styles.voiceBtnIcon} /> Voice off</>}
-        </button>
-      </div>
-
-      {/* Not a gate: a guest runs and saves exactly as an account holder does,
-          with the history kept against their anonymous session. */}
-      {!hasAccount && (
-        <p className={styles.guestNote}>
-          Breathing is open to everyone — run as many as you like. Your sessions are
-          saved to this browser;{' '}
-          <Link className={styles.signInLink} to="/register" state={{ from: '/breathe' }}>
-            a free account
-          </Link>{' '}
-          only makes the history follow you to another device.
-        </p>
-      )}
-
-      {/* Load states */}
-      {!config && !exercisesError && exercises === null && (
-        <p className={styles.statusNote} role="status">Loading breathing exercises…</p>
-      )}
-
-      {!config && exercisesError && (
-        <div className={styles.errorNote} role="alert">
-          <p>Couldn’t load breathing exercises. {exercisesError}</p>
-          <button
-            className={styles.retryBtn}
-            onClick={() => setReloadTick(t => t + 1)}
-          >
-            Try again
-          </button>
+      <div className={styles.inner}>
+        <div className={styles.header}>
+          <h1 className={styles.heading}>Breathe with me</h1>
+          <p className={styles.sub}>
+            A moment of stillness. Even a few breaths change everything — <em>pumzika</em>
+          </p>
         </div>
-      )}
 
-      {!config && !exercisesError && exercises !== null && exercises.length === 0 && (
-        <p className={styles.statusNote} role="status">
-          No breathing exercises are available right now. Please check back soon.
-        </p>
-      )}
+        {/* Load states */}
+        {!config && !exercisesError && exercises === null && (
+          <p className={styles.statusNote} role="status">Loading breathing exercises…</p>
+        )}
 
-      {config && phase && (
-        <>
-          {/* Animated circle */}
-          <div className={styles.circleWrap} aria-hidden="true">
-            <div className={styles.ring1} />
-            <div className={styles.ring2} />
-            <div
-              className={styles.core}
-              style={{
-                transform: scale !== undefined ? `scale(${scale})` : undefined,
-                transitionDuration: running ? `${phase.duration}s` : '0.3s',
-              }}
-            >
-              <span className={styles.coreTech}>
-                {config.slug === '478' ? '4·7·8' : 'Box'}
-              </span>
-            </div>
-          </div>
-
-          {/* Phase label + countdown */}
-          <div className={styles.phaseDisplay} aria-live="polite" aria-atomic="true">
-            <p className={styles.phaseLabel}>
-              {running
-                ? phase.label + '...'
-                : breathCount > 0
-                  ? 'Well done.'
-                  : 'Ready to begin'
-              }
-            </p>
-            <p className={styles.phaseCount}>
-              {running
-                ? `${secs}s`
-                : breathCount > 0
-                  ? `${breathCount} breath${breathCount !== 1 ? 's' : ''} completed`
-                  : 'Press start'
-              }
-            </p>
-          </div>
-
-          {/* Voice instruction text */}
-          {running && (
-            <div className={styles.instruction} aria-live="polite">
-              <p className={styles.instructionText}>{phase.instruction}</p>
-            </div>
-          )}
-
-          {/* Controls */}
-          <div className={styles.controls}>
+        {!config && exercisesError && (
+          <div className={styles.errorNote} role="alert">
+            <p>Couldn’t load breathing exercises. {exercisesError}</p>
             <button
-              className={[styles.startBtn, running ? styles.startBtnStop : ''].join(' ')}
-              onClick={running ? handleStopClick : start}
-              disabled={saving}
-              aria-label={running ? 'Stop breathing exercise' : 'Start breathing exercise'}
+              className={styles.retryBtn}
+              onClick={() => setReloadTick(t => t + 1)}
             >
-              {running ? 'Stop' : saving ? 'Saving…' : 'Start'}
+              Try again
             </button>
           </div>
+        )}
 
-          {/* Save status — honest outcome of the backend call */}
-          {saving && (
-            <div className={styles.savingLine} role="status">Saving your session…</div>
-          )}
-          {!saving && saveError && (
-            <div className={styles.saveError} role="alert">
-              We couldn’t save your session — it wasn’t recorded. {saveError}
-            </div>
-          )}
-          {!saving && !saveError && savedSummary && (
-            <div className={styles.saveLine} role="status">
-              <span aria-hidden="true">✓ </span>
-              Saved — {savedSummary.name ?? config.name} · {savedSummary.breaths} breath
-              {savedSummary.breaths !== 1 ? 's' : ''} · {fmtDuration(savedSummary.duration_s)}
-            </div>
-          )}
-        </>
-      )}
+        {!config && !exercisesError && exercises !== null && exercises.length === 0 && (
+          <p className={styles.statusNote} role="status">
+            No breathing exercises are available right now. Please check back soon.
+          </p>
+        )}
 
-      {/* Technique selector */}
-      {exercises !== null && exercises.length > 0 && (
-        // A labelled group, not list items: role="listitem" on a button overrides its implicit role and invalidates aria-pressed.
-        <div className={styles.techniqueList} role="group" aria-label="Breathing techniques">
-          {exercises.map((t, i) => (
-            <button
-              key={t.id}
-              className={[styles.techniqueItem, selectedId === t.id ? styles.techniqueItemActive : ''].join(' ')}
-              onClick={() => switchTechnique(t.id)}
-              aria-pressed={selectedId === t.id}
-            >
-              <div className={styles.techNum}>{i + 1}</div>
-              <div className={styles.techInfo}>
-                <p className={styles.techName}>{t.name}</p>
-                <p className={styles.techDesc}>{t.description}</p>
+        {config && phase && (
+          <>
+            {/* Animated circle */}
+            <div className={styles.circleWrap} aria-hidden="true">
+              <div className={styles.ring1} />
+              <div className={styles.ring2} />
+              <div
+                className={styles.core}
+                style={{
+                  transform: scale !== undefined ? `scale(${scale})` : undefined,
+                  transitionDuration: running ? `${phase.duration}s` : '0.3s',
+                }}
+              >
+                <span className={styles.coreTech}>
+                  {config.slug === '478' ? '4·7·8' : 'Box'}
+                </span>
               </div>
-            </button>
-          ))}
-        </div>
-      )}
+            </div>
+
+            {/* Phase label + countdown */}
+            <div className={styles.phaseDisplay} aria-live="polite" aria-atomic="true">
+              <p className={styles.phaseLabel}>
+                {running
+                  ? phase.label + '...'
+                  : breathCount > 0
+                    ? 'Well done.'
+                    : 'Ready to begin'
+                }
+              </p>
+              <p className={styles.phaseCount}>
+                {running
+                  ? `${secs}s`
+                  : breathCount > 0
+                    ? `${breathCount} breath${breathCount !== 1 ? 's' : ''} completed`
+                    : 'Press start'
+                }
+              </p>
+            </div>
+
+            {/* Voice instruction text */}
+            {running && (
+              <div className={styles.instruction} aria-live="polite">
+                <p className={styles.instructionText}>{phase.instruction}</p>
+              </div>
+            )}
+
+            {/* Controls */}
+            <div className={styles.controls}>
+              <div className={styles.voiceToggle}>
+                <button
+                  className={[styles.voiceBtn, voiceOn ? styles.voiceBtnOn : ''].join(' ')}
+                  onClick={() => {
+                    setVoiceOn(v => !v)
+                    window.speechSynthesis?.cancel()
+                  }}
+                  aria-pressed={voiceOn}
+                  aria-label={voiceOn ? 'Turn voice guidance off' : 'Turn voice guidance on'}
+                >
+                  {voiceOn
+                    ? <><Volume2 aria-hidden="true" className={styles.voiceBtnIcon} /> Voice on</>
+                    : <><VolumeX aria-hidden="true" className={styles.voiceBtnIcon} /> Voice off</>}
+                </button>
+              </div>
+              <button
+                className={[styles.startBtn, running ? styles.startBtnStop : ''].join(' ')}
+                onClick={running ? handleStopClick : start}
+                disabled={saving}
+                aria-label={running ? 'Stop breathing exercise' : 'Start breathing exercise'}
+              >
+                {running ? 'Stop' : saving ? 'Saving…' : 'Start'}
+              </button>
+            </div>
+
+            {/* Save status — honest outcome of the backend call */}
+            {saving && (
+              <div className={styles.savingLine} role="status">Saving your session…</div>
+            )}
+            {!saving && saveError && (
+              <div className={styles.saveError} role="alert">
+                We couldn’t save your session — it wasn’t recorded. {saveError}
+              </div>
+            )}
+            {!saving && !saveError && savedSummary && (
+              <div className={styles.saveLine} role="status">
+                <span aria-hidden="true">✓ </span>
+                Saved — {savedSummary.name ?? config.name} · {savedSummary.breaths} breath
+                {savedSummary.breaths !== 1 ? 's' : ''} · {fmtDuration(savedSummary.duration_s)}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Technique selector */}
+        {exercises !== null && exercises.length > 0 && (
+          // A labelled group, not list items: role="listitem" on a button overrides its implicit role and invalidates aria-pressed.
+          <div className={styles.techniqueList} role="group" aria-label="Breathing techniques">
+            {exercises.map((t, i) => (
+              <button
+                key={t.id}
+                className={[styles.techniqueItem, selectedId === t.id ? styles.techniqueItemActive : ''].join(' ')}
+                onClick={() => switchTechnique(t.id)}
+                aria-pressed={selectedId === t.id}
+              >
+                <div className={styles.techNum}>{i + 1}</div>
+                <div className={styles.techInfo}>
+                  <p className={styles.techName}>{t.name}</p>
+                  <p className={styles.techDesc}>{t.description}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
