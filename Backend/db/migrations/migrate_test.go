@@ -87,8 +87,8 @@ func TestMigrationsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to count circles: %v", err)
 	}
-	if seedCount != 5 {
-		t.Errorf("expected 5 seeded circles, got %d", seedCount)
+	if seedCount != 8 {
+		t.Errorf("expected 8 seeded circles, got %d", seedCount)
 	}
 
 	err = m.Down()

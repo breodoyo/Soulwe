@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
 import { NotebookPen, HandHeart, Sprout, Send, Ear, Sparkles } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/auth/AuthContext'
@@ -56,7 +55,6 @@ function formatListDate(iso: string): { day: string; month: string } {
 
 export default function JournalPage() {
   const { status, user } = useAuth()
-  const hasAccount = status === 'authenticated'
 
   const [mode, setMode] = useState<JournalMode>('journal')
 
@@ -367,19 +365,6 @@ export default function JournalPage() {
         <h1 className={styles.heading}>Your journal</h1>
         <p className={styles.sub}>Private only yours — <em>ya siri</em></p>
       </div>
-
-      {/* Not a gate: a guest writes here exactly as an account holder does, with
-          their entries encrypted under their anonymous session. The only
-          difference worth stating is where the entries are kept. */}
-      {!hasAccount && (
-        <p className={styles.listStatus}>
-          Writing works without an account — your entries are saved to this browser.{' '}
-          <Link className={styles.link} to="/register" state={{ from: '/journal' }}>
-            Create a free account
-          </Link>{' '}
-          if you would rather they followed you to another device.
-        </p>
-      )}
 
       {/* Mode toggle */}
       <div className={styles.modeToggle} role="group" aria-label="Journal mode">

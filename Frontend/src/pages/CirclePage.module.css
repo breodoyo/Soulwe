@@ -1,7 +1,7 @@
 /* Full-bleed page: the hero image spans the whole screen, everything else is
    centred at the standard content width. */
 .page { padding: 0 0 var(--space-5) 0; display: flex; flex-direction: column; gap: var(--space-5); width: 100%; }
-.page > *:not(.heroImage) {
+.page > *:not(.heroImage):not(.heroWrap) {
   width: 100%;
   max-width: var(--max-content);
   margin-left: auto;
@@ -9,19 +9,52 @@
   padding-left: var(--space-4);
   padding-right: var(--space-4);
 }
-.page > *:not(.heroImage):first-child { margin-top: var(--space-4); }
+.page > *:not(.heroImage):not(.heroWrap):first-child { margin-top: var(--space-4); }
 
-.header { }
+.heroWrap { position: relative; width: 100%; }
 .heroImage {
   width: 100%;
-  height: 260px;
+  height: 300px;
   object-fit: cover;
   object-position: center 62%;
   display: block;
 }
-.heading { font-family: var(--font-display); font-size: var(--text-xl); color: var(--ink); margin-bottom: 3px; }
-.sub { font-size: var(--text-sm); color: var(--muted); }
-.sub em { font-style: italic; color: var(--sage-deep); }
+
+/* Text sits on the photo; a bottom-up scrim keeps it legible regardless of
+   what the image does underneath. */
+.heroOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: var(--space-5) var(--space-5) var(--space-6);
+  background: linear-gradient(
+    to top,
+    rgba(28, 25, 23, 0.78) 0%,
+    rgba(28, 25, 23, 0.35) 55%,
+    rgba(28, 25, 23, 0) 100%
+  );
+}
+.heroHeading {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 4.8vw, 44px);
+  color: var(--cream);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  margin-bottom: var(--space-2);
+}
+.heroSub {
+  font-size: clamp(14px, 1.6vw, 17px);
+  color: rgba(255, 255, 255, 0.88);
+  line-height: 1.55;
+  max-width: 52ch;
+}
+
+@media (min-width: 768px) {
+  .heroImage { height: 340px; }
+  .heroOverlay { padding: var(--space-8); }
+}
 
 .anonNotice {
   display: flex; align-items: flex-start; gap: var(--space-3);
@@ -143,6 +176,7 @@
   display: flex; align-items: flex-start; gap: var(--space-3);
   padding-bottom: var(--space-4); border-bottom: 1px solid var(--border);
 }
+.threadHeaderMain { flex: 1; min-width: 0; }
 .threadIcon { flex-shrink: 0; display: inline-flex; color: var(--sun-deep); }
 .threadIcon svg { width: 26px; height: 26px; stroke-width: 1.6; }
 .threadName { font-family: var(--font-display); font-size: var(--text-xl); color: var(--ink); margin-bottom: 2px; }
@@ -237,8 +271,10 @@
 .leaveRow {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-3);
   flex-wrap: wrap;
+  margin-top: var(--space-3);
 }
 
 .leavePrompt { font-size: var(--text-sm); color: var(--ink-mid); }

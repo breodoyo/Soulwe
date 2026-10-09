@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Feather, Briefcase, Home, HeartHandshake, Sprout, MessageCircle, Lock,
+  Contrast, Church, Brain,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { clearAnonToken, ensureAnonSession, getAccessToken } from '@/lib/api'
@@ -18,6 +19,9 @@ const CIRCLE_ICONS: Record<string, typeof MessageCircle> = {
   family: Home,
   relationships: HeartHandshake,
   growth: Sprout,
+  trauma: Contrast,
+  faith: Church,
+  anxiety: Brain,
 }
 
 function circleIcon(key: string | null) {
@@ -369,10 +373,12 @@ export default function CirclePage() {
   if (sessionState === 'error') {
     return (
       <div className={styles.page}>
-        <img src="/circle.png.jpg" alt="Community circle" className={styles.heroImage} />
-        <div className={styles.header}>
-          <h1 className={styles.heading}>Community circles</h1>
-          <p className={styles.sub}>Peer support, African voices, safe space — <em>salama</em></p>
+        <div className={styles.heroWrap}>
+          <img src="/circle.png.jpg" alt="Community circle" className={styles.heroImage} />
+          <div className={styles.heroOverlay}>
+            <h1 className={styles.heroHeading}>Healing happens together.</h1>
+            <p className={styles.heroSub}>Connect with people who understand, share experiences, and find strength in community.</p>
+          </div>
         </div>
         <div className={styles.errorNote} role="alert">
           <p>{sessionError}</p>
@@ -390,10 +396,12 @@ export default function CirclePage() {
       {/* Circle list */}
       {!activeCircleId && (
         <>
-          <img src="/circle.png.jpg" alt="Community circle" className={styles.heroImage} />
-          <div className={styles.header}>
-            <h1 className={styles.heading}>Community circles</h1>
-            <p className={styles.sub}>Peer support, African voices, safe space — <em>salama</em></p>
+          <div className={styles.heroWrap}>
+            <img src="/circle.png.jpg" alt="Community circle" className={styles.heroImage} />
+            <div className={styles.heroOverlay}>
+              <h1 className={styles.heroHeading}>Healing happens together.</h1>
+              <p className={styles.heroSub}>Connect with people who understand, share experiences, and find strength in community.</p>
+            </div>
           </div>
 
           {sessionNotice && <p className={styles.noticeInfo} role="status">{sessionNotice}</p>}
@@ -476,7 +484,7 @@ export default function CirclePage() {
             <span className={styles.threadIcon} aria-hidden="true">
               {(() => { const Icon = circleIcon(detail?.icon ?? null); return <Icon /> })()}
             </span>
-            <div>
+            <div className={styles.threadHeaderMain}>
               <h1 className={styles.threadName}>{detail?.name ?? 'Circle'}</h1>
               {detail?.description && <p className={styles.threadDesc}>{detail.description}</p>}
               {detail && (
@@ -484,42 +492,42 @@ export default function CirclePage() {
                   {detail.member_count} {detail.member_count === 1 ? 'member' : 'members'}
                 </p>
               )}
+
+              {/* Sits just under the member count, above the header's divider
+                  line; at the thread bottom the sticky reply box would cover it. */}
+              {!detailLoading && !detailError && detail && detail.is_member && (
+                <>
+                  <div className={styles.leaveRow}>
+                    {leaveConfirm ? (
+                      <>
+                        <span className={styles.leavePrompt}>Leave this circle?</span>
+                        <button
+                          className={styles.dangerBtn}
+                          onClick={handleLeave}
+                          disabled={leaving}
+                        >
+                          {leaving ? 'Leaving…' : 'Confirm leave'}
+                        </button>
+                        <button
+                          className={styles.inlineBtn}
+                          onClick={() => setLeaveConfirm(false)}
+                        >
+                          Stay
+                        </button>
+                      </>
+                    ) : (
+                      <button className={styles.leaveBtn} onClick={handleLeave}>
+                        Leave circle
+                      </button>
+                    )}
+                  </div>
+                  {actionError && <p className={styles.errorText} role="alert">{actionError}</p>}
+                </>
+              )}
             </div>
           </div>
 
           {pageNotice && <p className={styles.noticeSuccess} role="status">{pageNotice}</p>}
-
-          {/* Above the message list: at the thread bottom the sticky reply box
-              covers this row, making the leave action hard to reach. */}
-          {!detailLoading && !detailError && detail && detail.is_member && (
-            <>
-              <div className={styles.leaveRow}>
-                {leaveConfirm ? (
-                  <>
-                    <span className={styles.leavePrompt}>Leave this circle?</span>
-                    <button
-                      className={styles.dangerBtn}
-                      onClick={handleLeave}
-                      disabled={leaving}
-                    >
-                      {leaving ? 'Leaving…' : 'Confirm leave'}
-                    </button>
-                    <button
-                      className={styles.inlineBtn}
-                      onClick={() => setLeaveConfirm(false)}
-                    >
-                      Stay
-                    </button>
-                  </>
-                ) : (
-                  <button className={styles.leaveBtn} onClick={handleLeave}>
-                    Leave circle
-                  </button>
-                )}
-              </div>
-              {actionError && <p className={styles.errorText} role="alert">{actionError}</p>}
-            </>
-          )}
 
           {detailLoading && <p className={styles.status} role="status">Loading circle…</p>}
 
