@@ -14,20 +14,22 @@ interface BreathingConfig {
   phases: Phase[]
 }
 
-// Frontend-only voice copy; the backend exposes durations only.
+// Frontend-only voice copy; the backend exposes durations only. Each line is a
+// complete sentence short enough to be spoken within the shortest phase, so the
+// next phase's utterance never cuts it off mid-sentence.
 interface ScriptSet { inhale: string; hold: string; exhale: string; rest?: string }
 
 const SCRIPTS: Record<string, ScriptSet> = {
   '478': {
-    inhale: 'Breathe in slowly through your nose. Let your belly rise first, then your chest.',
-    hold: 'Hold gently. Stay still. You are safe.',
-    exhale: 'Release slowly through your mouth. Let everything go with the breath.',
+    inhale: 'Breathe in slowly through your nose.',
+    hold: 'Hold gently. You are safe.',
+    exhale: 'Breathe out slowly. Let everything go.',
   },
   box: {
-    inhale: 'Breathe in through your nose. Slow and steady.',
-    hold: 'Hold. Feel the stillness. You are grounded.',
-    exhale: 'Breathe out through your mouth. Release the tension.',
-    rest: 'Rest here. Empty and calm. You are okay.',
+    inhale: 'Breathe in slowly through your nose.',
+    hold: 'Hold gently. Feel the stillness.',
+    exhale: 'Breathe out slowly. Release the tension.',
+    rest: 'Rest here. You are safe and calm.',
   },
 }
 
@@ -268,9 +270,13 @@ export default function BreathePage() {
                   transitionDuration: running ? `${phase.duration}s` : '0.3s',
                 }}
               >
-                <span className={styles.coreTech}>
-                  {config.slug === '478' ? '4·7·8' : 'Box'}
-                </span>
+                {running ? (
+                  <span className={styles.coreTimer}>{secs}</span>
+                ) : (
+                  <span className={styles.coreTech}>
+                    {config.slug === '478' ? '4·7·8' : 'Box'}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -284,22 +290,15 @@ export default function BreathePage() {
                     : 'Ready to begin'
                 }
               </p>
-              <p className={styles.phaseCount}>
-                {running
-                  ? `${secs}s`
-                  : breathCount > 0
+              {!running && (
+                <p className={styles.phaseCount}>
+                  {breathCount > 0
                     ? `${breathCount} breath${breathCount !== 1 ? 's' : ''} completed`
                     : 'Press start'
-                }
-              </p>
+                  }
+                </p>
+              )}
             </div>
-
-            {/* Voice instruction text */}
-            {running && (
-              <div className={styles.instruction} aria-live="polite">
-                <p className={styles.instructionText}>{phase.instruction}</p>
-              </div>
-            )}
 
             {/* Controls */}
             <div className={styles.controls}>

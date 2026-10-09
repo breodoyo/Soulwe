@@ -80,6 +80,15 @@
   letter-spacing: 0.06em;
 }
 
+/* Live countdown sits where the technique tag would be, centred in the orb. */
+.coreTimer {
+  font-family: var(--font-display);
+  font-size: 30px;
+  color: var(--ink);
+  font-weight: 500;
+  line-height: 1;
+}
+
 /* ── Phase display ── */
 .phaseDisplay { }
 .phaseLabel {
@@ -267,29 +276,4 @@
   background: var(--sun-light);
   border-color: var(--sun-muted);
   color: var(--sun-deep);
-}
-
-/* ── Instruction text ── */
-.instruction {
-  max-width: 360px;
-  margin: 0 auto;
-  text-align: center;
-  padding: var(--space-4) var(--space-5);
-  background: var(--bg-mid);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  animation: fadeSlideUp 0.4s ease;
-}
-
-@keyframes fadeSlideUp {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.instructionText {
-  font-family: var(--font-display);
-  font-size: var(--text-base);
-  font-style: italic;
-  color: var(--ink-mid);
-  line-height: 1.7;
 }
