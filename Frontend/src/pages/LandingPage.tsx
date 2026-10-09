@@ -51,31 +51,6 @@ export default function LandingPage() {
   return (
     <div className={styles.page}>
 
-      <nav className={styles.nav} aria-label="Main">
-        <div className={styles.navBrand}>
-          <div className={styles.navMark}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-              <path d="M12 21C12 21 4 13.5 4 8.5a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5-8 12.5-8 12.5z"/>
-            </svg>
-          </div>
-          <span className={styles.navName}>Soulwe</span>
-        </div>
-        <div className={styles.navLinks}>
-          <a href="#features"   className={styles.navLink}>Features</a>
-          <a href="#circles"    className={styles.navLink}>Circles</a>
-          <a href="#therapists" className={styles.navLink}>Therapists</a>
-          {/* Signing in is always a choice, never a gate on browsing. */}
-          <Link to="/login" className={styles.navLink}>Log in</Link>
-        </div>
-        {/* Real links, not actions: keyboard reachable and cmd-clickable like any internal link. */}
-        <Link className={styles.navCta} to="/home">
-          Start your journey
-        </Link>
-      </nav>
-
-      {/* The page had no main landmark, so there was no way to skip the nav. */}
-      <main id="main-content">
-
       <section className={styles.hero}>
         <div className={styles.heroLeft}>
           <h1 className={styles.heroHeading}>
@@ -300,25 +275,6 @@ export default function LandingPage() {
           </p>
         </div>
       </section>
-
-      </main>
-
-      <footer className={styles.footer}>
-        <div className={styles.footerInner}>
-          <div className={styles.footerBrand}>
-            <div className={styles.navMark}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-                <path d="M12 21C12 21 4 13.5 4 8.5a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5-8 12.5-8 12.5z"/>
-              </svg>
-            </div>
-            <span className={styles.footerName}>Soulwe</span>
-          </div>
-          <p className={styles.footerTagline}>
-            A home for your soul. Built in East Africa, for East Africa.
-          </p>
-          <p className={styles.footerCopy}>© 2026 Soulwe.</p>
-        </div>
-      </footer>
 
     </div>
   )

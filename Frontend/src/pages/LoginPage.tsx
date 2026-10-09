@@ -54,7 +54,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className={styles.page}>
+    <div className={styles.page}>
       <div className={styles.card}>
 
         <div className={styles.brand}>
@@ -120,6 +120,6 @@ export default function LoginPage() {
         <p className={styles.backLink}><Link to="/">← Back to the Soulwe home page</Link></p>
 
       </div>
-    </main>
+    </div>
   )
 }

@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
-import AppShell from '@/components/layout/AppShell'
+import SiteLayout from '@/components/layout/SiteLayout'
 import { GuestOnly } from '@/auth/RouteGuards'
 import LandingPage from '@/pages/LandingPage'
 import LoginPage from '@/pages/LoginPage'
@@ -17,7 +17,7 @@ const pageTitles: Record<string, string> = {
   '/':          'Soulwe — A home for your soul',
   '/login':     'Log in — Soulwe',
   '/register':  'Create an account — Soulwe',
-  '/home':      'Home — Soulwe',
+  '/home':      'Check in — Soulwe',
   '/journal':   'Journal — Soulwe',
   '/circle':    'Circle — Soulwe',
   '/therapist': 'Find a therapist — Soulwe',
@@ -35,20 +35,20 @@ export default function App() {
   return (
     <Routes>
 
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/login"    element={<GuestOnly><LoginPage /></GuestOnly>} />
-      <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />
+      <Route element={<SiteLayout />}>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login"    element={<GuestOnly><LoginPage /></GuestOnly>} />
+        <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />
 
-      <Route element={<AppShell />}>
         <Route path="/home"      element={<HomePage />} />
         <Route path="/journal"   element={<JournalPage />} />
         <Route path="/circle"    element={<CirclePage />} />
         <Route path="/therapist" element={<TherapistPage />} />
         <Route path="/breathe"   element={<BreathePage />} />
         <Route path="/profile"   element={<ProfilePage />} />
-      </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
 
     </Routes>
   )

@@ -489,6 +489,38 @@ export default function CirclePage() {
 
           {pageNotice && <p className={styles.noticeSuccess} role="status">{pageNotice}</p>}
 
+          {/* Above the message list: at the thread bottom the sticky reply box
+              covers this row, making the leave action hard to reach. */}
+          {!detailLoading && !detailError && detail && detail.is_member && (
+            <>
+              <div className={styles.leaveRow}>
+                {leaveConfirm ? (
+                  <>
+                    <span className={styles.leavePrompt}>Leave this circle?</span>
+                    <button
+                      className={styles.dangerBtn}
+                      onClick={handleLeave}
+                      disabled={leaving}
+                    >
+                      {leaving ? 'Leaving…' : 'Confirm leave'}
+                    </button>
+                    <button
+                      className={styles.inlineBtn}
+                      onClick={() => setLeaveConfirm(false)}
+                    >
+                      Stay
+                    </button>
+                  </>
+                ) : (
+                  <button className={styles.leaveBtn} onClick={handleLeave}>
+                    Leave circle
+                  </button>
+                )}
+              </div>
+              {actionError && <p className={styles.errorText} role="alert">{actionError}</p>}
+            </>
+          )}
+
           {detailLoading && <p className={styles.status} role="status">Loading circle…</p>}
 
           {!detailLoading && detailError && (
@@ -592,32 +624,6 @@ export default function CirclePage() {
               </div>
 
               {sendError && <p className={styles.errorText} role="alert">{sendError}</p>}
-              {actionError && <p className={styles.errorText} role="alert">{actionError}</p>}
-
-              <div className={styles.leaveRow}>
-                {leaveConfirm ? (
-                  <>
-                    <span className={styles.leavePrompt}>Leave this circle?</span>
-                    <button
-                      className={styles.dangerBtn}
-                      onClick={handleLeave}
-                      disabled={leaving}
-                    >
-                      {leaving ? 'Leaving…' : 'Confirm leave'}
-                    </button>
-                    <button
-                      className={styles.inlineBtn}
-                      onClick={() => setLeaveConfirm(false)}
-                    >
-                      Stay
-                    </button>
-                  </>
-                ) : (
-                  <button className={styles.leaveBtn} onClick={handleLeave}>
-                    Leave circle
-                  </button>
-                )}
-              </div>
 
               <div className={styles.replyBox}>
                 <label className="sr-only" htmlFor="circle-reply">

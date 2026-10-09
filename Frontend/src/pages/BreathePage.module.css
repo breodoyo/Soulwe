@@ -1,7 +1,7 @@
 .page {
   position: relative;
   z-index: 0;
-  min-height: calc(100dvh - var(--nav-height) - var(--tab-height) - var(--space-6));
+  min-height: calc(100dvh - var(--nav-height) - var(--space-6));
 }
 
 .page::before {
@@ -221,7 +221,7 @@
 /* ── Desktop ── */
 @media (min-width: 768px) {
   .page {
-    min-height: calc(100dvh - var(--nav-height) - var(--tab-height) - var(--space-8));
+    min-height: calc(100dvh - var(--nav-height) - var(--space-8));
   }
 
   .page::before {

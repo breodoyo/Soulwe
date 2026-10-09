@@ -99,9 +99,7 @@
   --duration-slow:  360ms;
 
   /* ── Layout ── */
-  --sidebar-width: 240px;
   --max-content:   720px;
-  --tab-height:    64px;
   --nav-height:    56px;
 }
 
