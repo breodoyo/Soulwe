@@ -9,27 +9,17 @@ import (
 )
 
 const (
-	// AccessTokenTTL is how long a signed access token stays valid (Docs/API.md).
 	AccessTokenTTL = 15 * time.Minute
 
-	// Issuer identifies Soulwe as the party that issued a token.
 	Issuer = "soulwe-api"
 )
 
-// Sentinel errors returned by ParseAccessToken. The middleware maps all of them
-// to a generic 401; keeping them distinct helps callers diagnose failures
-// without exposing details to clients.
 var (
-	// ErrInvalidToken covers empty, malformed, expired, or unparseable tokens.
 	ErrInvalidToken = errors.New("invalid access token")
-	// ErrUnexpectedSigningMethod indicates an algorithm other than HS256.
 	ErrUnexpectedSigningMethod = errors.New("unexpected JWT signing method")
-	// ErrMissingSubject indicates a valid token carrying no subject.
 	ErrMissingSubject = errors.New("access token missing subject")
 )
 
-// Manager signs JWT access tokens using the application's JWT_SECRET,
-// which never leaves this package.
 type Manager struct {
 	secret []byte
 }
@@ -55,9 +45,6 @@ func (m *Manager) SignAccessToken(userID string) (string, error) {
 	return token.SignedString(m.secret)
 }
 
-// ParseAccessToken validates an HS256 access token signed with the manager's
-// secret and returns the user ID from its `sub` claim. It requires a present,
-// unexpired expiration claim and the Soulwe issuer.
 func (m *Manager) ParseAccessToken(tokenString string) (string, error) {
 	if strings.TrimSpace(tokenString) == "" {
 		return "", ErrInvalidToken
