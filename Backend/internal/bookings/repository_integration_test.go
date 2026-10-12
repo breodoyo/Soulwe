@@ -13,10 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TestPostgresRepositoryIntegration exercises the bookings repository against a
-// running PostgreSQL. Excluded from the default build via the "integration"
-// tag and skipped when DATABASE_URL is not set. Users and therapists are seeded
-// with fixed ids; the deferred cleanup removes them and bookings cascade away.
 func TestPostgresRepositoryIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -334,11 +330,6 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	})
 }
 
-// TestPostgresRepositoryWindowGuardIntegration exercises the migration 015
-// guarantees: the database itself rejects any two ACTIVE bookings whose
-// [scheduled_at, +60m) windows overlap, so concurrent requests cannot sneak
-// overlapping sessions in. Excluded from the default build via the "integration"
-// tag and skipped when DATABASE_URL is not set.
 func TestPostgresRepositoryWindowGuardIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -348,9 +339,6 @@ func TestPostgresRepositoryWindowGuardIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// Bounding deadlock detection keeps the concurrent exclusion subtests fast: a
-	// lost GiST race resolves via deadlock detection (default 1s) and the
-	// repository retries it as a clean conflict.
 	cfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		t.Fatalf("failed to parse DATABASE_URL: %v", err)
@@ -410,8 +398,6 @@ func TestPostgresRepositoryWindowGuardIntegration(t *testing.T) {
 		}
 	}()
 
-	// Each scenario lives on its own calendar day so one result never leaks
-	// into the next.
 	at := func(day, hour, minute int) time.Time {
 		return time.Date(2026, 12, day, hour, minute, 0, 0, time.UTC)
 	}

@@ -12,40 +12,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Repository defines the persistence operations the bookings domain needs.
-// Implementations only touch the database; they contain no business logic.
-// Every read is scoped by userID so a caller can never observe another user's
-// bookings.
 type Repository interface {
-	// Create inserts a booking in the pending state and fills in the
-	// database-generated fields. It returns ErrBookingConflict when an ACTIVE
-	// booking already claims the slot: the partial unique indexes (exact same
-	// minute) and the GiST EXCLUDE guards from migrations 014 and 015 (any
-	// overlap of the 60-minute window) make this race-proof.
 	Create(ctx context.Context, b *Booking) error
 
-	// GetByID returns the caller's booking joined with the therapist's display
-	// name, or ErrBookingNotFound when no such booking belongs to userID.
 	GetByID(ctx context.Context, userID, bookingID string) (*Booking, error)
 
-	// ListByUserID returns the caller's bookings newest first (created_at
-	// then id as tiebreaker). It returns an empty slice (not nil) when the
-	// user has none.
 	ListByUserID(ctx context.Context, userID string) ([]Booking, error)
 
-	// HasActiveOverlap reports whether the user already has a live booking
-	// whose session window overlaps the start..start+SessionDuration window.
 	HasActiveOverlap(ctx context.Context, userID string, start time.Time) (bool, error)
 
-	// TherapistStatus reports whether a therapist with the id exists and is
-	// actively accepting bookings.
 	TherapistStatus(ctx context.Context, therapistID string) (found, active bool, err error)
 
-	// SetStatus transitions a booking owned by userID from the expected status
-	// to next, refreshing updated_at, and returns the refreshed row. It
-	// returns ErrBookingNotFound when the booking is not the caller's, and
-	// ErrBookingStatusConflict when it exists but is not in the expected
-	// status.
 	SetStatus(ctx context.Context, userID, bookingID, expected, next string) (*Booking, error)
 }
 
@@ -58,8 +35,7 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
 
-// bookingColumns is the select list shared by list/get/status updates; the join
-// pulls only the audience-facing therapist name.
+
 const bookingColumns = `b.id, b.user_id, t.id, t.full_name, b.scheduled_at, b.status, b.created_at, b.updated_at`
 
 const (
@@ -85,10 +61,6 @@ const (
 		FROM bookings b
 		JOIN therapists t ON t.id = b.therapist_id
 		WHERE b.id = $2 AND b.user_id = $1`
-
-	// A session occupies [scheduled_at, scheduled_at + 60m); an existing one
-	// conflicts when it starts before the incoming window closes AND ends after
-	// the incoming one starts.
 	hasActiveOverlapSQL = `
 		SELECT EXISTS (
 			SELECT 1 FROM bookings
@@ -107,14 +79,6 @@ const (
 )
 
 func (r *PostgresRepository) Create(ctx context.Context, b *Booking) error {
-	// The CTE insert returns the joined row so the caller's booking has the
-	// therapist display_name populated immediately, matching list/get.
-	//
-	// Racing inserts cannot both win: the loser fails either with a clean
-	// conflict (23505/23P01) or, when probes of the two GiST EXCLUDE indexes
-	// interleave, with a detected deadlock (40P01). A deadlock aborts the
-	// loser without inserting, so the bounded retry is safe and resolves to
-	// the clean conflict once the winner has committed.
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
 		err := scanBooking(r.pool.QueryRow(ctx, createBookingSQL,
@@ -198,8 +162,6 @@ func (r *PostgresRepository) SetStatus(ctx context.Context, userID, bookingID, e
 	err := r.pool.QueryRow(ctx, setBookingStatusSQL, userID, bookingID, expected, next).
 		Scan(&refreshed.id, &refreshed.updatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		// The update touched nothing: the booking is either not the caller's or is
-		// owned but not in the expected status. Re-read to tell 404 from 409.
 		if _, getErr := r.GetByID(ctx, userID, bookingID); errors.Is(getErr, ErrBookingNotFound) {
 			return nil, ErrBookingNotFound
 		}
@@ -216,10 +178,6 @@ func (r *PostgresRepository) SetStatus(ctx context.Context, userID, bookingID, e
 	return b, nil
 }
 
-// isConflict recognizes the violations treated as a booking conflict: 23505
-// unique_violation (exact slot taken by a partial unique index) and 23P01
-// exclusion_violation (60-minute overlap under a GiST EXCLUDE guard). Both can
-// fire for racing requests.
 func isConflict(err error) bool {
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) {
@@ -228,9 +186,6 @@ func isConflict(err error) bool {
 	return pgErr.Code == pgerrcode.UniqueViolation || pgErr.Code == pgerrcode.ExclusionViolation
 }
 
-// isDeadlock detects SQLSTATE 40P01, surfaced when two racing inserts probe the
-// two GiST EXCLUDE indexes in interleaved order. The loser is aborted without
-// inserting, so the caller may safely retry.
 func isDeadlock(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.DeadlockDetected
