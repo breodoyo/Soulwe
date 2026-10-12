@@ -10,8 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Handler owns the HTTP surface of anonymous sessions. It validates the
-// optional X-Device-ID header and never touches the database.
 type Handler struct {
 	svc Service
 }

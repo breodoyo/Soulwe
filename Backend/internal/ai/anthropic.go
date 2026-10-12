@@ -1,6 +1,3 @@
-// Package ai provides the server-side Claude client that generates reflections.
-// Only the journal text a reflection needs is sent; credentials, database details
-// and user identity never leave the backend, and content is never logged.
 package ai
 
 import (
