@@ -280,11 +280,6 @@ func TestPhase4EndToEndIntegration(t *testing.T) {
 	})
 }
 
-// TestPhase5JournalEndToEndIntegration runs the full Phase 5 journal stack
-// (encrypt-at-rest, create/list/get/update/delete, ownership isolation) against
-// a live database through the real router. The AI reflection generator is wired
-// as nil, so the reflect endpoint is expected to return 503 — no real
-// Anthropic key is required anywhere in the integration suite.
 func TestPhase5JournalEndToEndIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -577,12 +572,6 @@ func TestPhase5JournalEndToEndIntegration(t *testing.T) {
 	})
 }
 
-// TestPhase6CirclesEndToEndIntegration runs the full Phase 6.1 circles stack
-// (discovery, detail, join/leave, membership-gated messaging) against a live
-// database through the real router, with both credential kinds: anonymous
-// sessions and registered JWTs. A registered member takes part in the same room
-// as an anonymous one, under their own display name, and the two memberships
-// stay separate.
 func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -598,8 +587,6 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 	}
 	defer pool.Close()
 
-	// The circle routes are gated on IdentityRequired, which verifies a
-	// registered token first, so this stack needs a real token manager.
 	tokenManager, err := auth.NewManager("integration-test-secret-not-for-production")
 	if err != nil {
 		t.Fatalf("auth.NewManager returned error: %v", err)
@@ -677,9 +664,6 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		return w
 	}
 
-	// registerMember signs up a real account, names it, and returns its access
-	// token, so the registered half of the circle flow goes through the same
-	// router and the same session plumbing a signed-in member uses.
 	registerMember := func(t *testing.T, label, displayName string) string {
 		t.Helper()
 		email := fmt.Sprintf("circle-%s-%d@soulwe.local", label, time.Now().UnixNano())
@@ -713,10 +697,6 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 			t.Fatalf("%s: expected an access token, got %s", label, w.Body.String())
 		}
 
-		// POST /auth/register takes only email and password, so the name has
-		// to be set through the profile route. Sending display_name to
-		// /auth/register would be silently dropped, and the circle would then
-		// show the neutral "Member" fallback instead of this member's name.
 		req, _ = http.NewRequest(http.MethodPatch, "/api/v1/users/me",
 			strings.NewReader(fmt.Sprintf(`{"display_name":%q}`, displayName)))
 		req.Header.Set("Content-Type", "application/json")
@@ -758,15 +738,11 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		}
 	})
 
-	// A peer-support circle used to reject this outright. Seeking support with
-	// an account should not be harder than seeking it without one.
+	
 	t.Run("a registered JWT is accepted on every circle route", func(t *testing.T) {
 		memberToken := registerMember(t, "routes", "Bree")
 		for _, r := range circleRoutes {
 			w := do(r.method, r.path, memberToken, r.body)
-			// The two calls that read or write need a real circle and a
-			// membership, so only the credential itself is under test here:
-			// anything but 401 proves the JWT authenticated.
 			if w.Code == http.StatusUnauthorized {
 				t.Errorf("%s %s: a registered JWT must authenticate, got 401: %s", r.method, r.path, w.Body.String())
 			}
@@ -929,8 +905,6 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 			t.Fatalf("expected 409 on a duplicate registered join, got %d: %s", w.Code, w.Body.String())
 		}
 
-		// A registered member is not labelled anonymous, and is never labelled
-		// with an identity UUID.
 		const open = "Signed in today, but I still need this room."
 		sent := do(http.MethodPost, "/api/v1/circles/"+circleID+"/messages", memberToken,
 			fmt.Sprintf(`{"content":%q}`, open))
@@ -944,8 +918,6 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 			t.Errorf("expected is_anonymous false for a registered author: %s", sent.Body.String())
 		}
 
-		// Both members see each other: the anonymous member's message is
-		// readable by the registered one and vice versa.
 		for label, token := range map[string]string{"registered": memberToken, "anonymous": tokenA} {
 			list := do(http.MethodGet, "/api/v1/circles/"+circleID+"/messages", token, "")
 			if list.Code != http.StatusOK {
@@ -965,7 +937,6 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 			}
 		}
 
-		// The registered member counts toward the room and can leave cleanly.
 		detail := do(http.MethodGet, "/api/v1/circles/"+circleID, memberToken, "")
 		if !strings.Contains(detail.Body.String(), `"member_count":2`) {
 			t.Errorf("expected both kinds of member in the count: %s", detail.Body.String())
@@ -1009,9 +980,6 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 	})
 
 	t.Run("every stored message and membership has exactly one owner", func(t *testing.T) {
-		// The schema's one-owner CHECK is the backstop behind the API's
-		// identity separation, so verify the data really does satisfy it for
-		// both kinds rather than trusting the middleware alone.
 		for name, query := range map[string]string{
 			"circle_messages": `SELECT COUNT(*) FROM circle_messages
 				WHERE circle_id = $1 AND num_nonnulls(user_id, anon_identity_id) <> 1`,
@@ -1027,8 +995,6 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 			}
 		}
 
-		// The anonymous member's authorship is still backed by a real
-		// anon_identities row, so the pseudonym is server-generated.
 		var anonCount int
 		if err := pool.QueryRow(ctx,
 			`SELECT COUNT(*) FROM circle_messages m
@@ -1042,10 +1008,6 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 	})
 }
 
-// TestPhase6TherapistDiscoveryEndToEndIntegration runs the full Phase 6.2
-// therapist discovery stack (directory, filters, pagination, profile) against
-// a live database through the real router, using a registered-user JWT exactly
-// as the product intends. Anonymous tokens must be rejected on every route.
 func TestPhase6TherapistDiscoveryEndToEndIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -1145,9 +1107,6 @@ func TestPhase6TherapistDiscoveryEndToEndIntegration(t *testing.T) {
 		return res.Token
 	}
 
-	// Seed three therapists with distinct created_at values so newest-first
-	// ordering and the before-cursor pagination are deterministic. Languages
-	// flow through the child table exactly as the product stores them.
 	now := time.Now().UTC().Truncate(time.Second)
 	seed := func(name string, langs, specs []string, active bool, createdAt time.Time) string {
 		t.Helper()
@@ -1324,8 +1283,6 @@ func TestPhase6TherapistDiscoveryEndToEndIntegration(t *testing.T) {
 		if len(three.Therapists) != 1 || three.Therapists[0].DisplayName != "Dr. Aminah Korir" {
 			t.Fatalf("expected Aminah on the last page, got %+v", three.Therapists)
 		}
-		// The page is full, so per the keyset convention it still carries a
-		// cursor; consuming it must yield an empty page with no further cursor.
 		if three.NextCursor == nil {
 			t.Fatalf("expected a cursor on the full last page, got %+v", three.Therapists)
 		}
@@ -1416,10 +1373,6 @@ func TestPhase6TherapistDiscoveryEndToEndIntegration(t *testing.T) {
 	})
 }
 
-// TestPhase6BookingEndToEndIntegration runs the Phase 6.3 booking stack
-// (create under a therapist, list/get/cancel the caller's own bookings) against
-// a live database through the real router. It is excluded from the default
-// build via the "integration" tag and skipped when DATABASE_URL is not set.
 func TestPhase6BookingEndToEndIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -1517,8 +1470,6 @@ func TestPhase6BookingEndToEndIntegration(t *testing.T) {
 		return w
 	}
 
-	// Seed one active and one inactive therapist, each with a unique name so
-	// the run is isolated from the Phase 6.2 e2e's therapists.
 	seed := func(name string, active bool) string {
 		t.Helper()
 		var id string
@@ -1539,15 +1490,12 @@ func TestPhase6BookingEndToEndIntegration(t *testing.T) {
 	alice, _ := register(t, "booking-alice")
 	bob, _ := register(t, "booking-bob")
 
-	// Slots are strictly in the future (48-55h out) so the scheduled_at checks
-	// and overlap window never depend on the clock being in a particular day.
 	slot := func(hoursFromNow int) string {
 		return time.Now().UTC().Add(time.Duration(48+hoursFromNow) * time.Hour).Truncate(time.Second).Format(time.RFC3339Nano)
 	}
 	slotA := slot(0) // alice's first booking
 	slotB := slot(2) // 2h after slotA -> no overlap
-	// 30 minutes after slotA, strictly inside the assumed 60-minute session
-	// window, so the overlap check must reject it.
+	
 	slotOverlap := time.Now().UTC().Add(48*time.Hour + 30*time.Minute).Truncate(time.Second).Format(time.RFC3339Nano)
 	past := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339Nano)
 
@@ -1790,10 +1738,6 @@ func TestPhase6BookingEndToEndIntegration(t *testing.T) {
 	})
 }
 
-// TestPhase6BreathingEndToEndIntegration runs the Phase 6.4 breathing stack
-// (exercise discovery, session recording, the caller's own history) against a
-// live database through the real router. It is excluded from the default build
-// via the "integration" tag and skipped when DATABASE_URL is not set.
 func TestPhase6BreathingEndToEndIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -1832,8 +1776,6 @@ func TestPhase6BreathingEndToEndIntegration(t *testing.T) {
 	createdEmails := []string{}
 	defer func() {
 		for _, e := range createdEmails {
-			// Breaths cascade-delete with the user, and exercise rows come from
-			// the migration seed, so only the seeded users need cleanup.
 			if _, err := pool.Exec(context.Background(), "DELETE FROM users WHERE email = $1", e); err != nil {
 				t.Errorf("cleanup failed to DELETE test user %s: %v", e, err)
 			}
