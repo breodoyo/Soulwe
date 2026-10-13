@@ -20,13 +20,8 @@ const missingID = "00000000-0000-0000-0000-000000000000"
 
 func strPtr(s string) *string { return &s }
 
-// ownerFor builds a registered Owner; sessions may also belong to an anonymous one.
 func ownerFor(userID string) middleware.Owner { return middleware.Owner{UserID: userID} }
 
-// TestPostgresRepositoryIntegration exercises the breathing repository against a
-// running PostgreSQL. Excluded from the default build via the "integration"
-// tag and skipped when DATABASE_URL is not set. Multiple users are created so
-// ownership isolation can be verified; sessions cascade-delete with their user.
 func TestPostgresRepositoryIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
