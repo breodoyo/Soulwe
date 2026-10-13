@@ -16,9 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TestPostgresRepositoryIntegration exercises the circles repository against a
-// running PostgreSQL. Excluded from the default build via the "integration"
-// tag and skipped when DATABASE_URL is not set.
 func TestPostgresRepositoryIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {

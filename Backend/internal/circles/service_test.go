@@ -33,9 +33,6 @@ var (
 
 func strPtr(s string) *string { return &s }
 
-// ownerKey identifies an owner of either kind for the in-memory maps. The
-// prefix keeps the kinds in separate namespaces, mirroring the schema's
-// separate user_id and anon_identity_id columns, so the two never collide.
 func ownerKey(owner middleware.Owner) string {
 	if _, ok := middleware.IdentityFromOwner(owner); !ok {
 		return ""
@@ -66,7 +63,6 @@ func newFakeRepository() *fakeRepository {
 		members:   map[string]map[string]bool{},
 		messages:  map[string][]CircleMessage{},
 		anonNames: map[string]string{anonOne: "Anon Baobab", anonTwo: "Anon Willow"},
-		// userTwo has no display name, exercising the DefaultAuthorName fallback.
 		authorName: map[string]string{
 			"user:" + userOne: "Bree",
 		},

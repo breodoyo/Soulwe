@@ -12,11 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Handler owns the HTTP surface of the circles domain: it validates input,
-// calls the service layer, and writes responses, never the database. The owner
-// always comes from the identity middleware, never a request body or path, and
-// no response carries user or anonymous identity IDs, device UUIDs, or token
-// hashes.
+
 type Handler struct {
 	svc Service
 }
@@ -25,13 +21,11 @@ func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// sendRequest is the body of POST /api/v1/circles/:id/messages.
+
 type sendRequest struct {
 	Content string `json:"content"`
 }
 
-// List handles GET /api/v1/circles. Discovery is open to any registered or
-// anonymous session.
 func (h *Handler) List(c *gin.Context) {
 	if _, ok := middleware.OwnerFromContext(c); !ok {
 		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
@@ -48,8 +42,6 @@ func (h *Handler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"circles": circles})
 }
 
-// Get handles GET /api/v1/circles/:id, returning the circle's details and
-// whether the authenticated owner is a member.
 func (h *Handler) Get(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -70,7 +62,7 @@ func (h *Handler) Get(c *gin.Context) {
 	}
 }
 
-// Join handles POST /api/v1/circles/:id/join. Joining twice conflicts.
+
 func (h *Handler) Join(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -93,8 +85,7 @@ func (h *Handler) Join(c *gin.Context) {
 	}
 }
 
-// Leave handles DELETE /api/v1/circles/:id/leave. It is idempotent: leaving a
-// circle never joined still succeeds.
+
 func (h *Handler) Leave(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -115,8 +106,6 @@ func (h *Handler) Leave(c *gin.Context) {
 	}
 }
 
-// ListMessages handles GET /api/v1/circles/:id/messages, members only,
-// newest first, honoring optional ?limit and ?before query parameters.
 func (h *Handler) ListMessages(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -153,10 +142,6 @@ func (h *Handler) ListMessages(c *gin.Context) {
 	}
 }
 
-// SendMessage handles POST /api/v1/circles/:id/messages, members only. The
-// response exposes the resolved author_name and is_anonymous flag, never an
-// identity UUID: a member appears under their display name, an anonymous
-// session under its pseudonym.
 func (h *Handler) SendMessage(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -190,8 +175,6 @@ func (h *Handler) SendMessage(c *gin.Context) {
 	}
 }
 
-// nextCursor is the keyset cursor for the next page: the last message's
-// created_at when the page is full, otherwise null.
 func nextCursor(messages []CircleMessage, limit int) *time.Time {
 	if len(messages) == 0 {
 		return nil
@@ -203,8 +186,6 @@ func nextCursor(messages []CircleMessage, limit int) *time.Time {
 	return &last
 }
 
-// parseLimit reads the optional ?limit query parameter; empty means "use the
-// service default" and a non-integer value is a client error.
 func parseLimit(c *gin.Context) (int, error) {
 	raw := c.Query("limit")
 	if raw == "" {
@@ -220,7 +201,6 @@ func parseLimit(c *gin.Context) (int, error) {
 	return limit, nil
 }
 
-// parseBefore reads the optional ?before cursor (ISO 8601 timestamp).
 func parseBefore(c *gin.Context) (*time.Time, error) {
 	raw := c.Query("before")
 	if raw == "" {
@@ -233,8 +213,6 @@ func parseBefore(c *gin.Context) (*time.Time, error) {
 	return &before, nil
 }
 
-// respondError writes the documented error envelope:
-// {"error": {"code": "...", "message": "...", "field": "..."}}.
 func respondError(c *gin.Context, status int, code, message, field string) {
 	body := gin.H{
 		"error": gin.H{
