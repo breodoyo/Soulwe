@@ -738,7 +738,6 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		}
 	})
 
-	
 	t.Run("a registered JWT is accepted on every circle route", func(t *testing.T) {
 		memberToken := registerMember(t, "routes", "Bree")
 		for _, r := range circleRoutes {
@@ -1495,7 +1494,7 @@ func TestPhase6BookingEndToEndIntegration(t *testing.T) {
 	}
 	slotA := slot(0) // alice's first booking
 	slotB := slot(2) // 2h after slotA -> no overlap
-	
+
 	slotOverlap := time.Now().UTC().Add(48*time.Hour + 30*time.Minute).Truncate(time.Second).Format(time.RFC3339Nano)
 	past := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339Nano)
 

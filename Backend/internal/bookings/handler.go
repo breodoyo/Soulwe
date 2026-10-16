@@ -23,7 +23,6 @@ func NewHandler(svc Service) *Handler {
 
 var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-
 type createBookingRequest struct {
 	ScheduledAt string `json:"scheduled_at"`
 }

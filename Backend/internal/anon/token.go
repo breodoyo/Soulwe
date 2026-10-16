@@ -8,7 +8,6 @@ import (
 	"regexp"
 )
 
-
 const tokenByteLength = 32
 
 func GenerateRawToken() (string, error) {

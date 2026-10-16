@@ -27,10 +27,9 @@ func ClampLimit(limit int) int {
 }
 
 var (
-	
 	ErrCircleNotFound = errors.New("circle not found")
-	ErrAlreadyMember = errors.New("already a member of this circle")
-	ErrNotMember = errors.New("not a member of this circle")
+	ErrAlreadyMember  = errors.New("already a member of this circle")
+	ErrNotMember      = errors.New("not a member of this circle")
 	ErrInvalidContent = errors.New("invalid circle message content")
 )
 

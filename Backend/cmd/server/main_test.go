@@ -209,7 +209,6 @@ func (f *fakeAnonService) Authenticate(_ context.Context, rawToken string) (stri
 	return id, ok, nil
 }
 
-
 func TestAnonymousPromoteEndpoint(t *testing.T) {
 	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
 	if err != nil {
@@ -307,6 +306,7 @@ func (s *stubUserService) GetProfile(context.Context, string) (*user.User, error
 func (s *stubUserService) UpdateProfile(context.Context, string, *string, *string) (*user.User, error) {
 	return s.profile, s.err
 }
+
 type stubMoodService struct {
 	mood.Service
 	createLog *mood.MoodLog
@@ -322,7 +322,7 @@ func (s *stubMoodService) List(context.Context, middleware.Owner, int) ([]mood.M
 	return s.listLogs, s.err
 }
 
-
+type stubDashboardService struct {
 	dashboard.Service
 	getFunc func(ctx context.Context, userID string) (*dashboard.Dashboard, error)
 }
@@ -330,7 +330,6 @@ func (s *stubMoodService) List(context.Context, middleware.Owner, int) ([]mood.M
 func (s *stubDashboardService) Get(ctx context.Context, userID string) (*dashboard.Dashboard, error) {
 	return s.getFunc(ctx, userID)
 }
-
 
 type stubJournalService struct {
 	journal.Service
@@ -433,7 +432,6 @@ func (s *stubBookingService) Get(context.Context, string, string) (*bookings.Boo
 func (s *stubBookingService) Cancel(context.Context, string, string) (*bookings.Booking, error) {
 	return s.booking, s.err
 }
-
 
 type stubBreathingService struct {
 	breathing.Service
@@ -845,7 +843,6 @@ func TestPhase4WellnessRoutes(t *testing.T) {
 	})
 }
 
-
 func TestPhase6CircleRoutes(t *testing.T) {
 	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
 	if err != nil {
@@ -1135,7 +1132,6 @@ func TestPhase6TherapistDiscoveryRoutes(t *testing.T) {
 		}
 	})
 }
-
 
 func TestPhase6BookingRoutes(t *testing.T) {
 	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")

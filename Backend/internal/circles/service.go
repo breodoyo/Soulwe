@@ -10,7 +10,6 @@ import (
 )
 
 type Service interface {
-
 	List(ctx context.Context) ([]Circle, error)
 
 	Get(ctx context.Context, owner middleware.Owner, circleID string) (*Circle, error)
@@ -112,7 +111,7 @@ func (s *service) requireMember(ctx context.Context, owner middleware.Owner, cir
 	if isMember {
 		return nil
 	}
-	
+
 	if _, err := s.circles.GetCircle(ctx, circleID); err != nil {
 		return err
 	}

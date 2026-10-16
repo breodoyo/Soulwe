@@ -96,7 +96,6 @@ func (h *Handler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"entries": entries, "next_cursor": nextCursor(entries, limit)})
 }
 
-
 func (h *Handler) Get(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {

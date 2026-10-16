@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-
 type Service interface {
 	Create(ctx context.Context, userID, therapistID string, scheduledAt time.Time) (*Booking, error)
 

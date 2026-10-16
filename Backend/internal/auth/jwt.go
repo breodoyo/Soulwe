@@ -15,9 +15,9 @@ const (
 )
 
 var (
-	ErrInvalidToken = errors.New("invalid access token")
+	ErrInvalidToken            = errors.New("invalid access token")
 	ErrUnexpectedSigningMethod = errors.New("unexpected JWT signing method")
-	ErrMissingSubject = errors.New("access token missing subject")
+	ErrMissingSubject          = errors.New("access token missing subject")
 )
 
 type Manager struct {

@@ -22,7 +22,6 @@ func ownerArgs(owner middleware.Owner) (any, any, bool) {
 }
 
 type Repository interface {
-	
 	ListExercises(ctx context.Context, limit int) ([]Exercise, error)
 
 	GetExercise(ctx context.Context, exerciseID string) (*Exercise, error)
@@ -160,7 +159,6 @@ func scanListedSession(s func(dest ...any) error, session *Session) error {
 	assignOwner(userID, anonID, &session.UserID, &session.AnonIdentityID)
 	return nil
 }
-
 
 func assignOwner(userID, anonID *string, dstUser, dstAnon *string) {
 	if userID != nil {

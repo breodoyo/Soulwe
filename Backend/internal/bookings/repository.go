@@ -35,7 +35,6 @@ func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{pool: pool}
 }
 
-
 const bookingColumns = `b.id, b.user_id, t.id, t.full_name, b.scheduled_at, b.status, b.created_at, b.updated_at`
 
 const (

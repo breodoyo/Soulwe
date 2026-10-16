@@ -12,7 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-
 type Handler struct {
 	svc Service
 }
@@ -20,7 +19,6 @@ type Handler struct {
 func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
-
 
 type sendRequest struct {
 	Content string `json:"content"`
@@ -62,7 +60,6 @@ func (h *Handler) Get(c *gin.Context) {
 	}
 }
 
-
 func (h *Handler) Join(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -84,7 +81,6 @@ func (h *Handler) Join(c *gin.Context) {
 		c.Status(http.StatusNoContent)
 	}
 }
-
 
 func (h *Handler) Leave(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)

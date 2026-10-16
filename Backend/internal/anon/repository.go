@@ -27,7 +27,6 @@ type Repository interface {
 	RotateToken(ctx context.Context, id, tokenHash string) error
 }
 
-
 type PostgresRepository struct {
 	pool *pgxpool.Pool
 }

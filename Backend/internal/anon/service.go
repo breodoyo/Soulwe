@@ -7,7 +7,6 @@ import (
 	"strings"
 )
 
-
 const maxCreateAttempts = 5
 
 type Session struct {

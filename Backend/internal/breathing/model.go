@@ -16,7 +16,6 @@ var (
 	ErrInvalidOwner = errors.New("breathing: request has no single owner")
 )
 
-
 type Exercise struct {
 	ID          string    `json:"id"`
 	Slug        string    `json:"slug"`

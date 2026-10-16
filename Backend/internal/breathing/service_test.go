@@ -276,8 +276,7 @@ func TestServiceListSessions(t *testing.T) {
 			t.Fatalf("ListSessions returned error: %v", err)
 		}
 		if sessions == nil {
-			t.
-	if _, ok := middleware.IdentityFromOwner(owner)ders []")
+			t.Fatal("expected an empty slice, not nil, so the JSON renders []")
 		}
 		if len(sessions) != 0 {
 			t.Errorf("expected 0 sessions, got %d", len(sessions))

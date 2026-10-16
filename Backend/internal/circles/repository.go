@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-
 type Repository interface {
 	ListCircles(ctx context.Context) ([]Circle, error)
 
@@ -78,7 +77,6 @@ const (
 	removeMemberSQL = `DELETE FROM circle_members
 		WHERE circle_id = $1 AND ` + ownerPredicate
 
-	
 	messageSelect = `SELECT m.id,
 		COALESCE(NULLIF(BTRIM(u.display_name), ''), a.anon_name, ` + sqlDefaultAuthorName + `),
 		m.anon_identity_id IS NOT NULL,
