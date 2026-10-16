@@ -61,8 +61,16 @@ export default function SiteLayout() {
   const { status, user, logout } = useAuth()
   const { pathname, hash } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
   const firstRender = useRef(true)
   const isAuthed = status === 'authenticated'
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 4)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   // Any navigation dismisses the mobile menu.
   useEffect(() => {
@@ -104,7 +112,10 @@ export default function SiteLayout() {
 
       <a className={styles.skipLink} href="#main-content">Skip to main content</a>
 
-      <header className={styles.header} role="banner">
+      <header
+        className={[styles.header, scrolled ? styles.headerScrolled : ''].join(' ')}
+        role="banner"
+      >
         <div className={styles.headerInner}>
           <Link to="/" className={styles.brand} aria-label="Soulwe home page">
             <BrandMark />

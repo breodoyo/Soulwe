@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { BookOpen, Users, Wind, UserCheck, CloudRain, Minus, TrendingUp, Leaf, Heart, type LucideIcon } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { BookOpen, Users, Wind, UserCheck, CloudRain, Minus, TrendingUp, Leaf, Heart, ArrowUpRight, type LucideIcon } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/auth/AuthContext'
 import { isApiError, type DashboardResponse, type Mood, type MoodLog } from '@/types'
@@ -51,7 +51,6 @@ function formatLoggedAt(iso: string): string {
 }
 
 export default function HomePage() {
-  const navigate = useNavigate()
   const { status } = useAuth()
   // Complete for a guest too: only the account dashboard needs an account.
   const hasAccount = status === 'authenticated'
@@ -155,79 +154,83 @@ export default function HomePage() {
   return (
     <div className={styles.page}>
 
-      {/* Greeting band */}
-      <section className={styles.greetBand} aria-label="Welcome">
-        <p className={styles.greetEyebrow}>
-          {member && member.display_name
-            ? `Karibu, ${member.display_name}`
-            : 'Karibu — Welcome'}
-        </p>
-        <h1 className={styles.greetHeading}>
-          Nafsi yangu,<br />
-          <em>how are you today?</em>
-        </h1>
-        <p className={styles.greetSub}>
-          {hasAccount
-            ? 'This is your private space. No judgment, no stigma — just you.'
-            : 'You are welcome here, with or without an account. Take your time — everything on this page is yours to explore.'}
-        </p>
-
-        {/* Mood picker — always browsable; only saving a check-in needs an account */}
-        <div className={styles.moodRow} role="group" aria-label="How are you feeling?">
-          {moods.map(({ Icon, label }) => (
-            <button
-              key={label}
-              className={[styles.moodBtn, activeMood === label ? styles.moodBtnActive : ''].join(' ')}
-              onClick={() => handleMoodSelect(label)}
-              disabled={saving}
-              aria-pressed={activeMood === label}
-              aria-label={`Feeling ${label}`}
-            >
-              <span className={styles.moodEmoji} aria-hidden="true">
-                <Icon size={20} strokeWidth={1.8} />
-              </span>
-              <span className={styles.moodLabel}>{label}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* Mood save status */}
-        {(saving || savedMood !== null || saveError) && (
-          <p
-            className={saveError ? styles.moodError : styles.moodSaved}
-            role={saveError ? 'alert' : 'status'}
-          >
-            {saving ? 'Saving your mood…' : saveError ?? 'Saved. This is how you are feeling today.'}
+      <div className={styles.topGrid}>
+        {/* Greeting band */}
+        <section className={styles.greetBand} aria-label="Welcome">
+          <p className={styles.greetEyebrow}>
+            {member && member.display_name
+              ? `Karibu, ${member.display_name}`
+              : 'Karibu — Welcome'}
           </p>
-        )}
-      </section>
+          <h1 className={styles.greetHeading}>
+            Nafsi yangu,<br />
+            <em>how are you today?</em>
+          </h1>
+          <p className={styles.greetSub}>
+            {hasAccount
+              ? 'This is your private space. No judgment, no stigma — just you.'
+              : 'You are welcome here, with or without an account. Take your time — everything on this page is yours to explore.'}
+          </p>
 
-      {/* Affirmation */}
-      <section className={styles.affirmation} aria-label="Today's affirmation">
-        <p className={styles.affirmationEyebrow}>Today's affirmation</p>
-        <blockquote className={styles.affirmationText}>
-          {affirmation.text}
-        </blockquote>
-        <p className={styles.affirmationSource}>{affirmation.attribution}</p>
-      </section>
+          {/* Mood picker — always browsable; only saving a check-in needs an account */}
+          <div className={styles.moodRow} role="group" aria-label="How are you feeling?">
+            {moods.map(({ Icon, label }) => (
+              <button
+                key={label}
+                className={[styles.moodBtn, activeMood === label ? styles.moodBtnActive : ''].join(' ')}
+                onClick={() => handleMoodSelect(label)}
+                disabled={saving}
+                aria-pressed={activeMood === label}
+                aria-label={`Feeling ${label}`}
+              >
+                <span className={styles.moodEmoji} aria-hidden="true">
+                  <Icon size={20} strokeWidth={1.8} />
+                </span>
+                <span className={styles.moodLabel}>{label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Mood save status */}
+          {(saving || savedMood !== null || saveError) && (
+            <p
+              className={saveError ? styles.moodError : styles.moodSaved}
+              role={saveError ? 'alert' : 'status'}
+            >
+              {saving ? 'Saving your mood…' : saveError ?? 'Saved. This is how you are feeling today.'}
+            </p>
+          )}
+        </section>
+
+        {/* Affirmation */}
+        <section className={styles.affirmation} aria-label="Today's affirmation">
+          <p className={styles.affirmationEyebrow}>Today's affirmation</p>
+          <blockquote className={styles.affirmationText}>
+            {affirmation.text}
+          </blockquote>
+          <p className={styles.affirmationSource}>{affirmation.attribution}</p>
+        </section>
+      </div>
 
       {/* Quick access */}
       <section aria-label="Quick access">
         <p className={styles.sectionLabel}>Your space</p>
         <div className={styles.quickGrid}>
           {quickCards.map(({ to, Icon, label, sub, color }) => (
-            <button
+            <Link
               key={to}
+              to={to}
               className={[styles.quickCard, styles[`quickCard_${color}`]].join(' ')}
-              onClick={() => navigate(to)}
-              aria-label={label}
             >
               <span className={styles.quickIcon} aria-hidden="true">
-                <Icon size={22} strokeWidth={1.8} />
+                <Icon size={24} strokeWidth={1.8} />
               </span>
               <span className={styles.quickLabel}>{label}</span>
               <span className={styles.quickSub}>{sub}</span>
-            </button>
+              <span className={styles.quickArrow} aria-hidden="true">
+                <ArrowUpRight size={18} strokeWidth={2} />
+              </span>
+            </Link>
           ))}
         </div>
       </section>

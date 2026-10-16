@@ -84,6 +84,8 @@
   --space-6:  24px;
   --space-8:  32px;
   --space-10: 40px;
+  --space-12: 48px;
+  --space-14: 56px;
 
   /* ── Radius ── */
   --radius-sm:   8px;
@@ -100,6 +102,7 @@
 
   /* ── Layout ── */
   --max-content:   720px;
+  --max-site:      1120px;
   --nav-height:    56px;
 }
 
