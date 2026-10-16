@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"Backend/db"
-	"Backend/internal/ai"
 	"Backend/internal/anon"
 	"Backend/internal/auth"
 	"Backend/internal/bookings"
@@ -21,6 +20,7 @@ import (
 	"Backend/internal/config"
 	"Backend/internal/dashboard"
 	"Backend/internal/journal"
+	"Backend/internal/llm"
 	"Backend/internal/middleware"
 	"Backend/internal/mood"
 	"Backend/internal/therapists"
@@ -234,14 +234,16 @@ func main() {
 	dashboardHandler := dashboard.NewHandler(dashboardService)
 
 	// Content is AES-256-GCM encrypted before it reaches the repository. A missing
-	// or failing ANTHROPIC_API_KEY only disables AI reflections.
+	// or failing provider key only disables AI reflections.
 	journalCodec, err := cipher.NewAESGCM([]byte(cfg.JournalKey))
 	if err != nil {
 		log.Fatalf("Journal encryption key error: %v", err)
 	}
-	var reflection journal.ReflectionGenerator
-	if cfg.AnthropicKey != "" {
-		reflection = ai.NewClient(cfg.AnthropicKey, ai.DefaultModel)
+	// Selecting the provider is env-driven; a missing key yields a nil reflector
+	// so the app still starts with reflections disabled.
+	reflection, err := llm.NewFromEnv()
+	if err != nil {
+		log.Fatalf("AI reflection configuration error: %v", err)
 	}
 	journalService := journal.NewService(journal.NewPostgresRepository(pool), journalCodec, reflection)
 	journalHandler := journal.NewHandler(journalService)

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"Backend/internal/cipher"
+	"Backend/internal/llm"
 	"Backend/internal/middleware"
 )
 
@@ -38,7 +39,7 @@ type fakeReflection struct {
 	gotTag []string
 }
 
-func (f *fakeReflection) GenerateReflection(ctx context.Context, content string, tags []string) (string, error) {
+func (f *fakeReflection) Reflect(ctx context.Context, content string, tags []string) (string, error) {
 	f.calls++
 	f.got = content
 	f.gotTag = tags
@@ -402,6 +403,19 @@ func TestCreateReflectionIsBestEffort(t *testing.T) {
 		}
 		if repo.stored(owner("user-1"), entry.ID) == nil {
 			t.Error("entry must still be persisted when reflection fails")
+		}
+	})
+
+	t.Run("a safety block stores the safe fallback", func(t *testing.T) {
+		repo := newFakeRepository()
+		ref := &fakeReflection{err: fmt.Errorf("provider declined: %w", llm.ErrBlocked)}
+		svc := NewService(repo, codec, ref)
+		entry, err := svc.Create(context.Background(), owner("user-1"), secretText, nil, nil)
+		if err != nil {
+			t.Fatalf("Create must not fail when a reflection is blocked: %v", err)
+		}
+		if entry.AIReflection == nil || *entry.AIReflection != FallbackReflection {
+			t.Errorf("expected the safe fallback reflection, got %v", entry.AIReflection)
 		}
 	})
 
@@ -785,7 +799,7 @@ func TestReflect(t *testing.T) {
 
 	t.Run("generator failure is surfaced safely", func(t *testing.T) {
 		repo := newFakeRepository()
-		svc := NewService(repo, codec, &fakeReflection{err: errors.New("anthropic exploded")})
+		svc := NewService(repo, codec, &fakeReflection{err: errors.New("provider exploded")})
 		created, _ := svc.Create(context.Background(), owner("user-1"), secretText, nil, nil)
 		_, err := svc.Reflect(context.Background(), owner("user-1"), created.ID)
 		if !errors.Is(err, ErrAIReflectionUnavailable) {
@@ -794,8 +808,25 @@ func TestReflect(t *testing.T) {
 		if strings.Contains(err.Error(), secretText) {
 			t.Error("journal content must never appear in reflection errors")
 		}
-		if strings.Contains(err.Error(), "anthropic exploded") {
+		if strings.Contains(err.Error(), "provider exploded") {
 			t.Error("upstream details must never leak from reflection errors")
+		}
+	})
+
+	t.Run("a safety block persists the safe fallback", func(t *testing.T) {
+		repo := newFakeRepository()
+		svc := NewService(repo, codec, &fakeReflection{err: fmt.Errorf("declined: %w", llm.ErrBlocked)})
+		created, _ := svc.Create(context.Background(), owner("user-1"), secretText, nil, nil)
+		entry, err := svc.Reflect(context.Background(), owner("user-1"), created.ID)
+		if err != nil {
+			t.Fatalf("Reflect must succeed with a fallback on a block: %v", err)
+		}
+		if entry.AIReflection == nil || *entry.AIReflection != FallbackReflection {
+			t.Errorf("expected the safe fallback, got %v", entry.AIReflection)
+		}
+		stored := repo.stored(owner("user-1"), created.ID)
+		if stored.AIReflection == nil || *stored.AIReflection != FallbackReflection {
+			t.Error("the fallback must be persisted")
 		}
 	})
 

@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"Backend/internal/cipher"
+	"Backend/internal/llm"
 	"Backend/internal/middleware"
 )
 
@@ -41,9 +41,9 @@ type Service interface {
 	Delete(ctx context.Context, owner middleware.Owner, entryID string) error
 
 	// Reflect decrypts the owner's entry, generates a fresh AI reflection and
-	// persists it. Returns ErrAIReflectionUnavailable when no generator is
-	// configured or Claude fails; ErrJournalEntryNotFound when the entry is not
-	// the owner's.
+	// persists it. Returns ErrAIReflectionUnavailable when no provider is
+	// configured or the provider fails; ErrJournalEntryNotFound when the entry is
+	// not the owner's.
 	Reflect(ctx context.Context, owner middleware.Owner, entryID string) (*JournalEntry, error)
 }
 
@@ -59,11 +59,11 @@ type Update struct {
 type service struct {
 	entries    Repository
 	codec      *cipher.AESGCM
-	reflection ReflectionGenerator
+	reflection llm.Reflector
 }
 
-// NewService wires the service; reflection may be nil when ANTHROPIC_API_KEY is unset.
-func NewService(entries Repository, codec *cipher.AESGCM, reflection ReflectionGenerator) *service {
+// NewService wires the service; reflection may be nil when no AI provider key is set.
+func NewService(entries Repository, codec *cipher.AESGCM, reflection llm.Reflector) *service {
 	return &service{entries: entries, codec: codec, reflection: reflection}
 }
 
@@ -144,13 +144,18 @@ func (s *service) Create(ctx context.Context, owner middleware.Owner, content st
 }
 
 // generateReflection never lets a failure escape; journal content is not logged.
+// A safety block yields the safe fallback, any other failure leaves it unset.
 func (s *service) generateReflection(ctx context.Context, content string, tags []string) *string {
 	if s.reflection == nil {
 		return nil
 	}
-	reflection, err := s.reflection.GenerateReflection(ctx, content, tags)
+	reflection, err := s.reflection.Reflect(ctx, content, tags)
 	if err != nil {
-		slog.Error("journal reflection skipped", slog.String("error", err.Error()))
+		if errors.Is(err, llm.ErrBlocked) {
+			fallback := FallbackReflection
+			return &fallback
+		}
+		// The provider logs the failure; the entry is still saved without one.
 		return nil
 	}
 	reflection = strings.TrimSpace(reflection)
@@ -267,10 +272,15 @@ func (s *service) Reflect(ctx context.Context, owner middleware.Owner, entryID s
 		return nil, err
 	}
 
-	reflection, err := s.reflection.GenerateReflection(ctx, entry.Content, entry.MoodTags)
+	reflection, err := s.reflection.Reflect(ctx, entry.Content, entry.MoodTags)
 	if err != nil {
-		slog.Error("journal reflection failed", slog.String("error", err.Error()))
-		return nil, ErrAIReflectionUnavailable
+		if errors.Is(err, llm.ErrBlocked) {
+			// A refusal still gives the user a gentle, content-free reflection.
+			reflection = FallbackReflection
+		} else {
+			// The provider logs the failure; the caller gets a safe sentinel.
+			return nil, ErrAIReflectionUnavailable
+		}
 	}
 	reflection = strings.TrimSpace(reflection)
 	if reflection == "" {

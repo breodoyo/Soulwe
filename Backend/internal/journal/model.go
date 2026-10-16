@@ -1,7 +1,6 @@
 package journal
 
 import (
-	"context"
 	"errors"
 	"time"
 )
@@ -46,6 +45,11 @@ var (
 	ErrAIReflectionUnavailable = errors.New("ai reflection is unavailable")
 )
 
+// FallbackReflection is shown instead of an AI reflection when a provider
+// refuses to answer (for example a safety block). It is content-free and never
+// exposes why the model declined.
+const FallbackReflection = "Thank you for putting this into words. Noticing how you feel is a gentle act of care for yourself."
+
 // JournalEntry mirrors journal_entries. Exactly one of UserID or AnonIdentityID
 // is set (journalling must not require registering); ownership, ContentEnc and
 // ContentIV are never serialized, and Content stays empty outside detail
@@ -62,9 +66,4 @@ type JournalEntry struct {
 	AIReflection   *string   `json:"ai_reflection"`
 	WordCount      int       `json:"word_count"`
 	CreatedAt      time.Time `json:"created_at"`
-}
-
-// ReflectionGenerator isolates the Claude client behind a seam testable without a key.
-type ReflectionGenerator interface {
-	GenerateReflection(ctx context.Context, content string, moodTags []string) (string, error)
 }

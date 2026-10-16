@@ -1,0 +1,26 @@
+# Sample journal entries for llmcompare: one per line, '#' lines are ignored.
+# English entries first, then Swahili/Sheng, so provider language mirroring can
+# be compared directly.
+
+I finally told my sister how overwhelmed I have felt lately, and she just listened.
+Work has been heavy, but I took a short walk at lunch and it helped a little.
+I miss my grandmother today. The rain reminded me of her kitchen.
+I woke up anxious again, but I still made it to the gym.
+Today I said no to something I did not have the energy for, and I feel lighter.
+My friend canceled on me and I felt more hurt than I expected.
+I am proud that I finished the report, even though it took all night.
+I keep comparing myself to everyone else and it drains me.
+Small win: I drank water and slept before midnight.
+I feel stuck, like nothing I do changes anything.
+
+# Swahili / Sheng
+Leo nimechoka sana lakini nimefurahi kwa sababu nimekamilisha kazi yangu.
+Nimekosa mama yangu leo. Nataka tu kuzungumza naye.
+Nilipatwa na wasiwasi asubuhi lakini nikaenda kazini.
+Rafiki yangu alinikataa leo na nimeumia roho.
+Nashukuru kwa afya yangu, hata kama maisha ni magumu.
+Nimemaliza mazoezi ya kupumua na nimepata utulivu.
+Siku hii ilikuwa ndefu, lakini nimejifunza kusema hapana.
+Nampenda mpenzi wangu lakini tuna shida ya kuwasiliana.
+Nimekaa na familia yangu jioni na nilijisikia salama.
+Kesho nitajaribu tena, hata kama leo ni ngumu.

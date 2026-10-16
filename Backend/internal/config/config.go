@@ -19,7 +19,6 @@ type Config struct {
 	JWTSecret        string
 	JWTRefreshSecret string
 	JournalKey       string
-	AnthropicKey     string
 }
 
 func Load() *Config {
@@ -36,7 +35,6 @@ func Load() *Config {
 		JWTSecret:        getEnv("JWT_SECRET", ""),
 		JWTRefreshSecret: getEnv("JWT_REFRESH_SECRET", ""),
 		JournalKey:       getEnv("JOURNAL_ENCRYPTION_KEY", ""),
-		AnthropicKey:     getEnv("ANTHROPIC_API_KEY", ""),
 	}
 }
 

@@ -1,4 +1,4 @@
-package ai
+package llm
 
 import (
 	"context"
@@ -17,7 +17,7 @@ const (
 	testReflection = "It is brave to sit with that anxiety."
 )
 
-func newFakeAnthropic(t *testing.T, status int, response any) *httptest.Server {
+func newFakeClaude(t *testing.T, status int, response any) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -29,8 +29,8 @@ func newFakeAnthropic(t *testing.T, status int, response any) *httptest.Server {
 		if got := r.Header.Get("x-api-key"); got != testAPIKey {
 			t.Errorf("expected x-api-key %q, got %q", testAPIKey, got)
 		}
-		if got := r.Header.Get("anthropic-version"); got != APIVersion {
-			t.Errorf("expected anthropic-version %q, got %q", APIVersion, got)
+		if got := r.Header.Get("anthropic-version"); got != ClaudeAPIVersion {
+			t.Errorf("expected anthropic-version %q, got %q", ClaudeAPIVersion, got)
 		}
 		var body struct {
 			Model     string `json:"model"`
@@ -50,6 +50,9 @@ func newFakeAnthropic(t *testing.T, status int, response any) *httptest.Server {
 		if body.MaxTokens != MaxTokens {
 			t.Errorf("expected max_tokens %d, got %d", MaxTokens, body.MaxTokens)
 		}
+		if body.System != SystemPrompt {
+			t.Errorf("expected the shared system prompt")
+		}
 		if len(body.Messages) != 1 || body.Messages[0].Role != "user" {
 			t.Errorf("expected a single user message")
 		}
@@ -68,8 +71,8 @@ func newFakeAnthropic(t *testing.T, status int, response any) *httptest.Server {
 	}))
 }
 
-func TestGenerateReflectionSuccess(t *testing.T) {
-	srv := newFakeAnthropic(t, http.StatusOK, messagesResponse{
+func TestClaudeReflectSuccess(t *testing.T) {
+	srv := newFakeClaude(t, http.StatusOK, claudeResponse{
 		Content: []struct {
 			Type string `json:"type"`
 			Text string `json:"text"`
@@ -77,30 +80,30 @@ func TestGenerateReflectionSuccess(t *testing.T) {
 	})
 	defer srv.Close()
 
-	c := NewClientForTests(srv.URL+"/v1/messages", testAPIKey, testModel)
-	got, err := c.GenerateReflection(context.Background(), testContent, []string{"anxiety"})
+	c := newClaude(testAPIKey, testModel, srv.URL+"/v1/messages")
+	got, err := c.Reflect(context.Background(), testContent, []string{"anxiety"})
 	if err != nil {
-		t.Fatalf("GenerateReflection returned error: %v", err)
+		t.Fatalf("Reflect returned error: %v", err)
 	}
 	if got != testReflection {
 		t.Errorf("expected %q, got %q", testReflection, got)
 	}
 }
 
-func TestGenerateReflectionNotConfigured(t *testing.T) {
-	c := NewClient("", testModel)
-	_, err := c.GenerateReflection(context.Background(), testContent, nil)
+func TestClaudeReflectNotConfigured(t *testing.T) {
+	c := NewClaude("", testModel)
+	_, err := c.Reflect(context.Background(), testContent, nil)
 	if !errors.Is(err, ErrNotConfigured) {
 		t.Fatalf("expected ErrNotConfigured, got %v", err)
 	}
 }
 
-func TestGenerateReflectionRejectsNonSuccessStatus(t *testing.T) {
-	srv := newFakeAnthropic(t, http.StatusInternalServerError, map[string]string{"error": "boom"})
+func TestClaudeReflectRejectsNonSuccessStatus(t *testing.T) {
+	srv := newFakeClaude(t, http.StatusInternalServerError, map[string]string{"error": "boom"})
 	defer srv.Close()
 
-	c := NewClientForTests(srv.URL+"/v1/messages", testAPIKey, testModel)
-	_, err := c.GenerateReflection(context.Background(), testContent, nil)
+	c := newClaude(testAPIKey, testModel, srv.URL+"/v1/messages")
+	_, err := c.Reflect(context.Background(), testContent, nil)
 	if err == nil {
 		t.Fatal("expected error for 500 status")
 	}
@@ -112,7 +115,7 @@ func TestGenerateReflectionRejectsNonSuccessStatus(t *testing.T) {
 	}
 }
 
-func TestGenerateReflectionRejectsMalformedResponse(t *testing.T) {
+func TestClaudeReflectRejectsMalformedResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -120,21 +123,22 @@ func TestGenerateReflectionRejectsMalformedResponse(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClientForTests(srv.URL, testAPIKey, testModel)
-	if _, err := c.GenerateReflection(context.Background(), testContent, nil); err == nil {
+	c := newClaude(testAPIKey, testModel, srv.URL)
+	if _, err := c.Reflect(context.Background(), testContent, nil); err == nil {
 		t.Fatal("expected error for malformed response")
 	}
 }
 
-func TestGenerateReflectionRejectsEmptyText(t *testing.T) {
-	srv := newFakeAnthropic(t, http.StatusOK, messagesResponse{Content: []struct {
+func TestClaudeReflectBlockedOnEmptyText(t *testing.T) {
+	srv := newFakeClaude(t, http.StatusOK, claudeResponse{Content: []struct {
 		Type string `json:"type"`
 		Text string `json:"text"`
 	}{}})
 	defer srv.Close()
 
-	c := NewClientForTests(srv.URL+"/v1/messages", testAPIKey, testModel)
-	if _, err := c.GenerateReflection(context.Background(), testContent, nil); err == nil {
-		t.Fatal("expected error when no text block is returned")
+	c := newClaude(testAPIKey, testModel, srv.URL+"/v1/messages")
+	_, err := c.Reflect(context.Background(), testContent, nil)
+	if !errors.Is(err, ErrBlocked) {
+		t.Fatalf("expected ErrBlocked when no text block is returned, got %v", err)
 	}
 }
