@@ -66,10 +66,7 @@ const (
 )
 
 func TestServiceCreate(t *testing.T) {
-	future, err := time.Parse(time.RFC3339Nano, svcFutureTime)
-	if err != nil {
-		t.Fatalf("parse fixture: %v", err)
-	}
+	future := time.Now().UTC().Add(72 * time.Hour).Truncate(time.Hour)
 	past := time.Now().Add(-time.Hour)
 
 	t.Run("rejects a past scheduled_at before touching the repository", func(t *testing.T) {
