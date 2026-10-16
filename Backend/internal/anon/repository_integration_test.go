@@ -13,8 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TestAnonSessionIntegration needs a running PostgreSQL (DATABASE_URL), the
-// "integration" tag, and migration 011_add_anon_session_identity applied.
+
 func TestAnonSessionIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {

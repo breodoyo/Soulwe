@@ -211,7 +211,7 @@ func main() {
 		log.Fatalf("Database connection failed: %v", err)
 	}
 	defer pool.Close()
-	log.Println("🌿 Database connection pool established")
+	log.Println("Database connection pool established")
 
 	tokenManager, err := auth.NewManager(cfg.JWTSecret)
 	if err != nil {
@@ -271,7 +271,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("🌿 Soulwe API server listening on %s [%s mode]", serverAddr, cfg.Env)
+		log.Printf("Soulwe API server listening on %s [%s mode]", serverAddr, cfg.Env)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("Server startup failed: %v", err)
 		}

@@ -12,15 +12,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// uuidPattern accepts the canonical 8-4-4-4-12 UUID layout used across the API.
-// It is a shape check, not a cryptographic guarantee.
+// This is a shape check, not a cryptographic guarantee.
 var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-// Handler owns the HTTP surface of the breathing domain: it validates input,
-// calls the service layer, and writes responses, never the database. The
-// exercise catalog is shared public data, so browsing needs no credentials;
-// recording and listing sessions do, and ownership always comes from the
-// identity context, never the request body.
 type Handler struct {
 	svc Service
 }
@@ -29,9 +23,6 @@ func NewHandler(svc Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// recordSessionRequest is the body of POST /breathing/sessions. Completed is
-// optional and defaults to true: recording through this endpoint means the user
-// finished the exercise. The user ID is never part of the body.
 type recordSessionRequest struct {
 	ExerciseID string `json:"exercise_id"`
 	Breaths    int    `json:"breaths"`
@@ -39,7 +30,6 @@ type recordSessionRequest struct {
 	Completed  *bool  `json:"completed"`
 }
 
-// ListExercises handles GET /breathing/exercises, honoring an optional ?limit=.
 func (h *Handler) ListExercises(c *gin.Context) {
 	limit, err := parseLimit(c)
 	if err != nil {
@@ -58,7 +48,6 @@ func (h *Handler) ListExercises(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"exercises": exercises})
 }
 
-// GetExercise handles GET /breathing/exercises/:id, or 404 for a missing one.
 func (h *Handler) GetExercise(c *gin.Context) {
 	id := c.Param("id")
 	if !uuidPattern.MatchString(id) {
@@ -80,8 +69,6 @@ func (h *Handler) GetExercise(c *gin.Context) {
 	}
 }
 
-// RecordSession handles POST /breathing/sessions. It records a completed
-// exercise session for the authenticated user.
 func (h *Handler) RecordSession(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -129,9 +116,6 @@ func (h *Handler) RecordSession(c *gin.Context) {
 	}
 }
 
-// ListSessions handles GET /breathing/sessions, newest first, honoring an
-// optional ?limit=. The owner always comes from the identity context, so this
-// can never list another identity's sessions.
 func (h *Handler) ListSessions(c *gin.Context) {
 	owner, ok := middleware.OwnerFromContext(c)
 	if !ok {
@@ -173,8 +157,6 @@ func parseLimit(c *gin.Context) (int, error) {
 	return limit, nil
 }
 
-// respondError writes the documented error envelope:
-// {"error": {"code": "...", "message": "...", "field": "..."}}.
 func respondError(c *gin.Context, status int, code, message, field string) {
 	body := gin.H{
 		"error": gin.H{

@@ -9,29 +9,18 @@ import (
 	"Backend/internal/middleware"
 )
 
-// Service is the circles business-logic boundary: it owns input validation and
-// the membership gate for message reads/writes, and scopes every operation to
-// the owner resolved by the identity middleware (never one from a request body).
-// It never constructs SQL and never exposes owner IDs on the wire.
 type Service interface {
-	// List returns all active circles with live member counts, ordered by name.
+
 	List(ctx context.Context) ([]Circle, error)
 
-	// Get returns one circle with the owner's membership, or ErrCircleNotFound.
 	Get(ctx context.Context, owner middleware.Owner, circleID string) (*Circle, error)
 
-	// Join adds the owner, returning ErrAlreadyMember on a duplicate.
 	Join(ctx context.Context, owner middleware.Owner, circleID string) error
 
-	// Leave removes the owner's membership; leaving a circle never joined is a no-op success.
 	Leave(ctx context.Context, owner middleware.Owner, circleID string) error
 
-	// ListMessages returns messages newest first, resuming from an exclusive
-	// created_at cursor; non-members get ErrNotMember or ErrCircleNotFound.
 	ListMessages(ctx context.Context, owner middleware.Owner, circleID string, limit int, before *time.Time) ([]CircleMessage, error)
 
-	// SendMessage stores a message for the owner, or returns ErrInvalidContent,
-	// ErrCircleNotFound, or ErrNotMember.
 	SendMessage(ctx context.Context, owner middleware.Owner, circleID, content string) (*CircleMessage, error)
 }
 
@@ -115,9 +104,6 @@ func (s *service) SendMessage(ctx context.Context, owner middleware.Owner, circl
 	return message, nil
 }
 
-// requireMember gates message reads/writes behind membership: a missing or
-// inactive circle surfaces as ErrCircleNotFound (404), a non-member as
-// ErrNotMember (403).
 func (s *service) requireMember(ctx context.Context, owner middleware.Owner, circleID string) error {
 	isMember, err := s.circles.IsMember(ctx, circleID, owner)
 	if err != nil {
@@ -126,7 +112,7 @@ func (s *service) requireMember(ctx context.Context, owner middleware.Owner, cir
 	if isMember {
 		return nil
 	}
-	// Distinguish "this circle does not exist" from "you are not a member".
+	
 	if _, err := s.circles.GetCircle(ctx, circleID); err != nil {
 		return err
 	}
@@ -143,9 +129,6 @@ func validateContent(content string) error {
 	return nil
 }
 
-// normalizeMessage keeps two wire invariants: reaction_counts is {} rather than
-// JSON null, and author_name is never blank (belt-and-braces against a fake or
-// hand-built repository, since the SQL already falls back to DefaultAuthorName).
 func normalizeMessage(m *CircleMessage) {
 	if m.ReactionCounts == nil {
 		m.ReactionCounts = map[string]int{}

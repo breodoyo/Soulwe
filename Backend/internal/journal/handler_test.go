@@ -116,8 +116,6 @@ func requestRouter(t *testing.T, method, path, body string, owner middleware.Own
 	return rec
 }
 
-// routePattern turns a request path into the Gin route pattern; the routes have
-// at most one dynamic segment, optionally followed by the literal "reflect".
 func routePattern(path string) string {
 	const prefix = "/api/v1/journal"
 	if path == prefix {

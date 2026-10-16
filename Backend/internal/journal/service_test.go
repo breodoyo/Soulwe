@@ -56,8 +56,6 @@ func owner(userID string) middleware.Owner { return middleware.Owner{UserID: use
 
 func anon(anonID string) middleware.Owner { return middleware.Owner{AnonIdentityID: anonID} }
 
-// ownerKey namespaces owners so a user and an anonymous session can never collide
-// in the fake repository's index, mirroring the schema's one-owner-per-row rule.
 func ownerKey(o middleware.Owner) string {
 	if o.Registered() {
 		return "user:" + o.UserID
@@ -65,12 +63,10 @@ func ownerKey(o middleware.Owner) string {
 	return "anon:" + o.AnonIdentityID
 }
 
-// ownerKeyOf reads the owner columns off a stored entry.
 func ownerKeyOf(e *JournalEntry) string {
 	return ownerKey(middleware.Owner{UserID: e.UserID, AnonIdentityID: e.AnonIdentityID})
 }
 
-// ownedBy reports whether a stored entry belongs to the given owner.
 func ownedBy(e *JournalEntry, o middleware.Owner) bool {
 	return ownerKeyOf(e) == ownerKey(o)
 }

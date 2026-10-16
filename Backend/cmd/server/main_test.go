@@ -35,8 +35,7 @@ func TestHealthEndpoints(t *testing.T) {
 	}
 
 	// The pool is only required for the /readyz endpoint, and the auth handler
-	// is only used for /api/v1/auth/* routes. Neither is exercised by these
-	// unit tests, so both are omitted here.
+	// is only used for /api/v1/auth/* routes.
 	router := setupRouter(cfg, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	t.Run("Root /health returns 200 OK", func(t *testing.T) {
@@ -122,10 +121,6 @@ func TestHealthEndpoints(t *testing.T) {
 	})
 }
 
-// TestAuthMeEndpoint exercises the Phase 3.3 wiring: /api/v1/auth/me is
-// registered through setupRouter and only responds when a valid Bearer token
-// is present. The handler used here is built with a nil service because the
-// Me endpoint never touches the service layer.
 func TestAuthMeEndpoint(t *testing.T) {
 	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
 	if err != nil {
@@ -168,8 +163,6 @@ func TestAuthMeEndpoint(t *testing.T) {
 	})
 
 	t.Run("health endpoints remain unprotected", func(t *testing.T) {
-		// /readyz is intentionally excluded: it needs a live database pool to
-		// return 200, and this router is built with a nil pool.
 		for _, path := range []string{"/health", "/api/v1/health"} {
 			req, _ := http.NewRequest(http.MethodGet, path, nil)
 			w := httptest.NewRecorder()
@@ -199,9 +192,6 @@ func TestAuthMeEndpoint(t *testing.T) {
 	})
 }
 
-// fakeAnonService is a minimal anon.Service used by the router wiring tests. It
-// recognises exactly one anonymous token (by its SHA-256 hash), mimicking the
-// real service's Authenticate without a database.
 type fakeAnonService struct {
 	knownHashes map[string]string // token SHA-256 hash -> anonymous identity id
 }
@@ -219,10 +209,7 @@ func (f *fakeAnonService) Authenticate(_ context.Context, rawToken string) (stri
 	return id, ok, nil
 }
 
-// TestAnonymousPromoteEndpoint verifies the Phase 3.5 wiring: the promote route
-// exists, is protected by the anonymous middleware (registered JWTs are
-// rejected), and the pre-existing anonymous and registered auth flows are
-// untouched.
+
 func TestAnonymousPromoteEndpoint(t *testing.T) {
 	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
 	if err != nil {
@@ -307,9 +294,6 @@ func TestAnonymousPromoteEndpoint(t *testing.T) {
 	})
 }
 
-// stubUserService implements user.Service by embedding the interface and
-// overriding only the Phase 4 profile methods, so registered-JWT requests can
-// be exercised end to end through the router without a database.
 type stubUserService struct {
 	user.Service
 	profile *user.User
@@ -323,9 +307,6 @@ func (s *stubUserService) GetProfile(context.Context, string) (*user.User, error
 func (s *stubUserService) UpdateProfile(context.Context, string, *string, *string) (*user.User, error) {
 	return s.profile, s.err
 }
-
-// stubMoodService implements mood.Service by embedding the interface and
-// overriding only the methods the Phase 4 router tests exercise.
 type stubMoodService struct {
 	mood.Service
 	createLog *mood.MoodLog
@@ -341,9 +322,7 @@ func (s *stubMoodService) List(context.Context, middleware.Owner, int) ([]mood.M
 	return s.listLogs, s.err
 }
 
-// stubDashboardService implements dashboard.Service by embedding the interface
-// and overriding Get with a canned snapshot.
-type stubDashboardService struct {
+
 	dashboard.Service
 	getFunc func(ctx context.Context, userID string) (*dashboard.Dashboard, error)
 }
@@ -352,9 +331,7 @@ func (s *stubDashboardService) Get(ctx context.Context, userID string) (*dashboa
 	return s.getFunc(ctx, userID)
 }
 
-// stubJournalService implements journal.Service by embedding the interface and
-// overriding every method with canned values, so the Phase 5 router wiring can
-// be exercised end to end without a database.
+
 type stubJournalService struct {
 	journal.Service
 	entry *journal.JournalEntry
@@ -386,9 +363,6 @@ func (s *stubJournalService) Reflect(context.Context, middleware.Owner, string) 
 	return s.entry, s.err
 }
 
-// stubCircleService implements circles.Service by embedding the interface and
-// overriding every method with canned values, so the Phase 6.1 router wiring
-// can be exercised end to end with the anonymous middleware and no database.
 type stubCircleService struct {
 	circles.Service
 	circle     *circles.Circle
@@ -422,9 +396,6 @@ func (s *stubCircleService) SendMessage(context.Context, middleware.Owner, strin
 	return s.message, s.err
 }
 
-// stubTherapistService implements therapists.Service by embedding the interface
-// and overriding both methods with canned values, so the Phase 6.2 router
-// wiring can be exercised with the registered-JWT middleware and no database.
 type stubTherapistService struct {
 	therapists.Service
 	therapist     *therapists.Therapist
@@ -440,9 +411,6 @@ func (s *stubTherapistService) Get(context.Context, string) (*therapists.Therapi
 	return s.therapist, s.err
 }
 
-// stubBookingService implements bookings.Service by embedding the interface
-// and overriding every method with canned values, so the Phase 6.3 router
-// wiring can be exercised with the registered-JWT middleware and no database.
 type stubBookingService struct {
 	bookings.Service
 	booking     *bookings.Booking
@@ -466,10 +434,7 @@ func (s *stubBookingService) Cancel(context.Context, string, string) (*bookings.
 	return s.booking, s.err
 }
 
-// stubBreathingService implements breathing.Service by embedding the
-// interface and overriding every method with canned values, so the Phase 6.4
-// router wiring can be exercised with the registered-JWT middleware and no
-// database.
+
 type stubBreathingService struct {
 	breathing.Service
 	exercise     *breathing.Exercise
@@ -495,10 +460,6 @@ func (s *stubBreathingService) ListSessions(context.Context, middleware.Owner, i
 	return s.sessionList, s.err
 }
 
-// TestPhase5JournalRoutes verifies the Phase 5 wiring: every journal route
-// exists behind the registered-user AuthRequired middleware, rejects missing
-// and anonymous tokens, accepts a valid registered JWT, and is absent when the
-// journal stack is not wired.
 func TestPhase5JournalRoutes(t *testing.T) {
 	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
 	if err != nil {
@@ -884,13 +845,7 @@ func TestPhase4WellnessRoutes(t *testing.T) {
 	})
 }
 
-// TestPhase6CircleRoutes verifies the Phase 6.1 wiring: every circle route
-// exists behind the dual-credential IdentityRequired middleware, rejects
-// missing and unparseable tokens, accepts both a valid anonymous token and a
-// valid registered-user JWT, and is absent when the circles stack is not
-// wired. The two credentials resolve to different owners and are never
-// interchangeable, and the registered-only auth/me route still refuses an
-// anonymous token.
+
 func TestPhase6CircleRoutes(t *testing.T) {
 	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
 	if err != nil {
@@ -987,9 +942,6 @@ func TestPhase6CircleRoutes(t *testing.T) {
 		}
 	})
 
-	// A peer-support circle used to be unreachable for anyone with an account.
-	// IdentityRequired now accepts a registered JWT, so a signed-in member
-	// takes part on exactly the same routes as an anonymous session.
 	t.Run("registered JWT reaches every circle route", func(t *testing.T) {
 		jwt, err := tokenManager.SignAccessToken(registeredID)
 		if err != nil {
@@ -1059,11 +1011,6 @@ func TestPhase6CircleRoutes(t *testing.T) {
 	})
 }
 
-// TestPhase6TherapistDiscoveryRoutes verifies the Phase 6.2 wiring: therapist
-// discovery is public, so both routes serve the directory with no credential
-// at all (and with an anonymous-format token, which is simply ignored), accept
-// a valid registered JWT unchanged, only expose public profile fields, and are
-// absent when the stack is not wired.
 func TestPhase6TherapistDiscoveryRoutes(t *testing.T) {
 	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
 	if err != nil {
@@ -1189,11 +1136,7 @@ func TestPhase6TherapistDiscoveryRoutes(t *testing.T) {
 	})
 }
 
-// TestPhase6BookingRoutes verifies the Phase 6.3 wiring: creating a booking
-// under a therapist and the bookings list/get/cancel routes all live behind the
-// registered-user AuthRequired middleware, reject missing and anonymous tokens,
-// accept a valid registered JWT, and are absent when the bookings stack is not
-// wired (404, not a handler decision).
+
 func TestPhase6BookingRoutes(t *testing.T) {
 	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
 	if err != nil {
@@ -1377,8 +1320,7 @@ func TestPhase6BreathingRoutes(t *testing.T) {
 		session:      session,
 		sessionList:  []breathing.Session{*session},
 	}
-	// Finishing an exercise should not require registering, so the session
-	// routes accept an anonymous session like the journal and mood routes.
+
 	anonSvc := newFakeAnonService(anonToken, "33333333-3333-3333-3333-333333333333")
 
 	router := setupRouter(&config.Config{

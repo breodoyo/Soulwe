@@ -8,19 +8,13 @@ import (
 	"Backend/internal/middleware"
 )
 
-// Service is the breathing business-logic boundary: exercise resolution,
-// session assembly, and list-page clamping, never SQL.
 type Service interface {
 	// ListExercises returns the curated catalog in its defined order, clamped to
 	// a sane page size.
 	ListExercises(ctx context.Context, limit int) ([]Exercise, error)
 
-	// GetExercise returns one catalog exercise, or ErrExerciseNotFound.
 	GetExercise(ctx context.Context, exerciseID string) (*Exercise, error)
 
-	// RecordSession records a session for the given owner, which may be a
-	// registered user or an anonymous session. The exercise must exist
-	// (ErrExerciseNotFound otherwise) and its technique and name are stamped on.
 	RecordSession(ctx context.Context, owner middleware.Owner, exerciseID string, breaths, durationS int, completed bool) (*Session, error)
 
 	// ListSessions returns the owner's breathing history newest first, clamped
@@ -49,8 +43,6 @@ func (s *service) GetExercise(ctx context.Context, exerciseID string) (*Exercise
 }
 
 func (s *service) RecordSession(ctx context.Context, owner middleware.Owner, exerciseID string, breaths, durationS int, completed bool) (*Session, error) {
-	// An ambiguous owner (both identities set) would silently write as one of
-	// them, so it is rejected rather than guessed.
 	if _, ok := middleware.IdentityFromOwner(owner); !ok {
 		return nil, ErrInvalidOwner
 	}

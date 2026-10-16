@@ -26,9 +26,6 @@ const (
 	integrationText = "Integration diary: the rain finally stopped and the town smelled of wet earth."
 )
 
-// TestPostgresRepositoryIntegration exercises the repository against a running
-// PostgreSQL; it needs the "integration" tag and DATABASE_URL. Two users allow
-// ownership isolation and cascade deletes to be verified.
 func TestPostgresRepositoryIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -115,7 +112,6 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 			t.Error("expected created_at to be populated")
 		}
 
-		// No plaintext may reach the database.
 		var storedEnc []byte
 		if err := pool.QueryRow(ctx,
 			"SELECT content_enc FROM journal_entries WHERE id = $1", entry.ID).Scan(&storedEnc); err != nil {
@@ -252,7 +248,6 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 			t.Errorf("expected the revised text to be stored, got %q", plain)
 		}
 
-		// Metadata-only change: content and any stored reflection survive.
 		if err := repo.UpdateReflection(ctx, ownerFor(ownerID), entry.ID, "keep me"); err != nil {
 			t.Fatalf("UpdateReflection: %v", err)
 		}

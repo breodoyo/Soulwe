@@ -72,8 +72,6 @@ func requestRouter(t *testing.T, method, routePattern, requestPath, body string,
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
-		// An ill-formed owner is treated as "no identity", mirroring the real
-		// middleware simply not having set the key.
 		if _, ok := middleware.IdentityFromOwner(owner); ok {
 			c.Set(middleware.OwnerKey, owner)
 		}

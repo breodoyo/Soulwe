@@ -7,26 +7,16 @@ import (
 	"strings"
 )
 
-// maxCreateAttempts bounds retries on the UNIQUE constraints; a fresh random
-// name and token are tried each loop, making collisions effectively impossible.
+
 const maxCreateAttempts = 5
 
-// Session is a successful session creation: the raw token the client presents
-// on subsequent requests, plus the identity ID (anonymous_id).
 type Session struct {
 	Token       string
 	AnonymousID string
 }
 
-// Service is the anonymous-session business-logic boundary.
 type Service interface {
-	// CreateSession mints a token and its identity; a repeat call with the same
-	// device UUID reuses that identity and rotates the token, keeping the
-	// endpoint idempotent per device.
 	CreateSession(ctx context.Context, deviceUUID string) (*Session, error)
-
-	// Authenticate returns the identity ID for a valid raw token. ok=false
-	// means the token is unknown, not an internal failure.
 	Authenticate(ctx context.Context, rawToken string) (identityID string, ok bool, err error)
 }
 
@@ -41,8 +31,6 @@ func NewService(identities Repository) *service {
 func (s *service) CreateSession(ctx context.Context, deviceUUID string) (*Session, error) {
 	deviceUUID = strings.TrimSpace(deviceUUID)
 
-	// A repeat call from the same device reuses its identity, so the
-	// anonymous_id stays stable.
 	if deviceUUID != "" {
 		if existing, err := s.identities.FindByDeviceUUID(ctx, deviceUUID); err == nil {
 			session, err := s.rotate(ctx, existing.ID)
@@ -76,9 +64,6 @@ func (s *service) CreateSession(ctx context.Context, deviceUUID string) (*Sessio
 				return nil, fmt.Errorf("anon create session: %w", err)
 			}
 
-			// A concurrent request may have created this device's identity
-			// after our lookup, racing us on the device_uuid unique index.
-			// Re-check so we rotate the winner instead of exhausting retries.
 			if deviceUUID != "" {
 				if existing, lookupErr := s.identities.FindByDeviceUUID(ctx, deviceUUID); lookupErr == nil {
 					session, rotateErr := s.rotate(ctx, existing.ID)

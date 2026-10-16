@@ -11,14 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Repository defines the persistence operations the anonymous session domain
-// needs. All token arguments are already SHA-256 hashes, never raw tokens.
 type Repository interface {
-	// Create fills in the database-generated fields on the passed value and
-	// returns ErrIdentityConflict on a unique-constraint collision.
 	Create(ctx context.Context, identity *AnonIdentity) error
 
-	// FindByTokenHash returns the identity matching the hash, or ErrIdentityNotFound.
 	FindByTokenHash(ctx context.Context, tokenHash string) (*AnonIdentity, error)
 
 	// FindByDeviceUUID returns the identity bound to a device UUID, or ErrIdentityNotFound.
@@ -32,7 +27,7 @@ type Repository interface {
 	RotateToken(ctx context.Context, id, tokenHash string) error
 }
 
-// PostgresRepository implements Repository on top of the shared pgx pool.
+
 type PostgresRepository struct {
 	pool *pgxpool.Pool
 }
@@ -56,8 +51,6 @@ const (
 	rotateTokenSQL    = "UPDATE anon_identities SET token_hash = $2, last_seen_at = NOW() WHERE id = $1"
 )
 
-// Create inserts an anonymous identity with user_id NULL; the column stays NULL
-// until the identity is linked to an account.
 func (r *PostgresRepository) Create(ctx context.Context, identity *AnonIdentity) error {
 	err := r.pool.QueryRow(ctx, createIdentitySQL,
 		identity.DeviceUUID, identity.AnonName, identity.TokenHash,
@@ -112,8 +105,6 @@ func (r *PostgresRepository) RotateToken(ctx context.Context, id, tokenHash stri
 	return nil
 }
 
-// translateCreateError maps a unique violation to ErrIdentityConflict. Any of
-// the three unique constraints can fire, so the caller retries on all of them.
 func translateCreateError(err error) error {
 	if err == nil {
 		return nil

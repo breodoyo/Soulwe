@@ -27,9 +27,6 @@ func (f *fakeAnonymousVerifier) Authenticate(ctx context.Context, rawToken strin
 	return f.authenticateFunc(ctx, rawToken)
 }
 
-// newAnonymousProtectedRouter builds a Gin engine with one anonymous-protected
-// route whose handler echoes the context identity ID, so tests can assert
-// AnonymousAuthRequired stored it.
 func newAnonymousProtectedRouter(t *testing.T, verifier middleware.AnonymousVerifier) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
