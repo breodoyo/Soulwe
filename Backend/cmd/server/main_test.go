@@ -869,6 +869,7 @@ func TestPhase6CircleRoutes(t *testing.T) {
 		ID:             "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
 		AuthorName:     "Anon Baobab",
 		IsAnonymous:    true,
+		IsMine:         true,
 		Content:        "Lost my father last month.",
 		ReactionCounts: map[string]int{},
 		CreatedAt:      time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC),
@@ -975,8 +976,11 @@ func TestPhase6CircleRoutes(t *testing.T) {
 		if !strings.Contains(body, `"author_name":"Anon Baobab"`) {
 			t.Errorf("expected the resolved author name: %s", body)
 		}
-		if !strings.Contains(body, `"is_anonymous":true`) {
-			t.Errorf("expected is_anonymous on the message: %s", body)
+		if !strings.Contains(body, `"is_mine":true`) {
+			t.Errorf("expected is_mine on the message: %s", body)
+		}
+		if strings.Contains(body, "is_anonymous") {
+			t.Errorf("the response must not reveal the author's account kind: %s", body)
 		}
 	})
 

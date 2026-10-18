@@ -14,17 +14,12 @@ import (
 type Repository interface {
 	Create(ctx context.Context, identity *AnonIdentity) error
 
+	// FindByTokenHash resolves a session by the hash of the token the caller
+	// presented; possessing the token is the only proof of ownership.
 	FindByTokenHash(ctx context.Context, tokenHash string) (*AnonIdentity, error)
-
-	// FindByDeviceUUID returns the identity bound to a device UUID, or ErrIdentityNotFound.
-	FindByDeviceUUID(ctx context.Context, deviceUUID string) (*AnonIdentity, error)
 
 	// UpdateLastSeen stamps the identity's last_seen_at to now.
 	UpdateLastSeen(ctx context.Context, id string) error
-
-	// RotateToken reassigns a fresh token hash and stamps last_seen_at, so a
-	// re-registering device keeps its identity and anon_name.
-	RotateToken(ctx context.Context, id, tokenHash string) error
 }
 
 type PostgresRepository struct {
@@ -44,11 +39,13 @@ const (
 		RETURNING ` + identityColumns
 
 	findIdentityByTokenHashSQL = "SELECT " + identityColumns + " FROM anon_identities WHERE token_hash = $1"
-	findIdentityByDeviceSQL    = "SELECT " + identityColumns + " FROM anon_identities WHERE device_uuid = $1"
 
 	updateLastSeenSQL = "UPDATE anon_identities SET last_seen_at = NOW() WHERE id = $1"
-	rotateTokenSQL    = "UPDATE anon_identities SET token_hash = $2, last_seen_at = NOW() WHERE id = $1"
 )
+
+// deviceUUIDIndexName is the partial unique index guarding one identity per
+// device; a violation means the device is already claimed by someone else.
+const deviceUUIDIndexName = "idx_anon_identities_device_uuid"
 
 func (r *PostgresRepository) Create(ctx context.Context, identity *AnonIdentity) error {
 	err := r.pool.QueryRow(ctx, createIdentitySQL,
@@ -75,21 +72,6 @@ func (r *PostgresRepository) FindByTokenHash(ctx context.Context, tokenHash stri
 	return identity, nil
 }
 
-func (r *PostgresRepository) FindByDeviceUUID(ctx context.Context, deviceUUID string) (*AnonIdentity, error) {
-	identity := &AnonIdentity{}
-	err := r.pool.QueryRow(ctx, findIdentityByDeviceSQL, deviceUUID).Scan(
-		&identity.ID, &identity.UserID, &identity.DeviceUUID, &identity.AnonName,
-		&identity.TokenHash, &identity.CreatedAt, &identity.LastSeenAt,
-	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrIdentityNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("anon find by device uuid: %w", err)
-	}
-	return identity, nil
-}
-
 func (r *PostgresRepository) UpdateLastSeen(ctx context.Context, id string) error {
 	if _, err := r.pool.Exec(ctx, updateLastSeenSQL, id); err != nil {
 		return fmt.Errorf("anon update last seen: %w", err)
@@ -97,20 +79,22 @@ func (r *PostgresRepository) UpdateLastSeen(ctx context.Context, id string) erro
 	return nil
 }
 
-func (r *PostgresRepository) RotateToken(ctx context.Context, id, tokenHash string) error {
-	if _, err := r.pool.Exec(ctx, rotateTokenSQL, id, tokenHash); err != nil {
-		return fmt.Errorf("anon rotate token: %w", err)
-	}
-	return nil
-}
-
+// translateCreateError maps a failed INSERT to a domain error without ever
+// echoing the driver's message: a Postgres DETAIL can contain the failing row,
+// which would leak anon_name and token_hash into logs.
 func translateCreateError(err error) error {
 	if err == nil {
 		return nil
 	}
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-		return ErrIdentityConflict
+	if errors.As(err, &pgErr) {
+		if pgErr.Code == pgerrcode.UniqueViolation {
+			if pgErr.ConstraintName == deviceUUIDIndexName {
+				return ErrDeviceConflict
+			}
+			return ErrIdentityConflict
+		}
+		return fmt.Errorf("anon identity create: sqlstate %s", pgErr.Code)
 	}
 	return fmt.Errorf("anon identity create: %w", err)
 }

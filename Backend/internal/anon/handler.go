@@ -1,6 +1,7 @@
 package anon
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -28,6 +29,14 @@ func (h *Handler) Create(c *gin.Context) {
 
 	session, err := h.svc.CreateSession(c.Request.Context(), deviceID)
 	if err != nil {
+		// A genuine conflict is a retryable condition, not a server fault, and
+		// carries no identity values to log.
+		if errors.Is(err, ErrIdentityConflict) {
+			slog.Warn("anon session creation hit an identity conflict")
+			respondError(c, http.StatusConflict, "SESSION_CONFLICT",
+				"We couldn't start a new session just now. Please try again.", "")
+			return
+		}
 		slog.Error("anon session creation failed", slog.String("error", err.Error()))
 		respondError(c, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR",
 			"An unexpected server error occurred", "")

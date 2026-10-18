@@ -596,7 +596,8 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 
 	anonService := anon.NewService(anon.NewPostgresRepository(pool))
 	anonHandler := anon.NewHandler(anonService)
-	circlesHandler := circles.NewHandler(circles.NewService(circles.NewPostgresRepository(pool)))
+	circlesHandler := circles.NewHandler(circles.NewService(
+		circles.NewPostgresRepository(pool), "integration-test-naming-key-not-for-production"))
 
 	router := setupRouter(&config.Config{
 		Env:         "test",
@@ -818,8 +819,11 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		if !strings.Contains(created, `"author_name":`) {
 			t.Errorf("expected an author_name on the created message: %s", created)
 		}
-		if !strings.Contains(created, `"is_anonymous":true`) {
-			t.Errorf("expected an anonymous author to be flagged: %s", created)
+		if !strings.Contains(created, `"is_mine":true`) {
+			t.Errorf("expected the sender's own message to be marked is_mine: %s", created)
+		}
+		if strings.Contains(created, `"is_anonymous"`) {
+			t.Errorf("the response must not reveal the author's account kind: %s", created)
 		}
 		for _, leak := range []string{"anon_identity_id", identityA, "user_id", "token_hash"} {
 			if strings.Contains(created, leak) {
@@ -910,11 +914,16 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		if sent.Code != http.StatusCreated {
 			t.Fatalf("expected 201 sending as a registered member, got %d: %s", sent.Code, sent.Body.String())
 		}
-		if !strings.Contains(sent.Body.String(), `"author_name":"Bree"`) {
-			t.Errorf("expected the registered display name: %s", sent.Body.String())
+		if !strings.Contains(sent.Body.String(), `"author_name":`) {
+			t.Errorf("expected an author_name on the created message: %s", sent.Body.String())
 		}
-		if !strings.Contains(sent.Body.String(), `"is_anonymous":false`) {
-			t.Errorf("expected is_anonymous false for a registered author: %s", sent.Body.String())
+		// The registered display name must never reach a circle response; the
+		// author wears a per-circle label instead.
+		if strings.Contains(sent.Body.String(), `"author_name":"Bree"`) {
+			t.Errorf("the registered display name must not be exposed: %s", sent.Body.String())
+		}
+		if !strings.Contains(sent.Body.String(), `"is_mine":true`) {
+			t.Errorf("expected the sender's own message to be marked is_mine: %s", sent.Body.String())
 		}
 
 		for label, token := range map[string]string{"registered": memberToken, "anonymous": tokenA} {
@@ -929,7 +938,7 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 			if !strings.Contains(body, "I lost my father") {
 				t.Errorf("%s: expected the anonymous member's message: %s", label, body)
 			}
-			for _, leak := range []string{"anon_identity_id", "user_id", identityA} {
+			for _, leak := range []string{"anon_identity_id", "user_id", identityA, "Bree", "is_anonymous"} {
 				if strings.Contains(body, leak) {
 					t.Errorf("%s: messages must never expose %s: %s", label, leak, body)
 				}
