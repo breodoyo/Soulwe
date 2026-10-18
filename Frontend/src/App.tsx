@@ -11,6 +11,9 @@ import CirclePage from '@/pages/CirclePage'
 import TherapistPage from '@/pages/TherapistPage'
 import BreathePage from '@/pages/BreathePage'
 import ProfilePage from '@/pages/ProfilePage'
+import PrivacyPage from '@/pages/PrivacyPage'
+import TermsPage from '@/pages/TermsPage'
+import ContactPage from '@/pages/ContactPage'
 
 // Set per route: an SPA never reloads, so a screen reader announcing a new page has nothing to read out otherwise.
 const pageTitles: Record<string, string> = {
@@ -23,6 +26,9 @@ const pageTitles: Record<string, string> = {
   '/therapist': 'Find a therapist — Soulwe',
   '/breathe':   'Breathe — Soulwe',
   '/profile':   'Profile — Soulwe',
+  '/privacy':   'Privacy — Soulwe',
+  '/terms':     'Terms — Soulwe',
+  '/contact':   'Contact — Soulwe',
 }
 
 export default function App() {
@@ -39,6 +45,10 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login"    element={<GuestOnly><LoginPage /></GuestOnly>} />
         <Route path="/register" element={<GuestOnly><RegisterPage /></GuestOnly>} />
+
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms"   element={<TermsPage />} />
+        <Route path="/contact" element={<ContactPage />} />
 
         <Route path="/home"      element={<HomePage />} />
         <Route path="/journal"   element={<JournalPage />} />

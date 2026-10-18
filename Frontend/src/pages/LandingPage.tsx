@@ -1,278 +1,527 @@
-import React from 'react'
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  PenLine, Leaf, Handshake, Wind, HeartPulse,
-  Feather, Briefcase, Contrast, Church, Brain, Sprout,
-  Link as LinkIcon,
-} from 'lucide-react'
+import { PenLine, Leaf, Handshake, Wind } from 'lucide-react'
+import { api } from '@/lib/api'
+import { statsSourceUrl } from '@/landingContent'
+import { moodVerses } from '@/moodVerses'
+import { dailyVerses, dailyVerseIndex } from '@/dailyVerses'
+import type { Therapist } from '@/types'
 import styles from './LandingPage.module.css'
+import '@/styles/sunrise.css'
+
+// TODO(real data): confirm GET /api/v1/therapists returns rows in the deployed
+// environment before relying on this. While it is on, the therapist section
+// renders the real directory whenever the public API returns any, and a plain
+// "Therapists are joining" state otherwise. Turn it off to force the placeholder.
+const SHOW_THERAPIST_DIRECTORY = true
 
 const features = [
   {
     icon: PenLine,
-    title: 'Journal your truth',
-    desc: 'Write freely or pray intentionally. Private, encrypted, AI-reflected with African wisdom and Scripture.',
+    accent: 'sun',
+    title: 'A private journal',
+    desc: 'Write freely, in your own words. Your journal is private to you. Optional AI reflections send the entry you choose to an AI provider.',
   },
   {
     icon: Leaf,
-    title: 'Find your circle',
-    desc: 'Anonymous peer support around real African experiences — grief, PTSD, relationships, faith. No names. No judgment.',
+    accent: 'terracotta',
+    title: 'Peer support circles',
+    desc: 'Anonymous groups around grief, work pressure, family expectations and faith. You pick a nickname. Nobody sees your name.',
   },
   {
     icon: Handshake,
+    accent: 'leaf',
     title: 'Talk to a therapist',
-    desc: 'Kenyan therapists in Swahili, Dholuo, Kikuyu. From KES 500 a session.',
+    desc: 'Kenyan therapists who work in Swahili, Dholuo, Kikuyu and English. Sessions from KES 500.',
   },
   {
     icon: Wind,
-    title: 'Breathe through it',
-    desc: 'Guided breathing exercises. Two minutes to shift from panic to peace.',
-  },
-  {
-    icon: HeartPulse,
-    title: 'Check in on yourself',
-    desc: 'Name how you are feeling — heavy, okay, better, at peace, grateful — and watch it add up over time.',
+    accent: 'ink',
+    title: 'Guided breathing',
+    desc: 'Short, guided exercises you can do anywhere, any time you feel panic rising.',
   },
 ]
 
-const circles = [
-  { icon: Feather,         name: 'Grief & loss'        },
-  { icon: Briefcase,       name: 'Work pressure'        },
-  { icon: Leaf,            name: 'Family expectations'  },
-  { icon: Contrast,        name: 'Trauma & healing'     },
-  { icon: LinkIcon,        name: 'Relationships'        },
-  { icon: Church,          name: 'Faith & doubt'        },
-  { icon: Brain,           name: 'Anxiety & depression' },
-  { icon: Sprout,          name: 'Young adults'         },
+// One accent colour per feature card; the classes live in the module. Icons are
+// decorative (aria-hidden), so the pairings are stylistic, not text contrast.
+const featureAccentClass: Record<string, string> = {
+  sun: styles.featureIconSun,
+  terracotta: styles.featureIconTerracotta,
+  leaf: styles.featureIconLeaf,
+  ink: styles.featureIconInk,
+}
+
+// The eight circles are the ones seeded by migrations 010 and 020, not made up
+// for this page. TODO(real data): fetch this list from GET /circles once a
+// public, token-less circles endpoint exists, so the page can never drift from
+// the database.
+const circleTopics = [
+  'Grief & Loss',
+  'Work & Pressure',
+  'Family',
+  'Relationships',
+  'Young Adult Identity',
+  'Trauma & Healing',
+  'Faith & Doubt',
+  'Anxiety & Depression',
 ]
 
-// One page: the hero holds the entire first screen and nothing shares that viewport.
+function formatPrice(t: Therapist): string {
+  if (t.session_price == null) return 'Price on request'
+  return `${t.currency} ${t.session_price}`
+}
+
+// The longest verse is used to reserve the check-in space: an invisible copy of
+// it sits in the same grid cell as the visible verse, so the block is always
+// exactly as tall as the tallest verse at the current width, and switching
+// moods never shifts the layout below.
+const longestVerse = moodVerses.reduce((longest, verse) =>
+  verse.text.length > longest.text.length ? verse : longest,
+)
+
+// Preference for the hero check-in: faith is optional, so Scripture can be
+// hidden. Verses are always ON by default. The key is versioned (now v3): a
+// value stored by an earlier version (v1, v2) can never keep them hidden,
+// because we only ever read the current key. Nothing is written to storage
+// until the user actually clicks the toggle. Every access is wrapped for when
+// storage is unavailable (private mode, blocked cookies).
+const SCRIPTURE_KEY = 'soulwe.scripture.v3'
+
 export default function LandingPage() {
+  const [therapists, setTherapists] = useState<Therapist[]>([])
+  const [heroMood, setHeroMood] = useState<string | null>(null)
+  const [hideScripture, setHideScripture] = useState(() => {
+    try {
+      return window.localStorage.getItem(SCRIPTURE_KEY) === 'hidden'
+    } catch {
+      return false
+    }
+  })
+
+  const activeVerse =
+    heroMood !== null
+      ? moodVerses.find(v => v.mood === heroMood)
+      : undefined
+
+  // Today's affirmation card: one verse for the whole day, picked from the
+  // local date. If it happens to match the verse shown for the selected mood,
+  // step to the next one so the same verse never appears twice in the hero.
+  const dailyIndex = dailyVerseIndex()
+  let cardVerse = dailyVerses[dailyIndex]
+  if (activeVerse && activeVerse.reference === cardVerse.reference) {
+    cardVerse = dailyVerses[(dailyIndex + 1) % dailyVerses.length]
+  }
+
+  const toggleScripture = () => {
+    setHideScripture(prev => {
+      const next = !prev
+      try {
+        window.localStorage.setItem(SCRIPTURE_KEY, next ? 'hidden' : 'visible')
+      } catch {
+        /* storage unavailable: the choice still applies for this visit */
+      }
+      return next
+    })
+  }
+
+  // Radiogroup keyboard support: arrows move and select, roving tabindex.
+  const onMoodKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const count = moodVerses.length
+    let next: number | null = null
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index + 1) % count
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index - 1 + count) % count
+    else if (event.key === 'Home') next = 0
+    else if (event.key === 'End') next = count - 1
+    if (next === null) return
+    event.preventDefault()
+    setHeroMood(moodVerses[next].mood)
+    const group = event.currentTarget.parentElement
+    const radios = group?.querySelectorAll<HTMLButtonElement>('[role="radio"]')
+    radios?.[next]?.focus()
+  }
+
+  useEffect(() => {
+    if (!SHOW_THERAPIST_DIRECTORY) return
+    let cancelled = false
+    // Public endpoint, no token. Any failure leaves the placeholder state up,
+    // so a down API never invents a therapist on the landing page.
+    api.therapists
+      .list()
+      .then(res => {
+        if (!cancelled) setTherapists(res.therapists)
+      })
+      .catch(() => {
+        /* keep the placeholder */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} sunrise`}>
 
+      {/* ── Hero: full-bleed golden-hillside photo (circle.png.jpg, the
+             community-circle shot: people along the warm hillside, soft sky
+             above). ONE flat sun overlay at 75% covers the whole photo, edge
+             to edge, at the same opacity everywhere (no gradient, scrim, blur
+             or glow). Ink copy over the composite holds at least 4.8:1, even
+             over the darkest (near-black) foreground pixels. ── */}
       <section className={styles.hero}>
-        <div className={styles.heroLeft}>
-          <h1 className={styles.heroHeading}>
-            Your soul deserves<br />
-            the same care as<br />
-            your body.
-          </h1>
-          <p className={styles.heroSub}>
-            Connect with peer support circles, AI-assisted journaling,
-            and Kenyan therapists who listen, guide, and walk with you —
-            every step of your healing journey.
-          </p>
-          <Link className={styles.heroCtaPrimary} to="/home">
-            Enter Soulwe — it's free
-          </Link>
-          <div className={styles.heroPills}>
-            <span className={styles.heroPill}>
-              <span className={styles.pillStar}>✦</span> Anonymous by default
-            </span>
-            <span className={styles.heroPill}>
-              <span className={styles.pillStar}>✦</span> Bible-grounded support
-            </span>
-            <span className={styles.heroPill}>
-              <span className={styles.pillStar}>✦</span> Kenyan therapists
-            </span>
-            <span className={styles.heroPill}>
-              <span className={styles.pillStar}>✦</span> Free for everyone
-            </span>
-          </div>
-        </div>
+        <img
+          className={styles.heroImg}
+          src="/circle.png.jpg"
+          alt=""
+          width={3674}
+          height={2448}
+          fetchPriority="high"
+          decoding="async"
+        />
+        {/* Flat sun overlay edge to edge: decorative and behind the copy. */}
+        <div className={styles.heroOverlay} aria-hidden="true" />
+        <div className={styles.heroLayer}>
+          <div className={styles.inner}>
+            <div className={styles.heroText}>
+              <h1 className={styles.heroHeading}>
+                Your soul deserves the{' '}
+                <span className={styles.heroAccent}>same care</span> as your
+                body.
+              </h1>
 
-        <div className={styles.heroRight}>
-          <div className={styles.heroVisual}>
-            <div className={styles.heroOrb} />
-            <div className={styles.heroCard}>
-              <p className={styles.heroCardEyebrow}>Today's affirmation</p>
-              <p className={styles.heroCardVerse}>
-                "Come to me, all you who are weary and burdened,
-                and I will give you rest."
+              <div className={styles.moodCheck}>
+                <div className={styles.moodHead}>
+                  <p className={styles.moodLabel} id="mood-question">
+                    How is your soul today?
+                  </p>
+                  <button
+                    type="button"
+                    className={styles.moodToggle}
+                    aria-pressed={hideScripture}
+                    onClick={toggleScripture}
+                  >
+                    {hideScripture ? 'Show Scripture' : 'Hide Scripture'}
+                  </button>
+                </div>
+                <div
+                  className={styles.moodRow}
+                  role="radiogroup"
+                  aria-labelledby="mood-question"
+                >
+                  {moodVerses.map((verse, index) => (
+                    <button
+                      key={verse.mood}
+                      type="button"
+                      role="radio"
+                      aria-checked={heroMood === verse.mood}
+                      tabIndex={
+                        heroMood === null
+                          ? index === 0
+                            ? 0
+                            : -1
+                          : heroMood === verse.mood
+                          ? 0
+                          : -1
+                      }
+                      className={[
+                        styles.moodBtn,
+                        heroMood === verse.mood ? styles.moodBtnOn : '',
+                      ].join(' ')}
+                      onClick={() => setHeroMood(verse.mood)}
+                      onKeyDown={event => onMoodKeyDown(event, index)}
+                    >
+                      {verse.mood}
+                    </button>
+                  ))}
+                </div>
+                <div className={styles.verseBlock} aria-live="polite">
+                  {/* Invisible sizing copy: the longest verse plus the Heavy
+                      help line, always present, so the block reserves the
+                      tallest state at the current width and choosing a mood
+                      never shifts the copy below. */}
+                  <div className={styles.verseSizer} aria-hidden="true">
+                    <p className={styles.verseText}>
+                      &ldquo;{longestVerse.text}&rdquo;
+                    </p>
+                    <p className={styles.verseRef}>
+                      {longestVerse.reference} ({longestVerse.translation})
+                    </p>
+                    <p className={styles.verseHelp}>
+                      If today feels like too much, help is here.
+                    </p>
+                  </div>
+                  <div className={styles.verseContent}>
+                    {hideScripture || activeVerse === undefined ? (
+                      <p className={styles.versePlain}>
+                        Rest is welcome here. Stay as long as you like.
+                      </p>
+                    ) : (
+                      <>
+                        <p className={styles.verseText}>
+                          &ldquo;{activeVerse.text}&rdquo;
+                        </p>
+                        <p className={styles.verseRef}>
+                          {activeVerse.reference} ({activeVerse.translation})
+                        </p>
+                      </>
+                    )}
+                    {heroMood === 'Heavy' && (
+                      <p className={styles.verseHelp}>
+                        If today feels like too much,{' '}
+                        <a className={styles.verseHelpLink} href="#crisis">
+                          help is here
+                        </a>
+                        .
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <p className={styles.heroSub}>
+                {therapists.length > 0 ? (
+                  <>
+                    Peer support circles, a private journal, and Kenyan
+                    therapists who work in Swahili, Dholuo and Kikuyu.
+                  </>
+                ) : (
+                  <>
+                    Peer support circles, a private journal, and Kenyan
+                    therapists joining soon, in Swahili, Dholuo and Kikuyu.
+                  </>
+                )}
               </p>
-              <p className={styles.heroCardRef}>Matthew 11:28</p>
-            </div>
-            <div className={styles.heroStat}>
-              <span className={styles.heroStatNum}>12</span>
-              <span className={styles.heroStatLabel}>people in your circle right now</span>
+
+              <div className={styles.heroActions}>
+                <Link className={styles.btnPrimary} to="/home">
+                  Enter Soulwe
+                </Link>
+                <a className={styles.textLink} href="#features">
+                  See how it works
+                </a>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* The full-height hero needs one cue that there is more below. */}
-        <a className={styles.scrollCue} href="#features">
-          <span className={styles.scrollCueText}>See what&rsquo;s inside</span>
-          <span className={styles.scrollCueArrow} aria-hidden="true">&darr;</span>
-        </a>
+        {/* Today's affirmation: a cream card floating over the photo, upper
+            right, inside the container's right edge. It is hidden together
+            with Scripture. On mobile it drops below the call-to-action
+            buttons and spans the container width. */}
+        {!hideScripture && (
+          <aside className={styles.heroCard} aria-label="Today's affirmation">
+            <p className={styles.heroCardEyebrow}>Today&rsquo;s affirmation</p>
+            <p className={styles.heroCardVerse}>
+              &ldquo;{cardVerse.text}&rdquo;
+            </p>
+            <p className={styles.heroCardRef}>
+              {cardVerse.reference} ({cardVerse.translation})
+            </p>
+          </aside>
+        )}
       </section>
 
+      <div className={styles.heroBand}>
+        <div className={styles.inner}>
+          <ul className={styles.trustStrip}>
+            <li>Anonymous by default</li>
+            <li>Faith-friendly, Scripture optional</li>
+            <li>Journal, circles and breathing are free</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* ── Features: left-aligned heading, static grid ── */}
       <section className={styles.features} id="features">
         <div className={styles.inner}>
-          <span className={styles.eyebrow}>What Soulwe gives you</span>
-          <h2 className={styles.sectionHeading}>Everything in one quiet place.</h2>
-          <div className={styles.featuresScroller}>
-            {/* tabIndex and role="group" make the sideways-scrolling track keyboard scrollable and announced as one region. */}
-            <div
-              className={styles.featuresTrack}
-              tabIndex={0}
-              role="group"
-              aria-label="Soulwe features, scroll sideways for more"
-            >
-              {features.map(f => {
-                const Icon = f.icon
-                return (
-                  <div key={f.title} className={styles.featureCard}>
-                    <span className={styles.featureIcon}>
-                      <Icon aria-hidden="true" />
-                    </span>
-                    <h3 className={styles.featureTitle}>{f.title}</h3>
-                    <p className={styles.featureDesc}>{f.desc}</p>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className={styles.circlesSection} id="circles">
-        <div className={styles.inner}>
-          <span className={styles.eyebrowLight}>Community circles</span>
-          <h2 className={styles.sectionHeadingLight}>
-            You are not the only one carrying this.
-          </h2>
-          <p className={styles.sectionSubLight}>
-            Anonymous peer support groups built around real African struggles.
-            No names. No profiles. Just honest conversation.
+          <h2 className={styles.sectionHeading}>What Soulwe gives you</h2>
+          <p className={styles.sectionLead}>
+            Four tools that work together, and you can start without an account.
           </p>
-          <div className={styles.circlesPills}>
-            {circles.map(c => {
-              const Icon = c.icon
+          <div className={styles.featuresGrid}>
+            {features.map(f => {
+              const Icon = f.icon
               return (
-                <span key={c.name} className={styles.circleBadge}>
-                  <Icon aria-hidden="true" size={16} />
-                  {c.name}
-                </span>
+                <div key={f.title} className={styles.featureCard}>
+                  <Icon
+                    className={[
+                      styles.featureIcon,
+                      featureAccentClass[f.accent] ?? '',
+                    ].join(' ')}
+                    aria-hidden="true"
+                  />
+                  <h3 className={styles.featureTitle}>{f.title}</h3>
+                  <p className={styles.featureDesc}>{f.desc}</p>
+                </div>
               )
             })}
           </div>
-          <Link className={styles.circlesBtn} to="/circle">
-            Join a circle anonymously →
+          <p className={styles.featureExtra}>
+            Also included: daily mood check-ins. Name how you are feeling, from
+            heavy to grateful, and watch it add up over time.
+          </p>
+        </div>
+      </section>
+
+      {/* ── Circles: dark band, centered text, plain topic list ── */}
+      <section className={styles.circles} id="circles">
+        <div className={styles.inner}>
+          <h2 className={styles.sectionHeadingLight}>
+            You are not the only one carrying this.
+          </h2>
+          <p className={styles.circlesIntro}>
+            Anonymous groups for grief, work stress, family pressure and doubts
+            about faith. You pick a nickname. Nobody sees your name.
+          </p>
+          <p className={styles.circlesLabel}>Circles include</p>
+          <ul className={styles.circlesList}>
+            {circleTopics.map(name => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+          <Link className={styles.btnSun} to="/circle">
+            Join a circle anonymously
           </Link>
         </div>
       </section>
 
+      {/* ── Therapists: text left, real directory or honest placeholder right ── */}
       <section className={styles.therapists} id="therapists">
-        <div className={styles.therapistsInner}>
-          <div className={styles.therapistsLeft}>
-            <span className={styles.eyebrow}>Professional support</span>
-            <h2 className={styles.sectionHeading}>
-              Therapists who speak<br />
-              your language —<br />
-              <em>literally.</em>
-            </h2>
-            <p className={styles.therapistsDesc}>
-              Every therapist on Soulwe is Kenyan, qualified, and chosen because
-              they understand what it means to be you. Sessions in Swahili, Dholuo,
-              Kikuyu, and English. Starting from KES 500. First sessions often free.
-            </p>
-            <Link className={styles.therapistsBtn} to="/therapist">
-              Find your therapist →
-            </Link>
-          </div>
-          <div className={styles.therapistsRight}>
-            {[
-              { initials:'AK', name:'Dr. Amina Korir', lang:'Swahili · English', spec:'Grief, Trauma',     price:'KES 800' },
-              { initials:'JO', name:'Joel Odhiambo',   lang:'Dholuo · Swahili',  spec:'Anxiety, Youth',    price:'KES 500' },
-              { initials:'WW', name:'Wanjiku Waweru',   lang:'Kikuyu · Swahili',  spec:'Depression, Women', price:'KES 500' },
-            ].map((t, i) => (
-              <div
-                key={t.name}
-                className={styles.therapistMiniCard}
-                style={{ '--delay': `${i * 0.1}s` } as React.CSSProperties}
-              >
-                <div className={styles.therapistMiniAvatar}>{t.initials}</div>
-                <div className={styles.therapistMiniInfo}>
-                  <p className={styles.therapistMiniName}>{t.name}</p>
-                  <p className={styles.therapistMiniLang}>{t.lang}</p>
-                  <p className={styles.therapistMiniSpec}>{t.spec}</p>
+        <div className={styles.inner}>
+          <div className={styles.therapistsGrid}>
+            <div className={styles.therapistsText}>
+              <h2 className={styles.sectionHeading}>
+                Therapists who speak your language
+              </h2>
+              <p className={styles.sectionLead}>
+                Sessions in Swahili, Dholuo, Kikuyu and English, from KES 500.
+                You choose who you talk to and when.
+              </p>
+              <Link className={styles.btnPrimary} to="/therapist">
+                Find your therapist
+              </Link>
+            </div>
+
+            <div className={styles.therapistsPanel}>
+              {therapists.length > 0 ? (
+                <ul className={styles.therapistList}>
+                  {therapists.slice(0, 3).map(t => (
+                    <li key={t.id} className={styles.therapistRow}>
+                      <div className={styles.therapistInfo}>
+                        <p className={styles.therapistName}>{t.display_name}</p>
+                        <p className={styles.therapistLang}>
+                          {t.languages.join(' · ')}
+                        </p>
+                        {t.specialties.length > 0 && (
+                          <p className={styles.therapistMeta}>
+                            {t.specialties.join(' · ')}
+                          </p>
+                        )}
+                      </div>
+                      <span className={styles.therapistPrice}>
+                        {formatPrice(t)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className={styles.therapistPlaceholder}>
+                  <h3>Therapists are joining.</h3>
+                  <p>
+                    The directory is still filling up. Browse it to see who is
+                    open for sessions right now.
+                  </p>
+                  <Link className={styles.textLink} to="/therapist">
+                    See the therapist directory
+                  </Link>
                 </div>
-                <span className={styles.therapistMiniPrice}>{t.price}</span>
-              </div>
-            ))}
+              )}
+            </div>
           </div>
         </div>
       </section>
 
-
-      <div className={styles.statsBar}>
-        {[
-          { num: '8',    label: 'Support circles'     },
-          { num: '3+',   label: 'Kenyan languages'     },
-          { num: 'Free', label: 'Always, for everyone' },
-          { num: '24/7', label: 'Always open'          },
-        ].map(s => (
-          <div key={s.label} className={styles.statItem}>
-            <span className={styles.statNum}>{s.num}</span>
-            <span className={styles.statLabel}>{s.label}</span>
-          </div>
-        ))}
+      {/* ── Stats: three honest, checkable facts ── */}
+      <div className={styles.stats}>
+        <div className={styles.inner}>
+          <dl className={styles.statsList}>
+            <div className={styles.statItem}>
+              <dt className={styles.statLabel}>Journal, circles and breathing</dt>
+              <dd className={styles.statNum}>Free</dd>
+            </div>
+            <div className={styles.statItem}>
+              <dt className={styles.statLabel}>Therapist sessions from</dt>
+              <dd className={styles.statNum}>KES 500</dd>
+            </div>
+            <div className={styles.statItem}>
+              <dt className={styles.statLabel}>Kenyan therapy languages</dt>
+              <dd className={styles.statNum}>3</dd>
+            </div>
+          </dl>
+        </div>
       </div>
 
+      {/* ── Why Soulwe exists: figures left-list, closing line right ── */}
       <section className={styles.problem}>
         <div className={styles.inner}>
-          <span className={styles.eyebrow}>Why Soulwe exists</span>
-          <h2 className={styles.sectionHeading}>
-            Mental health care in East Africa has a gap.
-          </h2>
           <div className={styles.problemGrid}>
-            <div className={styles.problemCard}>
-              <span className={styles.problemNum}>90%</span>
-              <p className={styles.problemText}>
-                of people who need mental health support in sub-Saharan Africa never receive it.
+            <div className={styles.problemText}>
+              <h2 className={styles.sectionHeading}>
+                Mental health care in East Africa has a gap.
+              </h2>
+              <p className={styles.problemClose}>
+                Soulwe is not a substitute for psychiatric care. It is support
+                for the long wait before you can get it.
               </p>
             </div>
-            <div className={styles.problemCard}>
-              <span className={styles.problemNum}>&lt;100</span>
-              <p className={styles.problemText}>
-                psychiatrists serve Kenya's 55 million people. The wait is months. The cost is thousands.
-              </p>
-            </div>
-            <div className={styles.problemCard}>
-              <span className={styles.problemNum}>Very few</span>
-              <p className={styles.problemText}>
-                mental health apps are designed specifically around African culture, language, and stigma.
-              </p>
+            <div className={styles.problemFigures}>
+              <div className={styles.figure}>
+                <span className={styles.figureNum}>90%</span>
+                <p className={styles.figureText}>
+                  of people who need mental health support in sub-Saharan Africa
+                  never receive it.
+                  {statsSourceUrl !== '' && (
+                    <sup className={styles.footnoteRef}>1</sup>
+                  )}
+                </p>
+              </div>
+              <div className={styles.figure}>
+                <span className={styles.figureNum}>&lt;100</span>
+                <p className={styles.figureText}>
+                  psychiatrists serve the whole of Kenya.
+                  {statsSourceUrl !== '' && (
+                    <sup className={styles.footnoteRef}>1</sup>
+                  )}
+                </p>
+              </div>
+              {statsSourceUrl !== '' && (
+                <p className={styles.footnote}>
+                  <sup>1</sup>{' '}
+                  <a
+                    className={styles.footnoteLink}
+                    href={statsSourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Source for both figures
+                  </a>
+                </p>
+              )}
             </div>
           </div>
-          <p className={styles.problemClose}>
-            Soulwe is not trying to replace psychiatry.<br />
-            It is trying to close the gap between <strong>nothing</strong> and <strong>something.</strong>
-          </p>
         </div>
       </section>
 
+      {/* ── Final CTA: left-aligned, no glow ── */}
       <section className={styles.finalCta}>
-        <div className={styles.finalCtaInner}>
-          <div className={styles.finalCtaMark}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
-              <path d="M12 21C12 21 4 13.5 4 8.5a5 5 0 0 1 8-4 5 5 0 0 1 8 4c0 5-8 12.5-8 12.5z"/>
-            </svg>
-          </div>
-          <h2 className={styles.finalCtaHeading}>
-            Your healing is allowed<br />to begin today.
-          </h2>
+        <div className={styles.inner}>
+          <h2 className={styles.finalCtaHeading}>Start whenever you&rsquo;re ready.</h2>
           <p className={styles.finalCtaSub}>
-            No sign-up required. Walk in anonymously.<br />
-            Stay as long as you need.
+            No sign-up required to look around. Walk in anonymously, stay as
+            long as you need.
           </p>
-          <Link className={styles.finalCtaBtn} to="/home">
-            Enter Soulwe — it's free
+          <Link className={styles.btnPrimary} to="/home">
+            Enter Soulwe
           </Link>
-          <p className={styles.finalCtaVerse}>
-            "The Lord is close to the brokenhearted and saves those who are crushed in spirit." — Psalm 34:18
-          </p>
         </div>
       </section>
 
