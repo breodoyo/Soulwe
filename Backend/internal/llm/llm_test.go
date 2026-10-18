@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -168,7 +169,10 @@ func TestReflectionPrompt(t *testing.T) {
 func TestErrorType(t *testing.T) {
 	cases := map[string]error{
 		"blocked":        ErrBlocked,
-		"not_configured": ErrNotConfigured,
+		"config missing": ErrNotConfigured,
+		"http status":    &statusError{provider: ProviderClaude, status: 401},
+		"timeout":        context.DeadlineExceeded,
+		"canceled":       context.Canceled,
 	}
 	for want, err := range cases {
 		if got := errorType(err); got != want {

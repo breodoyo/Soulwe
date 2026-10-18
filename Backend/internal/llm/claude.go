@@ -47,7 +47,7 @@ func newClaude(apiKey, model, url string) *Claude {
 // set. Journal content never appears in the returned error.
 func (c *Claude) Reflect(ctx context.Context, entry string, moodTags []string) (out string, err error) {
 	start := time.Now()
-	defer func() { logCall(ProviderClaude, start, err) }()
+	defer func() { logCall(ProviderClaude, c.model, start, err) }()
 
 	if strings.TrimSpace(c.apiKey) == "" {
 		return "", ErrNotConfigured
@@ -88,7 +88,7 @@ func (c *Claude) Reflect(ctx context.Context, entry string, moodTags []string) (
 	if resp.StatusCode != http.StatusOK {
 		// Drain a little so the connection can be reused, but never echo the body.
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		return "", fmt.Errorf("llm: claude returned status %d", resp.StatusCode)
+		return "", &statusError{provider: ProviderClaude, status: resp.StatusCode}
 	}
 
 	var parsed claudeResponse

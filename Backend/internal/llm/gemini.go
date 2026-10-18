@@ -55,7 +55,7 @@ func newGemini(apiKey, model, url string) *Gemini {
 // content never appears in the returned error.
 func (g *Gemini) Reflect(ctx context.Context, entry string, moodTags []string) (out string, err error) {
 	start := time.Now()
-	defer func() { logCall(ProviderGemini, start, err) }()
+	defer func() { logCall(ProviderGemini, g.model, start, err) }()
 
 	if strings.TrimSpace(g.apiKey) == "" {
 		return "", ErrNotConfigured
@@ -98,7 +98,7 @@ func (g *Gemini) Reflect(ctx context.Context, entry string, moodTags []string) (
 
 	if resp.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		return "", fmt.Errorf("llm: gemini returned status %d", resp.StatusCode)
+		return "", &statusError{provider: ProviderGemini, status: resp.StatusCode}
 	}
 
 	var parsed geminiResponse

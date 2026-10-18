@@ -4,8 +4,9 @@
 //
 // Only the journal text a reflection needs is sent; credentials, database
 // details and user identity never leave the backend, and journal content is
-// never logged. Providers log only the provider name, latency and a coarse
-// error type.
+// never logged. A failed call logs only the provider, model, latency, a coarse
+// error category, the HTTP status when there is one, and our own error message
+// capped at 200 characters.
 package llm
 
 import (
@@ -13,9 +14,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -55,6 +58,48 @@ var ErrNotConfigured = errors.New("llm: provider is not configured")
 // block or an empty completion). Callers may substitute a safe fallback.
 var ErrBlocked = errors.New("llm: response was blocked")
 
+// maxLoggedError caps the provider error text in a log line, so an upstream
+// message can never grow one log entry into a payload.
+const maxLoggedError = 200
+
+// statusError is a non-200 answer from a provider. Its message carries the
+// status code only: the response body is drained and dropped, never echoed.
+type statusError struct {
+	provider string
+	status   int
+}
+
+func (e *statusError) Error() string {
+	return fmt.Sprintf("llm: %s returned status %d", e.provider, e.status)
+}
+
+// statusOf reports the HTTP status behind an error, or 0 when there was none.
+func statusOf(err error) int {
+	var statusErr *statusError
+	if errors.As(err, &statusErr) {
+		return statusErr.status
+	}
+	return 0
+}
+
+// statusMeaning translates the statuses worth acting on into plain words, so an
+// operator reading a log line knows what to do without decoding an HTTP code.
+// It returns "" for every status that needs no explanation.
+func statusMeaning(status int) string {
+	switch status {
+	case http.StatusUnauthorized:
+		return "401 unauthorized: the provider rejected the API key"
+	case http.StatusForbidden:
+		return "403 forbidden: the provider denied access to this account or model"
+	case http.StatusNotFound:
+		return "404 not found: the provider has no such endpoint or model"
+	case http.StatusTooManyRequests:
+		return "429 too many requests: the provider rate limit was hit"
+	default:
+		return ""
+	}
+}
+
 // SystemPrompt steers the model toward a warm, brief, non-clinical reflection in
 // the language of the journal. It contains no user data.
 const SystemPrompt = `You are a warm, thoughtful companion for a mental-wellbeing app called Soulwe. ` +
@@ -87,29 +132,49 @@ func NewFromEnv() (Reflector, error) {
 
 	switch provider {
 	case ProviderClaude:
-		key := strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY"))
-		if key == "" {
-			return nil, nil
-		}
 		if model == "" {
 			model = DefaultClaudeModel
 		}
+		key := strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY"))
+		if key == "" {
+			logStartup(provider, model, false)
+			return nil, nil
+		}
+		logStartup(provider, model, true)
 		return NewClaude(key, model), nil
 	case ProviderGemini:
+		if model == "" {
+			model = DefaultGeminiModel
+		}
 		key := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
 		if key == "" {
+			logStartup(provider, model, false)
 			return nil, nil
 		}
 		if isProduction() && os.Getenv("GEMINI_PAID") != "true" {
 			return nil, fmt.Errorf("llm: gemini is enabled in production but GEMINI_PAID is not \"true\"")
 		}
-		if model == "" {
-			model = DefaultGeminiModel
-		}
+		logStartup(provider, model, true)
 		return NewGemini(key, model), nil
 	default:
 		return nil, fmt.Errorf("llm: unknown LLM_PROVIDER %q", provider)
 	}
+}
+
+// logStartup records the provider selection once, at startup. The key is
+// reported as a boolean only; its value never reaches a log line.
+func logStartup(provider, model string, keyPresent bool) {
+	attrs := []any{
+		slog.String("provider", provider),
+		slog.String("model", model),
+		slog.Bool("key_present", keyPresent),
+	}
+	if !keyPresent {
+		slog.Warn("llm reflection provider is not active", append(attrs,
+			slog.String("reason", "no API key set for this provider, reflections are disabled"))...)
+		return
+	}
+	slog.Info("llm reflection provider is active", attrs...)
 }
 
 // isProduction reads APP_ENV, falling back to ENV, so the guard works whichever
@@ -136,31 +201,56 @@ func reflectionPrompt(entry string, moodTags []string) string {
 	return b.String()
 }
 
-// logCall records a failed provider call without ever logging the request or
-// response body. It is meant to be deferred with the named error return.
-func logCall(provider string, start time.Time, err error) {
+// logCall records a failed provider call. It is meant to be deferred with the
+// named error return.
+//
+// It never logs the request or response body, the API key, the journal entry or
+// any user identity: the only text it emits is our own error string, which
+// carries a status code or a transport failure, capped at maxLoggedError
+// characters.
+func logCall(provider, model string, start time.Time, err error) {
 	if err == nil {
 		return
 	}
-	slog.Warn("llm request failed",
+	attrs := []any{
 		slog.String("provider", provider),
+		slog.String("model", model),
 		slog.Duration("latency", time.Since(start)),
-		slog.String("error_type", errorType(err)),
-	)
+		slog.String("category", errorType(err)),
+		slog.String("error", truncateForLog(err.Error())),
+	}
+	if status := statusOf(err); status != 0 {
+		attrs = append(attrs, slog.Int("http_status", status))
+		if plain := statusMeaning(status); plain != "" {
+			attrs = append(attrs, slog.String("http_status_plain", plain))
+		}
+	}
+	slog.Warn("llm request failed", attrs...)
 }
 
-// errorType classifies an error into a coarse label, so logs stay useful without
-// ever carrying content or raw upstream messages.
+// truncateForLog caps a message at maxLoggedError characters so a log line
+// stays a line.
+func truncateForLog(s string) string {
+	if utf8.RuneCountInString(s) <= maxLoggedError {
+		return s
+	}
+	return string([]rune(s)[:maxLoggedError]) + "..."
+}
+
+// errorType classifies an error into a coarse label, so logs stay useful
+// without ever carrying content or raw upstream bodies.
 func errorType(err error) string {
 	switch {
-	case errors.Is(err, ErrBlocked):
-		return "blocked"
 	case errors.Is(err, ErrNotConfigured):
-		return "not_configured"
+		return "config missing"
+	case statusOf(err) != 0:
+		return "http status"
 	case errors.Is(err, context.DeadlineExceeded):
 		return "timeout"
 	case errors.Is(err, context.Canceled):
 		return "canceled"
+	case errors.Is(err, ErrBlocked):
+		return "blocked"
 	default:
 		return "upstream"
 	}

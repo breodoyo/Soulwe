@@ -19,11 +19,20 @@ type Config struct {
 	JWTSecret        string
 	JWTRefreshSecret string
 	JournalKey       string
+	NamingKey        string
 }
 
 func Load() *Config {
 	if err := godotenv.Load(); err != nil {
 		log.Println("Note: No .env file loaded, reading configuration directly from system environment")
+	}
+
+	// Circle display names are derived from a dedicated key when one is
+	// supplied, so rotating JWT_SECRET does not silently rename every member.
+	// Otherwise the JWT secret backs it, and Validate already requires that one.
+	namingKey := getEnv("CIRCLE_NAMING_KEY", "")
+	if namingKey == "" {
+		namingKey = getEnv("JWT_SECRET", "")
 	}
 
 	return &Config{
@@ -35,6 +44,7 @@ func Load() *Config {
 		JWTSecret:        getEnv("JWT_SECRET", ""),
 		JWTRefreshSecret: getEnv("JWT_REFRESH_SECRET", ""),
 		JournalKey:       getEnv("JOURNAL_ENCRYPTION_KEY", ""),
+		NamingKey:        namingKey,
 	}
 }
 
