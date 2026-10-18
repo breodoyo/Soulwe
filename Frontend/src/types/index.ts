@@ -123,11 +123,11 @@ export interface Circle {
   is_member: boolean
 }
 
-// The author is a resolved display name: their own when registered, a server pseudonym when anonymous (IsAnonymous says which); identities never leave the API.
+// author_name is a per-circle label the server derives (nothing in it is an identity); is_mine marks the reader's own messages.
 export interface CircleMessage {
   id: string
   author_name: string
-  is_anonymous: boolean
+  is_mine: boolean
   content: string
   reaction_counts: Record<string, number>
   created_at: string
