@@ -1,7 +1,7 @@
-/* Full-bleed page: the hero image spans the whole screen, everything else is
+﻿/* Full-bleed page: the hero image spans the whole screen, everything else is
    centred at the standard content width. */
-.page { padding: 0 0 var(--space-5) 0; display: flex; flex-direction: column; gap: var(--space-5); width: 100%; }
-.page > *:not(.heroImage):not(.heroWrap) {
+.page { padding: 0 0 var(--space-5) 0; display: flex; flex-direction: column; gap: var(--space-5); width: 100%; --text-xs: 14px; --text-sm: 14px; }
+.page > *:not(.heroImage):not(.heroWrap):not(.layout):not(.thread) {
   width: 100%;
   max-width: var(--max-content);
   margin-left: auto;
@@ -21,20 +21,30 @@
 }
 
 /* Text sits on the photo; a bottom-up scrim keeps it legible regardless of
-   what the image does underneath. */
+   what the image does underneath. The scrim stays full-bleed - only the
+   horizontal inset is handed to .heroContent below. */
 .heroOverlay {
   position: absolute;
   inset: 0;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: var(--space-5) var(--space-5) var(--space-6);
+  padding: var(--space-5) 0 var(--space-6);
   background: linear-gradient(
     to top,
     rgba(28, 25, 23, 0.78) 0%,
     rgba(28, 25, 23, 0.35) 55%,
     rgba(28, 25, 23, 0) 100%
   );
+}
+/* Identical centred box to .layout (see the geometry rules at the bottom of
+   this file), so the hero copy starts on the same gutter as the logo, the
+   sidebar card and the cards. Below 768px it keeps the hero's 20px inset. */
+.heroContent {
+  width: 100%;
+  max-width: calc(var(--max-site, 1120px) - var(--space-6) * 2 + var(--space-5) * 2);
+  margin: 0 auto;
+  padding: 0 var(--space-5);
 }
 .heroHeading {
   font-family: var(--font-display);
@@ -53,45 +63,111 @@
 
 @media (min-width: 768px) {
   .heroImage { height: 340px; }
-  .heroOverlay { padding: var(--space-8); }
+  .heroOverlay { padding: var(--space-8) 0; }
 }
 
 .anonNotice {
-  display: flex; align-items: flex-start; gap: var(--space-3);
-  background: rgba(22, 163, 74, 0.08); border: 1px solid rgba(22, 163, 74, 0.25);
-  border-radius: var(--radius-md); padding: var(--space-3) var(--space-4);
-  font-size: var(--text-sm); color: var(--sage-deep); line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  background: var(--sand, #FCE7C2);
+  border: 1px solid var(--border, #E7E2DE);
+  border-radius: var(--radius-md, 12px);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm, 14px);
+  color: var(--leaf-deep, #1F4D36);
+  line-height: 1.5;
 }
-.anonNotice p { flex: 1; }
+.anonNotice p {
+  flex: 1;
+  margin: 0;
+}
 
 /* Was an emoji glyph sized with font-size; now an <svg> that needs explicit
    dimensions and a tint matching the notice text. */
-.anonNoticeIcon { flex-shrink: 0; display: inline-flex; margin-top: 2px; }
-.anonNoticeIcon svg { width: 17px; height: 17px; }
+.anonNoticeIcon {
+  flex-shrink: 0;
+  display: inline-flex;
+  margin-top: 2px;
+  color: var(--leaf-deep, #1F4D36);
+}
+.anonNoticeIcon svg {
+  width: 17px;
+  height: 17px;
+  display: block;
+}
 
 .sectionLabel { font-size: var(--text-xs); color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; }
 
-.circleList { display: flex; flex-direction: column; gap: var(--space-3); }
+.circleGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
 
 .circleCard {
-  display: flex; align-items: center; gap: var(--space-3);
-  background: var(--bg-mid); border: 1px solid var(--border);
-  border-radius: var(--radius-md); padding: var(--space-4);
-  text-align: left; width: 100%;
-  transition: border-color var(--duration-base) var(--ease), background var(--duration-base) var(--ease);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--bg-mid, #F9F7F5);
+  border: 1px solid var(--border, #E7E2DE);
+  border-radius: var(--radius-md, 12px);
+  padding: var(--space-5);
+  text-align: left;
+  width: 100%;
+  transition: transform var(--duration-base) var(--ease), box-shadow var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease), background-color var(--duration-base) var(--ease);
+  min-height: 44px;
 }
-.circleCard:hover { border-color: var(--sun-muted); background: rgba(245, 158, 42, 0.06); }
+.circleCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(36, 24, 16, 0.08);
+  border-color: var(--sun-muted, #E08F12);
+  background: rgba(245, 158, 42, 0.06);
+}
 
-.circleIcon { flex-shrink: 0; display: inline-flex; color: var(--sun-deep); }
-.circleIcon svg { width: 26px; height: 26px; stroke-width: 1.6; }
-.circleInfo { flex: 1; }
-.circleName { font-size: var(--text-base); font-weight: 500; color: var(--ink); margin-bottom: 2px; }
-.circleDesc { font-size: var(--text-xs); color: var(--muted); line-height: 1.4; }
+.circleIconTile {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--sand, #FCE7C2);
+  color: #9A5600;
+}
+.circleIconTile svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 1.6;
+  display: block;
+}
+.circleInfo { flex: 1; min-width: 0; }
+.circleName {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink, #241810);
+  margin: 0 0 4px 0;
+  line-height: 1.25;
+}
+.circleDesc {
+  font-size: 15px;
+  color: var(--ink, #241810);
+  opacity: 0.8;
+  line-height: 1.5;
+  margin: 0;
+}
 .circleMeta { display: flex; align-items: center; gap: var(--space-1); flex-shrink: 0; }
 
-.memberCount { font-size: var(--text-xs); color: var(--muted); white-space: nowrap; }
+.memberCount {
+  font-size: 14px;
+  color: var(--ink-mid, #5B4633);
+  white-space: nowrap;
+}
 
-/* ── Status / empty / notices ── */
+/* -- Status / empty / notices -- */
+
 .status {
   font-size: var(--text-sm);
   color: var(--muted);
@@ -99,8 +175,8 @@
 }
 
 .emptyNote {
-  font-size: var(--text-sm);
-  color: var(--muted);
+  font-size: 16px;
+  color: var(--ink);
   line-height: 1.6;
   padding: var(--space-4);
   border: 1px dashed var(--border);
@@ -126,11 +202,13 @@
   line-height: 1.6;
 }
 
+/* Leaf-deep on a pale leaf tint - no teal on this page. */
 .noticeSuccess {
   font-size: var(--text-sm);
-  color: var(--teal-deep);
-  background: var(--teal-light);
-  border: 1px solid var(--teal);
+  color: #1F4D36;
+  color: var(--leaf-deep, #1F4D36);
+  background: #EDF4EF;
+  border: 1px solid #C7D9CE;
   border-radius: var(--radius-md);
   padding: var(--space-3) var(--space-4);
   line-height: 1.6;
@@ -162,64 +240,146 @@
 }
 .inlineBtn:hover { color: var(--ink); border-color: var(--sun-muted); }
 
-/* ── Thread ── */
-.thread { display: flex; flex-direction: column; gap: var(--space-4); min-height: calc(100dvh - var(--nav-height) - 2rem); }
+/* -- Thread -- */
+
+/* Single column by default; at 1024px+ the same geometry rules that size
+   .layout (see the bottom of this file) turn it into main + sidebar. */
+.thread {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-content: start;
+  gap: var(--space-5);
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  min-height: calc(100dvh - var(--nav-height) - 2rem);
+}
+.threadMain { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 
 .backBtn {
   display: flex; align-items: center; gap: var(--space-1);
-  font-size: var(--text-sm); color: var(--sun-deep);
+  font-size: var(--text-sm); color: #1F4D36; color: var(--leaf-deep, #1F4D36);
   transition: opacity var(--duration-fast) var(--ease);
 }
 .backBtn:hover { opacity: 0.8; }
 
 .threadHeader {
-  display: flex; align-items: flex-start; gap: var(--space-3);
+  display: flex; align-items: flex-start; gap: var(--space-4);
   padding-bottom: var(--space-4); border-bottom: 1px solid var(--border);
 }
 .threadHeaderMain { flex: 1; min-width: 0; }
-.threadIcon { flex-shrink: 0; display: inline-flex; color: var(--sun-deep); }
-.threadIcon svg { width: 26px; height: 26px; stroke-width: 1.6; }
-.threadName { font-family: var(--font-display); font-size: var(--text-xl); color: var(--ink); margin-bottom: 2px; }
-.threadDesc { font-size: var(--text-sm); color: var(--muted); }
-.threadMeta { font-size: var(--text-xs); color: var(--muted); margin-top: var(--space-1); }
+/* A 56px icon tile rather than a bare glyph, so the header reads as the
+   page title block. Sand disc, leaf-deep glyph (7.98:1 on sand). */
+.threadIcon {
+  flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  width: 56px; height: 56px; border-radius: var(--radius-lg, 18px);
+  background: #FCE7C2;
+  background: var(--sand, #FCE7C2);
+  color: #1F4D36;
+  color: var(--leaf-deep, #1F4D36);
+  border: 1px solid rgba(36, 24, 16, 0.14);
+}
+.threadIcon svg { width: 28px; height: 28px; stroke-width: 1.6; }
+.threadName {
+  font-family: var(--font-display);
+  font-size: clamp(32px, 3.2vw, 36px);
+  color: var(--ink); line-height: 1.15; letter-spacing: -0.02em;
+  margin: 0 0 var(--space-2);
+}
+.threadDesc { font-size: 18px; color: var(--ink); line-height: 1.55; margin: 0; }
+.threadMeta { font-size: 14px; color: var(--muted); margin-top: var(--space-2); }
+
+/* -- Conversation card -- */
+
+/* Bordered card holding the scrolling log with the composer attached to its
+   bottom edge. overflow:hidden keeps the message list's own scroll corners
+   inside the radius (removed at <768px so the composer can go sticky). */
+.conversationCard {
+  display: flex; flex-direction: column; min-width: 0;
+  background: var(--cream, #FFF8EC);
+  border: 1px solid var(--border, #E7E2DE);
+  border-radius: var(--radius-lg, 18px);
+  overflow: hidden;
+}
+.conversationHead {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--space-3); flex-wrap: wrap;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border, #E7E2DE);
+}
+.conversationHeading { font-size: var(--text-base, 15px); font-weight: 600; color: var(--ink); margin: 0; }
 
 .messageList { display: flex; flex-direction: column; gap: var(--space-4); flex: 1; }
+.conversationCard .messageList {
+  max-height: 60vh;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-4) var(--space-5);
+}
 
 .msg { display: flex; gap: var(--space-3); align-items: flex-start; }
 
+/* Own messages pack to the right edge (row-reverse flips the main axis), so
+   being yours is visible from the layout alone and not only from colour. */
+.msgMine { flex-direction: row-reverse; }
+
 .msgAvatar {
   width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+  box-sizing: border-box;
   display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 500; color: #fff;
+  font-size: 14px; font-weight: 500;
+  /* A neutral sand disc with ink initials: no bright accent that could read
+     as a status. Fallbacks cover the default theme, which has no --sand. */
+  background: #FCE7C2;
+  background: var(--sand, #FCE7C2);
+  color: #1C1917;
+  color: var(--ink, #1C1917);
+  border: 1px solid rgba(36, 24, 16, 0.14);
 }
 
 .msgBubble {
   max-width: 78%;
-  background: var(--bg-mid); border: 1px solid var(--border);
+  background: #FCE7C2;
+  background: var(--sand, #FCE7C2);
+  border: 1px solid rgba(36, 24, 16, 0.12);
   border-radius: 14px 14px 14px 4px; padding: var(--space-3) var(--space-4);
 }
 
-.msgName { font-size: 11px; color: var(--muted); margin-bottom: var(--space-1); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-/* Marks a message whose author posted anonymously. A registered member posts
-   under their own name, so the badge is only ever shown for a pseudonym. */
-.msgAnonTag {
-  font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em;
-  border: 1px solid var(--border-soft); border-radius: var(--radius-full); padding: 1px 6px;
-  color: var(--subtle); background: var(--bg-mid);
+.msgMine .msgBubble {
+  border-radius: 14px 14px 4px 14px;
+  /* A pale leaf-deep tint rather than the dark token itself, so ink text
+     stays high-contrast. The plain line is the fallback for browsers
+     without color-mix(). */
+  background: #E9EFEB;
+  background: color-mix(in srgb, var(--leaf-deep, #1F4D36) 9%, #FFFFFF);
+  border-color: #C7D5CC;
+  border-color: color-mix(in srgb, var(--leaf-deep, #1F4D36) 22%, #FFFFFF);
 }
-.msgText { font-size: var(--text-sm); color: var(--ink); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+
+.msgName {
+  font-size: 14px; margin-bottom: var(--space-1);
+  /* Sand is a light background: the default muted token only reaches 3.96:1
+     on it, so the label uses the darker ink (8.61:1 on sand, 9.00:1 on the
+     own-message tint). */
+  color: #44403C;
+  color: var(--ink-mid, #44403C);
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.msgMine .msgName { color: var(--leaf-deep, #1F4D36); font-weight: 600; }
+.msgText { font-size: 16px; color: var(--ink); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 
 .msgFooter { display: flex; align-items: center; justify-content: space-between; margin-top: var(--space-2); flex-wrap: wrap; gap: var(--space-1); }
-.msgTime { font-size: 10px; color: var(--muted); }
+.msgTime { font-size: 14px; color: #44403C; color: var(--ink-mid, #44403C); }
 .msgReacts { display: flex; gap: 4px; flex-wrap: wrap; }
 
 .reactChip {
-  font-size: 12px; display: inline-flex; align-items: center; gap: 2px;
+  font-size: 14px; display: inline-flex; align-items: center; gap: 2px;
   padding: 2px 8px; border-radius: var(--radius-full);
   background: var(--bg-mid); border: 1px solid var(--border-soft);
   color: var(--muted);
 }
-.reactChip span { font-size: 10px; }
+.reactChip span { font-size: 14px; }
 
 .loadOlderBtn {
   align-self: flex-start;
@@ -237,7 +397,8 @@
 .loadOlderBtn:hover:not(:disabled) { color: var(--ink); border-color: var(--sun-muted); }
 .loadOlderBtn:disabled { opacity: 0.55; cursor: not-allowed; }
 
-/* ── Join / leave ── */
+/* -- Join / leave -- */
+
 .joinCard {
   display: flex;
   flex-direction: column;
@@ -268,20 +429,27 @@
 .joinBtn:hover:not(:disabled) { opacity: 0.88; }
 .joinBtn:disabled { opacity: 0.55; cursor: not-allowed; }
 
-.leaveRow {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  margin-top: var(--space-3);
+/* -- Sidebar (guidelines, urgent help, leave) -- */
+
+.threadSidebar { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+
+.sideCard {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  background: var(--cream, #FFF8EC);
+  border: 1px solid var(--border, #E7E2DE);
+  border-radius: var(--radius-lg, 18px);
+  padding: var(--space-5);
 }
+.sideCardHeading { font-size: var(--text-base, 15px); font-weight: 600; color: var(--ink); margin: 0; }
+.sideCardText { font-size: 16px; color: #44403C; color: var(--ink-mid, #44403C); line-height: 1.6; margin: 0; }
+.sideList, .crisisList { margin: 0; padding-left: 1.15em; display: flex; flex-direction: column; gap: var(--space-2); }
+.sideList li, .crisisList li { font-size: 16px; line-height: 1.6; color: #44403C; color: var(--ink-mid, #44403C); }
 
-.leavePrompt { font-size: var(--text-sm); color: var(--ink-mid); }
-
+/* Quiet outlined terracotta: 16px label, 44px hit area, nothing loud. */
 .leaveBtn {
-  font-size: var(--text-xs);
-  padding: 6px 12px;
+  font-size: 16px;
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid rgba(185, 28, 28, 0.45);
   border-radius: var(--radius-md);
   background: transparent;
@@ -293,9 +461,50 @@
 }
 .leaveBtn:hover { background: rgba(185, 28, 28, 0.06); border-color: rgba(185, 28, 28, 0.7); }
 
+/* -- Leave confirmation dialog -- */
+
+/* Native <dialog> opened with showModal(): the browser traps focus, Escape
+   closes it (handled by onCancel), and focus returns to the button that
+   opened it. Cancel is the primary action; Leave is the quiet terracotta. */
+.leaveDialog {
+  border: 1px solid var(--border, #E7E2DE);
+  border-radius: var(--radius-lg, 18px);
+  background: #FFF8EC;
+  background: var(--cream, #FFF8EC);
+  color: #1C1917;
+  color: var(--ink, #1C1917);
+  padding: var(--space-5);
+  max-width: 420px;
+  width: calc(100% - 48px);
+  box-shadow: 0 24px 60px rgba(28, 25, 23, 0.28);
+}
+.leaveDialog::backdrop { background: rgba(28, 25, 23, 0.55); }
+.leaveDialogTitle {
+  font-family: var(--font-display);
+  font-size: 22px; color: var(--ink); margin: 0 0 var(--space-2);
+}
+.leaveDialogText { font-size: 16px; color: #44403C; color: var(--ink-mid, #44403C); line-height: 1.6; margin: 0 0 var(--space-5); }
+.leaveDialogActions { display: flex; gap: var(--space-3); justify-content: flex-end; flex-wrap: wrap; }
+.leaveDialogCancel {
+  font-size: 16px; font-weight: 600;
+  min-height: 44px;
+  padding: var(--space-3) var(--space-5);
+  border: 1px solid #1F4D36;
+  border-color: var(--leaf-deep, #1F4D36);
+  border-radius: var(--radius-md);
+  background: #1F4D36;
+  background: var(--leaf-deep, #1F4D36);
+  color: #FFF8EC;
+  color: var(--cream, #FFF8EC);
+  cursor: pointer;
+  transition: opacity var(--duration-base) var(--ease);
+}
+.leaveDialogCancel:hover { opacity: 0.9; }
+
 .dangerBtn {
-  font-size: var(--text-sm);
-  padding: var(--space-2) var(--space-4);
+  font-size: 16px;
+  min-height: 44px;
+  padding: var(--space-3) var(--space-5);
   border: 1px solid rgba(185, 28, 28, 0.45);
   border-radius: var(--radius-md);
   background: transparent;
@@ -308,43 +517,66 @@
 .dangerBtn:hover:not(:disabled) { background: rgba(185, 28, 28, 0.06); border-color: rgba(185, 28, 28, 0.7); }
 .dangerBtn:disabled { opacity: 0.55; cursor: not-allowed; }
 
-/* ── Reply box ── */
+/* One visible focus treatment for every control on the thread. */
+.backBtn:focus-visible,
+.inlineBtn:focus-visible,
+.joinBtn:focus-visible,
+.leaveBtn:focus-visible,
+.loadOlderBtn:focus-visible,
+.leaveDialogCancel:focus-visible,
+.dangerBtn:focus-visible,
+.sendBtn:focus-visible,
+.replyInput:focus-visible {
+  outline: 3px solid #1F4D36;
+  outline-color: var(--leaf-deep, #1F4D36);
+  outline-offset: 2px;
+}
+
+/* -- Reply box -- */
+
 .replyBox {
   display: flex; gap: var(--space-2); align-items: flex-end;
-  background: var(--bg-mid); border: 1px solid var(--border);
-  border-radius: 22px; padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
-  position: sticky; bottom: var(--space-3);
+  background: var(--bg-mid); border-top: 1px solid var(--border);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  position: static;
 }
+/* Sits on the card's bottom edge: top rule instead of a rounded box. */
+.conversationCard .replyBox { border-radius: 0; margin-top: auto; }
 
 .replyInput {
-  flex: 1; font-size: var(--text-sm); color: var(--ink);
+  flex: 1; font-size: 16px; color: var(--ink);
   background: transparent; resize: none; line-height: 1.5; max-height: 80px;
+  border: 0; padding: var(--space-2) 0;
 }
-.replyInput::placeholder { color: var(--subtle); }
+/* ink at 70% (6.27:1 on the composer background), not the faint token. */
+.replyInput::placeholder { color: rgba(28, 25, 23, 0.7); }
 
 .sendBtn {
-  width: 36px; height: 36px; background: var(--sun); border-radius: 50%;
+  width: 44px; height: 44px; background: #1C1917; background: var(--ink, #1C1917);
+  border: 0; border-radius: 50%; cursor: pointer;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  color: var(--ink);
+  color: #FFF8EC;
+  color: var(--cream, #FFF8EC);
   transition: opacity var(--duration-fast) var(--ease);
 }
 .sendBtn:hover:not(:disabled) { opacity: 0.85; }
-.sendBtn:disabled { opacity: 0.5; cursor: not-allowed; }
-.sendBtn svg { width: 15px; height: 15px; }
+.sendBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.sendBtn svg { width: 18px; height: 18px; }
 
 .sendSpinner {
-  width: 15px;
-  height: 15px;
-  border: 2px solid rgba(28, 25, 23, 0.25);
-  border-top-color: var(--ink);
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 248, 236, 0.35);
+  border-top-color: #FFF8EC;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Desktop ── */
-/* The hero stays full-bleed, so only the bottom padding scales up — no top or
+/* -- Desktop -- */
+
+/* The hero stays full-bleed, so only the bottom padding scales up - no top or
    side padding, which would leave white space around the image. */
 @media (min-width: 768px) {
   .page {
@@ -357,3 +589,62 @@
     padding-bottom: var(--space-10);
   }
 }
+
+
+
+
+
+
+.layout {
+  width: 100%;
+  /* border-box: inner box = max-width - 2*padding. Each breakpoint picks
+     max-width so the inner box stays at the nav's 1072px (1120 - 2*24) and its
+     left edge lands on the nav's gutter, while the visible gutters grow
+     16 -> 24 -> 32 -> 40px. */
+  max-width: calc(var(--max-site, 1120px) - var(--space-6) * 2 + var(--space-4) * 2);
+  margin: 0 auto;
+  padding: 0 var(--space-4);
+  display: grid;
+  gap: var(--space-6);
+  grid-template-columns: 1fr;
+}
+.sidebar { order: 1; }
+.main { order: 2; min-width: 0; }
+.howItWorks { background: var(--cream, #FFF8EC); border: 1px solid var(--border, #E7E2DE); border-radius: var(--radius-lg, 18px); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+.howHeading { font-size: var(--text-base, 15px); font-weight: 600; color: var(--ink, #241810); margin: 0; }
+.circleCard:focus-visible { outline: 3px solid var(--leaf-deep, #1F4D36); outline-offset: 2px; border-radius: var(--radius-md, 12px); }
+.cardHeader { display: flex; align-items: flex-start; gap: var(--space-3); }
+.circleInfo { flex: 1; min-width: 0; }
+.cardFooter { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.cardAction { font-size: 14px; color: var(--leaf-deep, #1F4D36); font-weight: 500; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .circleCard { transition: none; } .circleCard:hover { transform: none; box-shadow: none; } }
+/* Geometry shared by the sidebar/cards grid and the hero copy: same
+   max-width + padding at every breakpoint, so both start on the same x. */
+@media (min-width: 768px) { .layout, .heroContent, .thread { max-width: calc(var(--max-site, 1120px) - var(--space-6) * 2 + var(--space-6) * 2); padding: 0 var(--space-6); } }
+/* Sticky sidebar: top = nav height + 24px. No ancestor in the chain
+   (.layout, SiteLayout .main, .layout, #root, body) sets overflow, so the
+   sticky scrollport is the viewport; body's overflow-x is propagated to the
+   viewport by the UA and does not clip this. */
+@media (min-width: 1024px) { .layout, .heroContent, .thread { max-width: calc(var(--max-site, 1120px) - var(--space-6) * 2 + var(--space-8) * 2); padding: 0 var(--space-8); } .layout { grid-template-columns: 320px 1fr; gap: var(--space-8); } .sidebar { position: sticky; top: calc(var(--nav-height, 56px) + var(--space-6)); align-self: start; } .thread { grid-template-columns: minmax(0, 1fr) 340px; gap: var(--space-8); } .threadSidebar { position: sticky; top: calc(var(--nav-height, 56px) + var(--space-6)); align-self: start; } .circleGrid { grid-template-columns: repeat(2, 1fr); gap: var(--space-4); } .howItWorks { padding: var(--space-5); } }
+@media (min-width: 1440px) { .layout, .heroContent, .thread { max-width: calc(var(--max-site, 1120px) - var(--space-6) * 2 + var(--space-10) * 2); padding: 0 var(--space-10); } }
+@media (max-width: 767px) {
+  .inlineBtn, .backBtn, .loadOlderBtn, .joinBtn, .leaveBtn, .dangerBtn, .leaveDialogCancel { min-height: 44px; }
+  .reactChip { min-height: 44px; padding: 0 12px; }
+  .sendBtn { width: 44px; height: 44px; }
+  /* Page scrolls here instead of the log, so the composer can pin itself to
+     the viewport bottom and stay above the on-screen keyboard. */
+  .conversationCard { overflow: visible; }
+  .conversationCard .messageList { max-height: none; overflow: visible; padding: var(--space-4); }
+  .conversationCard .replyBox { position: sticky; bottom: 0; z-index: 2; }
+  .conversationHead { padding: var(--space-4); }
+  .sideCard { padding: var(--space-4); }
+  .threadHeader { gap: var(--space-3); }
+  .threadName { font-size: 32px; }
+  .threadSidebar { margin-top: var(--space-1); }
+}
+
+
+
+
+
+

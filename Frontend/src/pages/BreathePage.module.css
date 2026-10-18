@@ -1,134 +1,303 @@
+/* Breathe page — sunrise-scoped re-theme.
+   Colours come from the `.sunrise` class applied to this page's root only
+   (see BreathePage.tsx), so nothing leaks into other screens.
+
+   Contrast (measured, WCAG 2.1 relative luminance):
+     ink #241810        on cream #FFF8EC   16.40:1   body, sub, safety, length, desc
+     ink #241810        on sun   #F6A31B    8.39:1   disc text
+     ink #241810        on sand  #FCE7C2   14.30:1   pause hover, selected item
+     cream #FFF8EC      on ink   #241810   16.40:1   start / resume
+     cream #FFF8EC      on leaf-deep #1F4D36 9.15:1  selected length / number
+     terracotta #B5482A on cream            5.07:1   stop, links
+     ink-mid #5B4633    on cream            8.40:1   voice off
+     leaf-deep #1F4D36  on sand             7.98:1   voice on
+     #B91C1C            on cream            6.13:1   save error
+   Readable copy is ink (subtitle, safety line, length options, exercise
+   descriptions). The italic brand word stays sun-deep 5.37:1 (>= 4.5).
+   Never white/cream on sun (1.96:1). */
+
 .page {
-  position: relative;
-  z-index: 0;
-  min-height: calc(100dvh - var(--nav-height) - var(--space-6));
+  background: var(--cream);
+  min-height: calc(100dvh - var(--nav-height));
 }
 
-.page::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: calc(-1 * var(--space-6));
-  left: 0;
-  right: 0;
-  z-index: -1;
-  background:
-    linear-gradient(rgba(255, 251, 245, 0.55), rgba(255, 251, 245, 0.55)),
-    url('/breath.jpg') center center / cover no-repeat;
+.container {
+  width: 100%;
+  max-width: var(--max-site);
+  margin: 0 auto;
+  padding: 0 var(--space-6);
 }
 
-.inner {
-  padding: var(--space-4);
+.layout {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Photo (header band on mobile, left column on desktop) ── */
+.photoBand {
+  height: 30vh;
+  min-height: 200px;
+  margin: 0 calc(-1 * var(--space-6));
+  background: url('/breath.jpg') center 35% / cover no-repeat;
+}
+
+/* ── Cream content panel ── */
+.panel {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--space-5);
+  padding: var(--space-6) 0 var(--space-8);
   text-align: center;
-  max-width: var(--max-content);
-  margin: 0 auto;
 }
 
 .header { width: 100%; }
-.heading { font-family: var(--font-display); font-size: var(--text-xl); color: var(--ink); margin-bottom: 4px; }
-.sub { font-size: var(--text-sm); color: var(--muted); }
+.heading {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.sub { font-size: 14px; color: var(--ink); }
 .sub em { font-style: italic; color: var(--sun-deep); }
 
-/* ── Breathing circle ── */
-.circleWrap {
+/* ── Orb: flat sun disc + one thin progress ring ── */
+.orbWrap {
   position: relative;
-  width: 200px;
-  height: 200px;
+  width: 220px;
+  height: 220px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin: var(--space-4) 0;
 }
 
-.ring1, .ring2 {
+.ringSvg {
   position: absolute;
-  border-radius: 50%;
-  border: 1.5px solid var(--border);
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
-.ring1 { width: 190px; height: 190px; animation: rotateRing 20s linear infinite; }
-.ring2 { width: 160px; height: 160px; animation: rotateRing 14s linear infinite reverse; }
-
-@keyframes rotateRing {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+.ringTrack {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 3;
 }
 
-.core {
-  width: 100px;
-  height: 100px;
+.ringProgress {
+  fill: none;
+  stroke: var(--terracotta);
+  stroke-width: 3;
+  stroke-linecap: round;
+  /* 2π·r with r=92 in the 200×200 viewBox */
+  stroke-dasharray: 578;
+  stroke-dashoffset: 578;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  animation-name: ringFill;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes ringFill {
+  from { stroke-dashoffset: 578; }
+  to   { stroke-dashoffset: 0; }
+}
+
+.disc {
+  width: 140px;
+  height: 140px;
   border-radius: 50%;
-  background: radial-gradient(circle at 40% 40%, var(--sun-muted), var(--sun-deep));
+  background: var(--sun);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition-property: transform;
+  transition-timing-function: ease-in-out;
+  will-change: transform;
+}
+
+.discTech {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+
+/* ── Phase label + countdown ── */
+.phaseDisplay {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  position: relative;
-  z-index: 2;
-  transition: transform 4s ease-in-out;
-  box-shadow: var(--shadow-float);
+  gap: var(--space-1);
+  min-height: 96px;
+  width: 100%;
 }
-
-.coreTech {
-  font-size: 11px;
-  color: var(--ink-mid);
-  font-weight: 500;
-  letter-spacing: 0.06em;
-}
-
-/* Live countdown sits where the technique tag would be, centred in the orb. */
-.coreTimer {
-  font-family: var(--font-display);
-  font-size: 30px;
-  color: var(--ink);
-  font-weight: 500;
-  line-height: 1;
-}
-
-/* ── Phase display ── */
-.phaseDisplay { }
 .phaseLabel {
   font-family: var(--font-display);
   font-size: var(--text-2xl);
   color: var(--ink);
   font-style: italic;
   line-height: 1.2;
-  margin-bottom: var(--space-2);
-  min-height: 2em;
 }
-.phaseCount { font-size: var(--text-sm); color: var(--muted); }
+.phaseCount {
+  font-family: var(--font-display);
+  font-size: 34px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.phaseCountSmall { font-size: var(--text-sm); color: var(--muted); }
+
+/* ── Completion ── */
+.completion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: center;
+  width: 100%;
+  max-width: 420px;
+  padding: var(--space-4) var(--space-5);
+  background: var(--cream);
+  border: 1px solid var(--sand);
+  border-radius: var(--radius-lg);
+}
+.completionTitle {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  color: var(--ink);
+  line-height: 1.3;
+}
+.completionLinks { font-size: var(--text-sm); color: var(--muted); }
+.completionLinks a { color: var(--terracotta); font-weight: 500; }
+.completionLinks a:hover { text-decoration: underline; }
 
 /* ── Controls ── */
 .controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
 .startBtn {
-  background: var(--teal);
-  color: var(--ink);
+  min-height: 44px;
+  padding: var(--space-3) var(--space-10);
+  background: var(--ink);
+  color: var(--cream);
   font-size: var(--text-base);
   font-weight: 500;
-  padding: var(--space-3) var(--space-10);
+  border: 1px solid var(--ink);
   border-radius: var(--radius-full);
-  transition: background var(--duration-base) var(--ease), transform var(--duration-fast) var(--ease);
-  box-shadow: var(--shadow-card);
+  transition: background var(--duration-base) var(--ease);
 }
-.startBtn:hover { transform: scale(1.03); }
-.startBtn:active { transform: scale(0.98); }
-.startBtn:disabled {
-  opacity: 0.55;
-  transform: none;
-  cursor: not-allowed;
-  box-shadow: none;
+.startBtn:hover:not(:disabled) { background: var(--ink-hover); }
+.startBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.pauseBtn {
+  min-height: 44px;
+  padding: var(--space-3) var(--space-6);
+  background: var(--cream);
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-full);
+  font-size: var(--text-base);
+  font-weight: 500;
+  transition: background var(--duration-base) var(--ease);
 }
-.startBtnStop { background: var(--muted); box-shadow: none; }
+.pauseBtn:hover { background: var(--sand); }
+
+.stopBtn {
+  min-height: 44px;
+  padding: var(--space-3) var(--space-6);
+  background: transparent;
+  color: var(--terracotta);
+  border: 1px solid var(--terracotta);
+  border-radius: var(--radius-full);
+  font-size: var(--text-base);
+  font-weight: 500;
+  transition: background var(--duration-base) var(--ease);
+}
+.stopBtn:hover:not(:disabled) { background: var(--sand); }
+.stopBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.voiceBtn {
+  min-height: 44px;
+  padding: 8px 18px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: var(--cream);
+  color: var(--ink-mid);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm);
+  transition:
+    background var(--duration-base) var(--ease),
+    color var(--duration-base) var(--ease),
+    border-color var(--duration-base) var(--ease);
+}
+.voiceBtnOn {
+  background: var(--sand);
+  border-color: var(--leaf-deep);
+  color: var(--leaf-deep);
+}
+.voiceBtnIcon { width: 17px; height: 17px; flex-shrink: 0; }
+
+/* ── Length selector ── */
+.lengthRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+}
+.lengthLabel { font-size: 14px; color: var(--ink); font-weight: 500; }
+.lengthGroup {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+}
+.lengthOption {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 56px;
+  padding: 8px 14px;
+  border-radius: var(--radius-full);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--duration-base) var(--ease), color var(--duration-base) var(--ease);
+}
+.lengthOption:hover:not(.lengthOptionActive):not(.lengthOptionDisabled) { background: var(--sand); }
+.lengthOption:focus-within { outline: 2px solid var(--ink); outline-offset: 2px; }
+.lengthOptionActive { background: var(--leaf-deep); color: var(--cream); font-weight: 600; }
+.lengthOptionDisabled { opacity: 0.6; cursor: not-allowed; }
+.remainingText {
+  font-size: var(--text-sm);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Safety line ── */
+.safety {
+  font-size: 14px;
+  color: var(--ink);
+  line-height: 1.6;
+  max-width: 42ch;
+  margin: 0 auto;
+}
 
 /* ── Load / save status ── */
 .statusNote {
@@ -143,15 +312,17 @@
   align-items: center;
   gap: var(--space-3);
   max-width: 360px;
+  margin: 0 auto;
   padding: var(--space-4) var(--space-5);
-  background: var(--bg-mid);
-  border: 1px solid var(--border-soft);
+  background: var(--sand);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   font-size: var(--text-sm);
-  color: var(--ink-mid);
+  color: var(--ink);
 }
 
 .retryBtn {
+  min-height: 44px;
   font-size: var(--text-sm);
   font-weight: 500;
   padding: var(--space-2) var(--space-4);
@@ -160,9 +331,9 @@
   color: var(--ink);
   border: none;
   cursor: pointer;
-  transition: transform var(--duration-fast) var(--ease), background var(--duration-base) var(--ease);
+  transition: background var(--duration-base) var(--ease);
 }
-.retryBtn:hover { transform: scale(1.03); }
+.retryBtn:hover { background: var(--sun-muted); }
 
 .savingLine, .saveLine, .saveError {
   font-size: var(--text-sm);
@@ -170,110 +341,105 @@
   border-radius: var(--radius-md);
 }
 .savingLine { color: var(--muted); }
-.saveLine { background: var(--teal-light); color: var(--teal-deep); }
-/* Was --sun-light/--sun-deep, which read as a neutral notice rather than a
-   failure next to the teal success line. Uses the same danger treatment as
-   AuthForm and ProfilePage. */
+.saveLine { background: var(--sand); color: var(--leaf-deep); }
 .saveError {
-  background: rgba(220, 38, 38, 0.06);
-  border: 1px solid rgba(220, 38, 38, 0.22);
+  background: rgba(185, 28, 28, 0.06);
+  border: 1px solid rgba(185, 28, 28, 0.35);
   color: #B91C1C;
 }
 
-/* ── Technique list ── */
+/* ── Technique list (radio) ── */
 .techniqueList {
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   text-align: left;
+  margin-top: var(--space-2);
 }
 
 .techniqueItem {
   display: flex;
   gap: var(--space-3);
   align-items: center;
-  background: var(--bg-mid);
+  min-height: 44px;
+  background: var(--cream);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: var(--space-3) var(--space-4);
-  width: 100%;
-  text-align: left;
+  cursor: pointer;
   transition: border-color var(--duration-base) var(--ease), background var(--duration-base) var(--ease);
 }
-.techniqueItem:hover { border-color: var(--sun-muted); }
-.techniqueItemActive { border-color: var(--sun-deep); background: var(--sun-light); }
+.techniqueItem:hover { border-color: var(--ink-mid); }
+.techniqueItem:focus-within { outline: 2px solid var(--sun-deep); outline-offset: 2px; }
+.techniqueItemActive {
+  border-color: var(--leaf-deep);
+  background: var(--sand);
+  /* A second inset ring reads as a 2px border without shifting layout. */
+  box-shadow: inset 0 0 0 1px var(--leaf-deep);
+}
 
 .techNum {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--sun-deep);
-  color: var(--bg);
+  background: var(--sand);
+  color: var(--ink);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: 600;
   flex-shrink: 0;
 }
+.techniqueItemActive .techNum { background: var(--leaf-deep); color: var(--cream); }
 
-.techniqueItem:not(.techniqueItemActive) .techNum {
-  background: var(--bg-soft);
-  color: var(--muted);
-}
+.techInfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.techName { font-size: var(--text-base); font-weight: 600; color: var(--ink); line-height: 1.3; }
+.techDesc { font-size: 14px; color: var(--ink); line-height: 1.4; }
 
-.techInfo { }
-.techName { font-size: var(--text-sm); font-weight: 500; color: var(--ink); margin-bottom: 2px; }
-.techDesc { font-size: var(--text-xs); color: var(--muted); }
-
-/* ── Desktop ── */
-@media (min-width: 768px) {
-  .page {
-    min-height: calc(100dvh - var(--nav-height) - var(--space-8));
+/* ── Desktop: photo column + cream panel ──
+   The orb, controls, length selector, safety line and both exercise cards
+   must clear a 768px-tall viewport, so the column is tightened and the orb
+   shrinks to ~130px (r=92 in a 200 viewBox scales to ~129px at 140px). ── */
+@media (min-width: 1024px) {
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 9fr) minmax(0, 11fr);
+    gap: 32px;
+    align-items: start;
+    padding-top: var(--space-4);
   }
 
-  .page::before {
-    bottom: calc(-1 * var(--space-8));
+  .photoBand {
+    margin: 0;
+    height: calc(100dvh - var(--nav-height) - var(--space-6));
+    min-height: 480px;
+    border-radius: var(--radius-lg);
+    background-position: center center;
   }
 
-  .inner {
-    padding: var(--space-8) var(--space-8);
+  .panel {
+    gap: var(--space-2);
+    padding: 0 0 var(--space-6);
   }
-}
 
-@media (min-width: 1280px) {
-  .inner {
-    padding: var(--space-10) var(--space-10);
+  .orbWrap {
+    width: 140px;
+    height: 140px;
+    margin: var(--space-2) 0;
   }
-}
-/* ── Voice toggle ── */
-.voiceToggle {
-  display: flex;
-  justify-content: center;
+
+  .disc {
+    width: 96px;
+    height: 96px;
+  }
+
+  .phaseDisplay { min-height: 72px; }
 }
 
-.voiceBtn {
-  font-size: var(--text-sm);
-  padding: 8px 18px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border-soft);
-  background: var(--bg-mid);
-  color: var(--muted);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  transition: all var(--duration-base) var(--ease);
-}
-
-.voiceBtnIcon {
-  width: 17px;
-  height: 17px;
-  flex-shrink: 0;
-}
-
-.voiceBtnOn {
-  background: var(--sun-light);
-  border-color: var(--sun-muted);
-  color: var(--sun-deep);
+/* ── Reduced motion: no scaling, no ring sweep ── */
+@media (prefers-reduced-motion: reduce) {
+  .disc { transition: none; transform: none !important; }
+  .ringProgress { display: none; }
 }

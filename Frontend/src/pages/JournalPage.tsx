@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { NotebookPen, HandHeart, Sprout, Send, Ear, Sparkles } from 'lucide-react'
+import {
+  NotebookPen, HandHeart, Sprout, Send, Ear,
+  PenLine, CircleCheck, CircleAlert, Info,
+} from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/auth/AuthContext'
 import { isApiError, type JournalEntry } from '@/types'
+import '@/styles/sunrise.css'
 import styles from './JournalPage.module.css'
 
 type JournalMode = 'journal' | 'prayer'
@@ -360,400 +364,452 @@ export default function JournalPage() {
   const editTagOptions = Array.from(new Set([...moodTags, ...editTags]))
 
   return (
-    <div className={styles.page}>
-      <div className={styles.header}>
-        <h1 className={styles.heading}>Your journal</h1>
-        <p className={styles.sub}>Private only yours — <em>ya siri</em></p>
-      </div>
-
-      {/* Mode toggle */}
-      <div className={styles.modeToggle} role="group" aria-label="Journal mode">
-        <button
-          className={[styles.modeBtn, mode === 'journal' ? styles.modeBtnActive : ''].join(' ')}
-          onClick={() => switchMode('journal')}
-          aria-pressed={mode === 'journal'}
-        >
-          <NotebookPen aria-hidden="true" className={styles.modeBtnIcon} />
-          Journal
-        </button>
-        <button
-          className={[styles.modeBtn, mode === 'prayer' ? styles.modeBtnActive : ''].join(' ')}
-          onClick={() => switchMode('prayer')}
-          aria-pressed={mode === 'prayer'}
-        >
-          <HandHeart aria-hidden="true" className={styles.modeBtnIcon} />
-          Prayer
-        </button>
-      </div>
-
-      {/* ── JOURNAL MODE ── */}
-      {mode === 'journal' && (
-        <>
-          <div className={styles.promptStrip} role="group" aria-label="Journal prompts">
-            {prompts.map((p, i) => (
-              <button
-                key={p.label}
-                className={[styles.promptChip, activePrompt === i ? styles.promptChipActive : ''].join(' ')}
-                onClick={() => { setActivePrompt(i); textareaRef.current?.focus() }}
-                aria-pressed={activePrompt === i}
-              >
-                {p.label}
-              </button>
-            ))}
+    <div className={[styles.page, 'sunrise'].join(' ')}>
+      <div className={styles.container}>
+        <header className={styles.head}>
+          <div className={styles.headText}>
+            <h1 className={styles.heading}>Your journal</h1>
+            <p className={styles.sub}>Private only yours — <em>ya siri</em></p>
           </div>
 
-          <div className={styles.writeBox}>
-            <p className={styles.writeDate}>{today}</p>
-            <textarea
-              ref={textareaRef}
-              className={styles.textarea}
-              value={content}
-              onChange={e => setContent(e.target.value)}
-              placeholder={prompts[activePrompt].placeholder}
-              aria-label="Journal entry"
-              maxLength={10000}
-              rows={6}
-            />
-            <div className={styles.writeFooter}>
-              <span className={styles.wordCount}>
-                {wordCount} {wordCount === 1 ? 'word' : 'words'}
-              </span>
-            </div>
+          {/* Mode toggle */}
+          <div className={styles.modeToggle} role="group" aria-label="Journal mode">
+            <button
+              className={[styles.modeBtn, mode === 'journal' ? styles.modeBtnActive : ''].join(' ')}
+              onClick={() => switchMode('journal')}
+              aria-pressed={mode === 'journal'}
+            >
+              <NotebookPen aria-hidden="true" className={styles.modeBtnIcon} />
+              Journal
+            </button>
+            <button
+              className={[styles.modeBtn, mode === 'prayer' ? styles.modeBtnActive : ''].join(' ')}
+              onClick={() => switchMode('prayer')}
+              aria-pressed={mode === 'prayer'}
+            >
+              <HandHeart aria-hidden="true" className={styles.modeBtnIcon} />
+              Prayer
+            </button>
           </div>
+        </header>
 
-          <div>
-            <p className={styles.sectionLabel}>How are you feeling?</p>
-            <div className={styles.tagRow} role="group" aria-label="Mood tags">
-              {moodTags.map(tag => (
-                <button
-                  key={tag}
-                  className={[styles.tag, selectedTags.includes(tag) ? styles.tagActive : ''].join(' ')}
-                  onClick={() => toggleTag(tag)}
-                  aria-pressed={selectedTags.includes(tag)}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
+        <div className={styles.layout}>
+          {/* ── Left column: write + save + feedback ── */}
+          <div className={styles.formCol}>
+            {/* ── JOURNAL MODE ── */}
+            {mode === 'journal' && (
+              <>
+                <div className={styles.promptStrip} role="group" aria-label="Journal prompts">
+                  {prompts.map((p, i) => (
+                    <button
+                      key={p.label}
+                      className={[styles.promptChip, activePrompt === i ? styles.promptChipActive : ''].join(' ')}
+                      onClick={() => { setActivePrompt(i); textareaRef.current?.focus() }}
+                      aria-pressed={activePrompt === i}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
 
-      {/* ── PRAYER MODE ── */}
-      {mode === 'prayer' && (
-        <div className={styles.prayerMode}>
-          <p className={styles.prayerIntro}>
-            "Do not be anxious about anything, but in every situation, by prayer and petition,
-            with thanksgiving, present your requests to God." — Philippians 4:6
-          </p>
-
-          <div className={styles.prayerSection}>
-            <label className={styles.prayerLabel} htmlFor="gratitude">
-              <span className={styles.prayerLabelRow}>
-                <Sprout aria-hidden="true" className={styles.prayerLabelIcon} />
-                Gratitude
-              </span>
-              <span className={styles.prayerPrompt}>What am I thankful for today?</span>
-            </label>
-            <textarea
-              id="gratitude"
-              className={styles.prayerTextarea}
-              value={gratitude}
-              onChange={e => setGratitude(e.target.value)}
-              placeholder="Lord, I am grateful for..."
-              maxLength={10000}
-              rows={3}
-            />
-          </div>
-
-          <div className={styles.prayerSection}>
-            <label className={styles.prayerLabel} htmlFor="petition">
-              <span className={styles.prayerLabelRow}>
-                <Send aria-hidden="true" className={styles.prayerLabelIcon} />
-                Petition
-              </span>
-              <span className={styles.prayerPrompt}>What am I bringing before God?</span>
-            </label>
-            <textarea
-              id="petition"
-              className={styles.prayerTextarea}
-              value={petition}
-              onChange={e => setPetition(e.target.value)}
-              placeholder="Lord, I ask you for..."
-              maxLength={10000}
-              rows={3}
-            />
-          </div>
-
-          <div className={styles.prayerSection}>
-            <label className={styles.prayerLabel} htmlFor="listening">
-              <span className={styles.prayerLabelRow}>
-                <Ear aria-hidden="true" className={styles.prayerLabelIcon} />
-                Listening
-              </span>
-              <span className={styles.prayerPrompt}>What do I feel He is saying to me?</span>
-            </label>
-            <textarea
-              id="listening"
-              className={styles.prayerTextarea}
-              value={listening}
-              onChange={e => setListening(e.target.value)}
-              placeholder="I feel God is saying..."
-              maxLength={10000}
-              rows={3}
-            />
-          </div>
-
-          <div className={styles.blessingCard}>
-            <p className={styles.blessingEyebrow}>A word for you today</p>
-            <blockquote className={styles.blessingText}>{blessing.text}</blockquote>
-            <p className={styles.blessingRef}>{blessing.ref}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Save button — both modes. No aria-label: the visible text already names the
-          action, and a static label overrode it with the wrong verb in prayer
-          mode ("reflection" vs "prayer"), breaking WCAG 2.5.3 label-in-name. */}
-      <button
-        className={[styles.saveBtn, saving ? styles.saveBtnLoading : ''].join(' ')}
-        onClick={handleSave}
-        disabled={saving}
-      >
-        {saving
-          ? <><span className={styles.spinner} aria-hidden="true" /> Reflecting...</>
-          : mode === 'prayer'
-            ? <><HandHeart aria-hidden="true" className={styles.saveBtnIcon} /> Save prayer</>
-            : <><Sparkles aria-hidden="true" className={styles.saveBtnIcon} /> Save &amp; reflect with AI</>
-        }
-      </button>
-
-      {/* Create feedback + reflection */}
-      {createError && <p className={styles.noticeError} role="alert">{createError}</p>}
-      {createStatus && <p className={styles.noticeSuccess} role="status">{createStatus}</p>}
-      {reflection && (
-        <div className={styles.reflection} role="region" aria-live="polite">
-          <p className={styles.reflectionEyebrow}>
-            {mode === 'prayer' ? 'A word from your companion' : 'Your Soulwe companion'}
-          </p>
-          <p className={styles.reflectionText}>{reflection}</p>
-        </div>
-      )}
-      {reflectionUnavailable && (
-        <p className={styles.noticeInfo} role="status">
-          Your entry is saved. The AI companion is temporarily unavailable right now.
-        </p>
-      )}
-
-      {/* Past entries */}
-      <div>
-        <p className={styles.sectionLabel}>Past entries</p>
-
-        {pageNotice && <p className={styles.noticeSuccess} role="status">{pageNotice}</p>}
-
-        {/* Detail panel */}
-        {detailId && (
-          <section className={styles.detailCard} aria-label="Journal entry details">
-            <div className={styles.detailTop}>
-              <div className={styles.detailMeta}>
-                <p className={styles.detailDate}>
-                  {detailEntry ? formatFullDate(detailEntry.created_at) : ''}
-                </p>
-                {detailEntry && (
-                  <p className={styles.detailWords}>
-                    {wordsLabel(detailEntry.word_count)}
-                    {detailEntry.prompt_used
-                      ? ` · ${detailEntry.prompt_used === PRAYER_PROMPT ? 'Prayer' : detailEntry.prompt_used}`
-                      : ''}
-                  </p>
-                )}
-              </div>
-              <button className={styles.secondaryBtn} onClick={closeDetail}>Close</button>
-            </div>
-
-            {detailLoading && <p className={styles.detailStatus}>Loading entry…</p>}
-
-            {!detailLoading && detailError && (
-              <div className={styles.noticeError} role="alert">
-                {detailError}
-                <button
-                  className={styles.smallBtn}
-                  onClick={() => detailId && openEntry(detailId)}
-                >
-                  Try again
-                </button>
-              </div>
-            )}
-
-            {!detailLoading && !detailError && detailEntry && (
-              editMode ? (
-                <form className={styles.editForm} onSubmit={handleSaveEdit}>
+                <div className={styles.writeBox}>
+                  <p className={styles.writeDate}>{today}</p>
                   <textarea
-                    className={styles.editTextarea}
-                    value={editContent}
-                    onChange={e => setEditContent(e.target.value)}
-                    aria-label="Edit journal entry"
+                    ref={textareaRef}
+                    className={styles.textarea}
+                    value={content}
+                    onChange={e => setContent(e.target.value)}
+                    placeholder={prompts[activePrompt].placeholder}
+                    aria-label="Journal entry"
                     maxLength={10000}
-                    rows={7}
+                    rows={6}
                   />
+                  <div className={styles.writeFooter}>
+                    <span className={styles.wordCount}>
+                      {wordCount} {wordCount === 1 ? 'word' : 'words'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
                   <p className={styles.sectionLabel}>How are you feeling?</p>
                   <div className={styles.tagRow} role="group" aria-label="Mood tags">
-                    {editTagOptions.map(tag => (
+                    {moodTags.map(tag => (
                       <button
                         key={tag}
-                        type="button"
-                        className={[styles.tag, editTags.includes(tag) ? styles.tagActive : ''].join(' ')}
-                        onClick={() => toggleEditTag(tag)}
-                        aria-pressed={editTags.includes(tag)}
+                        className={[styles.tag, selectedTags.includes(tag) ? styles.tagActive : ''].join(' ')}
+                        onClick={() => toggleTag(tag)}
+                        aria-pressed={selectedTags.includes(tag)}
                       >
                         {tag}
                       </button>
                     ))}
                   </div>
-                  {editError && <p className={styles.noticeError} role="alert">{editError}</p>}
-                  <div className={styles.editActions}>
-                    <button className={styles.primaryBtn} type="submit" disabled={editing}>
-                      {editing ? 'Saving…' : 'Save changes'}
-                    </button>
-                    <button
-                      className={styles.secondaryBtn}
-                      type="button"
-                      onClick={() => setEditMode(false)}
-                      disabled={editing}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <>
-                  <div className={styles.entryContent}>{detailEntry.content}</div>
-                  {detailEntry.mood_tags.length > 0 && (
-                    <div className={styles.entryTags}>
-                      {detailEntry.mood_tags.map(t => <span key={t} className={styles.entryTag}>{t}</span>)}
-                    </div>
-                  )}
-
-                  <div className={styles.reflectionSection}>
-                    {reflectError && <p className={styles.noticeError} role="alert">{reflectError}</p>}
-                    {reflecting ? (
-                      <p className={styles.reflectStatus}>
-                        <span className={styles.spinner} aria-hidden="true" /> Asking your companion…
-                      </p>
-                    ) : detailEntry.ai_reflection ? (
-                      <>
-                        <p className={styles.reflectionEyebrow}>Your Soulwe companion</p>
-                        <p className={styles.reflectionText}>{detailEntry.ai_reflection}</p>
-                        <button
-                          className={styles.reflectionBtn}
-                          onClick={() => handleReflect(detailEntry.id)}
-                        >
-                          Fresh reflection
-                        </button>
-                      </>
-                    ) : (
-                      <div className={styles.noReflection}>
-                        <p className={styles.noReflectionText}>No AI reflection yet.</p>
-                        <button
-                          className={styles.reflectionBtn}
-                          onClick={() => handleReflect(detailEntry.id)}
-                        >
-                          Ask your companion
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {detailNotice && <p className={styles.noticeSuccess} role="status">{detailNotice}</p>}
-
-                  <div className={styles.entryActions}>
-                    <button className={styles.secondaryBtn} onClick={startEdit}>Edit</button>
-                    {deleteConfirm ? (
-                      <>
-                        <button className={styles.dangerBtn} onClick={handleDelete} disabled={deleting}>
-                          {deleting ? 'Deleting…' : 'Confirm delete'}
-                        </button>
-                        <button className={styles.secondaryBtn} onClick={() => setDeleteConfirm(false)}>
-                          Keep entry
-                        </button>
-                      </>
-                    ) : (
-                      <button className={styles.dangerBtn} onClick={handleDelete}>Delete</button>
-                    )}
-                  </div>
-                  {deleteError && <p className={styles.noticeError} role="alert">{deleteError}</p>}
-                </>
-              )
+                </div>
+              </>
             )}
-          </section>
-        )}
 
-        {listLoading ? (
-          <p className={styles.listStatus}>Loading your journal…</p>
-        ) : listError ? (
-          <div className={styles.noticeError} role="alert">
-            {listError}
-            <button className={styles.smallBtn} onClick={() => setTick(t => t + 1)}>
-              Try again
+            {/* ── PRAYER MODE ── */}
+            {mode === 'prayer' && (
+              <div className={styles.prayerMode}>
+                <p className={styles.prayerIntro}>
+                  "Do not be anxious about anything, but in every situation, by prayer and petition,
+                  with thanksgiving, present your requests to God." — Philippians 4:6
+                </p>
+
+                <div className={styles.prayerSection}>
+                  <label className={styles.prayerLabel} htmlFor="gratitude">
+                    <span className={styles.prayerLabelRow}>
+                      <Sprout aria-hidden="true" className={styles.prayerLabelIcon} />
+                      Gratitude
+                    </span>
+                    <span className={styles.prayerPrompt}>What am I thankful for today?</span>
+                  </label>
+                  <textarea
+                    id="gratitude"
+                    className={styles.prayerTextarea}
+                    value={gratitude}
+                    onChange={e => setGratitude(e.target.value)}
+                    placeholder="Lord, I am grateful for..."
+                    maxLength={10000}
+                    rows={3}
+                  />
+                </div>
+
+                <div className={styles.prayerSection}>
+                  <label className={styles.prayerLabel} htmlFor="petition">
+                    <span className={styles.prayerLabelRow}>
+                      <Send aria-hidden="true" className={styles.prayerLabelIcon} />
+                      Petition
+                    </span>
+                    <span className={styles.prayerPrompt}>What am I bringing before God?</span>
+                  </label>
+                  <textarea
+                    id="petition"
+                    className={styles.prayerTextarea}
+                    value={petition}
+                    onChange={e => setPetition(e.target.value)}
+                    placeholder="Lord, I ask you for..."
+                    maxLength={10000}
+                    rows={3}
+                  />
+                </div>
+
+                <div className={styles.prayerSection}>
+                  <label className={styles.prayerLabel} htmlFor="listening">
+                    <span className={styles.prayerLabelRow}>
+                      <Ear aria-hidden="true" className={styles.prayerLabelIcon} />
+                      Listening
+                    </span>
+                    <span className={styles.prayerPrompt}>What do I feel He is saying to me?</span>
+                  </label>
+                  <textarea
+                    id="listening"
+                    className={styles.prayerTextarea}
+                    value={listening}
+                    onChange={e => setListening(e.target.value)}
+                    placeholder="I feel God is saying..."
+                    maxLength={10000}
+                    rows={3}
+                  />
+                </div>
+
+                <div className={styles.blessingCard}>
+                  <p className={styles.blessingEyebrow}>A word for you today</p>
+                  <blockquote className={styles.blessingText}>{blessing.text}</blockquote>
+                  <p className={styles.blessingRef}>{blessing.ref}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Save button — both modes. No aria-label: the visible text already names the
+                action, and a static label overrode it with the wrong verb in prayer
+                mode ("reflection" vs "prayer"), breaking WCAG 2.5.3 label-in-name. */}
+            <button
+              className={[styles.saveBtn, saving ? styles.saveBtnLoading : ''].join(' ')}
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving
+                ? <><span className={styles.spinner} aria-hidden="true" /> Reflecting...</>
+                : mode === 'prayer'
+                  ? <><HandHeart aria-hidden="true" className={styles.saveBtnIcon} /> Save prayer</>
+                  : <><PenLine aria-hidden="true" className={styles.saveBtnIcon} /> Save &amp; reflect with AI</>
+              }
             </button>
+
+            {/* Create feedback + reflection */}
+            {createError && (
+              <p className={styles.noticeError} role="alert">
+                <CircleAlert aria-hidden="true" className={styles.noticeIcon} />
+                {createError}
+              </p>
+            )}
+            {createStatus && (
+              <p className={styles.noticeSuccess} role="status">
+                <CircleCheck aria-hidden="true" className={styles.noticeIcon} />
+                {createStatus}
+              </p>
+            )}
+            {reflection && (
+              <div className={styles.reflection} role="region" aria-live="polite">
+                <p className={styles.reflectionEyebrow}>
+                  {mode === 'prayer' ? 'A word from your companion' : 'Your Soulwe companion'}
+                </p>
+                <p className={styles.reflectionText}>{reflection}</p>
+              </div>
+            )}
+            {reflectionUnavailable && (
+              <p className={styles.noticeInfo} role="status">
+                <Info aria-hidden="true" className={styles.noticeIcon} />
+                Your entry is saved. The AI companion is temporarily unavailable right now.
+              </p>
+            )}
           </div>
-        ) : entries.length === 0 ? (
-          <p className={styles.emptyNote}>Your journal is empty. Write your first entry above.</p>
-        ) : (
-          <>
-            <div className={styles.entryList}>
-              {entries.map(entry => {
-                const d = formatListDate(entry.created_at)
-                const isPrayer = entry.prompt_used === PRAYER_PROMPT
-                return (
-                  <button
-                    key={entry.id}
-                    className={[
-                      styles.entryItem,
-                      detailId === entry.id ? styles.entryItemActive : '',
-                    ].join(' ')}
-                    onClick={() => openEntry(entry.id)}
-                    aria-label={`Open ${isPrayer ? 'prayer' : 'journal'} entry from ${formatFullDate(entry.created_at)}`}
-                  >
-                    <div className={styles.entryDate} aria-hidden="true">
-                      <span className={styles.entryDay}>{d.day}</span>
-                      <span className={styles.entryMonth}>{d.month}</span>
-                    </div>
-                    <div className={styles.entryBody}>
-                      <div className={styles.entryMeta}>
-                        <span className={styles.entryModeTag}>
-                          {isPrayer
-                            ? <><HandHeart aria-hidden="true" className={styles.entryModeIcon} /> Prayer</>
-                            : <><NotebookPen aria-hidden="true" className={styles.entryModeIcon} /> Journal</>}
-                        </span>
-                        <span className={styles.entryWords}>{wordsLabel(entry.word_count)}</span>
-                        {entry.ai_reflection && (
-                          <span className={styles.reflectionBadge}>Reflection</span>
-                        )}
-                      </div>
-                      <p className={styles.entryPreview}>
-                        {entry.prompt_used && entry.prompt_used !== PRAYER_PROMPT
-                          ? `“${entry.prompt_used}”`
-                          : 'Your private words — tap to read'}
+
+          {/* ── Right column: past entries ── */}
+          <aside className={styles.entriesPanel} aria-label="Past entries">
+            <p className={styles.sectionLabel}>Past entries</p>
+
+            {pageNotice && (
+              <p className={styles.noticeSuccess} role="status">
+                <CircleCheck aria-hidden="true" className={styles.noticeIcon} />
+                {pageNotice}
+              </p>
+            )}
+
+            {/* Detail panel */}
+            {detailId && (
+              <section className={styles.detailCard} aria-label="Journal entry details">
+                <div className={styles.detailTop}>
+                  <div className={styles.detailMeta}>
+                    <p className={styles.detailDate}>
+                      {detailEntry ? formatFullDate(detailEntry.created_at) : ''}
+                    </p>
+                    {detailEntry && (
+                      <p className={styles.detailWords}>
+                        {wordsLabel(detailEntry.word_count)}
+                        {detailEntry.prompt_used
+                          ? ` · ${detailEntry.prompt_used === PRAYER_PROMPT ? 'Prayer' : detailEntry.prompt_used}`
+                          : ''}
                       </p>
-                      {entry.mood_tags.length > 0 && (
+                    )}
+                  </div>
+                  <button className={styles.secondaryBtn} onClick={closeDetail}>Close</button>
+                </div>
+
+                {detailLoading && <p className={styles.detailStatus}>Loading entry…</p>}
+
+                {!detailLoading && detailError && (
+                  <div className={styles.noticeError} role="alert">
+                    <CircleAlert aria-hidden="true" className={styles.noticeIcon} />
+                    {detailError}
+                    <button
+                      className={styles.smallBtn}
+                      onClick={() => detailId && openEntry(detailId)}
+                    >
+                      Try again
+                    </button>
+                  </div>
+                )}
+
+                {!detailLoading && !detailError && detailEntry && (
+                  editMode ? (
+                    <form className={styles.editForm} onSubmit={handleSaveEdit}>
+                      <textarea
+                        className={styles.editTextarea}
+                        value={editContent}
+                        onChange={e => setEditContent(e.target.value)}
+                        aria-label="Edit journal entry"
+                        maxLength={10000}
+                        rows={7}
+                      />
+                      <p className={styles.sectionLabel}>How are you feeling?</p>
+                      <div className={styles.tagRow} role="group" aria-label="Mood tags">
+                        {editTagOptions.map(tag => (
+                          <button
+                            key={tag}
+                            type="button"
+                            className={[styles.tag, editTags.includes(tag) ? styles.tagActive : ''].join(' ')}
+                            onClick={() => toggleEditTag(tag)}
+                            aria-pressed={editTags.includes(tag)}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+                      {editError && (
+                        <p className={styles.noticeError} role="alert">
+                          <CircleAlert aria-hidden="true" className={styles.noticeIcon} />
+                          {editError}
+                        </p>
+                      )}
+                      <div className={styles.editActions}>
+                        <button className={styles.primaryBtn} type="submit" disabled={editing}>
+                          {editing ? 'Saving…' : 'Save changes'}
+                        </button>
+                        <button
+                          className={styles.secondaryBtn}
+                          type="button"
+                          onClick={() => setEditMode(false)}
+                          disabled={editing}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <div className={styles.entryContent}>{detailEntry.content}</div>
+                      {detailEntry.mood_tags.length > 0 && (
                         <div className={styles.entryTags}>
-                          {entry.mood_tags.map(t => <span key={t} className={styles.entryTag}>{t}</span>)}
+                          {detailEntry.mood_tags.map(t => <span key={t} className={styles.entryTag}>{t}</span>)}
                         </div>
                       )}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-            {loadMoreError && <p className={styles.noticeError} role="alert">{loadMoreError}</p>}
-            {nextCursor && (
-              <button className={styles.loadMoreBtn} onClick={handleLoadMore} disabled={loadingMore}>
-                {loadingMore ? 'Loading…' : 'Load older entries'}
-              </button>
+
+                      <div className={styles.reflectionSection}>
+                        {reflectError && (
+                          <p className={styles.noticeError} role="alert">
+                            <CircleAlert aria-hidden="true" className={styles.noticeIcon} />
+                            {reflectError}
+                          </p>
+                        )}
+                        {reflecting ? (
+                          <p className={styles.reflectStatus}>
+                            <span className={styles.spinner} aria-hidden="true" /> Asking your companion…
+                          </p>
+                        ) : detailEntry.ai_reflection ? (
+                          <>
+                            <p className={styles.reflectionEyebrow}>Your Soulwe companion</p>
+                            <p className={styles.reflectionText}>{detailEntry.ai_reflection}</p>
+                            <button
+                              className={styles.reflectionBtn}
+                              onClick={() => handleReflect(detailEntry.id)}
+                            >
+                              Fresh reflection
+                            </button>
+                          </>
+                        ) : (
+                          <div className={styles.noReflection}>
+                            <p className={styles.noReflectionText}>No AI reflection yet.</p>
+                            <button
+                              className={styles.reflectionBtn}
+                              onClick={() => handleReflect(detailEntry.id)}
+                            >
+                              Ask your companion
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {detailNotice && (
+                        <p className={styles.noticeSuccess} role="status">
+                          <CircleCheck aria-hidden="true" className={styles.noticeIcon} />
+                          {detailNotice}
+                        </p>
+                      )}
+
+                      <div className={styles.entryActions}>
+                        <button className={styles.secondaryBtn} onClick={startEdit}>Edit</button>
+                        {deleteConfirm ? (
+                          <>
+                            <button className={styles.dangerBtn} onClick={handleDelete} disabled={deleting}>
+                              {deleting ? 'Deleting…' : 'Confirm delete'}
+                            </button>
+                            <button className={styles.secondaryBtn} onClick={() => setDeleteConfirm(false)}>
+                              Keep entry
+                            </button>
+                          </>
+                        ) : (
+                          <button className={styles.dangerBtn} onClick={handleDelete}>Delete</button>
+                        )}
+                      </div>
+                      {deleteError && (
+                        <p className={styles.noticeError} role="alert">
+                          <CircleAlert aria-hidden="true" className={styles.noticeIcon} />
+                          {deleteError}
+                        </p>
+                      )}
+                    </>
+                  )
+                )}
+              </section>
             )}
-          </>
-        )}
+
+            {listLoading ? (
+              <p className={styles.listStatus}>Loading your journal…</p>
+            ) : listError ? (
+              <div className={styles.noticeError} role="alert">
+                <CircleAlert aria-hidden="true" className={styles.noticeIcon} />
+                {listError}
+                <button className={styles.smallBtn} onClick={() => setTick(t => t + 1)}>
+                  Try again
+                </button>
+              </div>
+            ) : entries.length === 0 ? (
+              <p className={styles.emptyNote}>Your journal is empty. Write your first entry above.</p>
+            ) : (
+              <>
+                <div className={styles.entryList}>
+                  {entries.map(entry => {
+                    const d = formatListDate(entry.created_at)
+                    const isPrayer = entry.prompt_used === PRAYER_PROMPT
+                    return (
+                      <button
+                        key={entry.id}
+                        className={[
+                          styles.entryItem,
+                          detailId === entry.id ? styles.entryItemActive : '',
+                        ].join(' ')}
+                        onClick={() => openEntry(entry.id)}
+                        aria-label={`Open ${isPrayer ? 'prayer' : 'journal'} entry from ${formatFullDate(entry.created_at)}`}
+                      >
+                        <div className={styles.entryDate} aria-hidden="true">
+                          <span className={styles.entryDay}>{d.day}</span>
+                          <span className={styles.entryMonth}>{d.month}</span>
+                        </div>
+                        <div className={styles.entryBody}>
+                          <div className={styles.entryMeta}>
+                            <span className={styles.entryModeTag}>
+                              {isPrayer
+                                ? <><HandHeart aria-hidden="true" className={styles.entryModeIcon} /> Prayer</>
+                                : <><NotebookPen aria-hidden="true" className={styles.entryModeIcon} /> Journal</>}
+                            </span>
+                            <span className={styles.entryWords}>{wordsLabel(entry.word_count)}</span>
+                            {entry.ai_reflection && (
+                              <span className={styles.reflectionBadge}>Reflection</span>
+                            )}
+                          </div>
+                          <p className={styles.entryPreview}>
+                            {entry.prompt_used && entry.prompt_used !== PRAYER_PROMPT
+                              ? `“${entry.prompt_used}”`
+                              : 'Your private words — tap to read'}
+                          </p>
+                          {entry.mood_tags.length > 0 && (
+                            <div className={styles.entryTags}>
+                              {entry.mood_tags.map(t => <span key={t} className={styles.entryTag}>{t}</span>)}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+                {loadMoreError && (
+                  <p className={styles.noticeError} role="alert">
+                    <CircleAlert aria-hidden="true" className={styles.noticeIcon} />
+                    {loadMoreError}
+                  </p>
+                )}
+                {nextCursor && (
+                  <button className={styles.loadMoreBtn} onClick={handleLoadMore} disabled={loadingMore}>
+                    {loadingMore ? 'Loading…' : 'Load older entries'}
+                  </button>
+                )}
+              </>
+            )}
+          </aside>
+        </div>
       </div>
     </div>
   )
