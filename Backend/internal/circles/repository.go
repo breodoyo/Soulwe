@@ -80,7 +80,8 @@ const (
 	messageSelect = `SELECT m.id,
 		COALESCE(NULLIF(BTRIM(u.display_name), ''), a.anon_name, ` + sqlDefaultAuthorName + `),
 		m.anon_identity_id IS NOT NULL,
-		m.content, m.reaction_counts, m.created_at
+		m.content, m.reaction_counts, m.created_at,
+		COALESCE(m.user_id::text, m.anon_identity_id::text, '')
 		FROM circle_messages m
 		LEFT JOIN anon_identities a ON a.id = m.anon_identity_id
 		LEFT JOIN users u ON u.id = m.user_id
@@ -103,7 +104,8 @@ const (
 		SELECT i.id,
 			COALESCE(NULLIF(BTRIM(u.display_name), ''), a.anon_name, ` + sqlDefaultAuthorName + `),
 			i.anon_identity_id IS NOT NULL,
-			i.content, i.reaction_counts, i.created_at
+			i.content, i.reaction_counts, i.created_at,
+			COALESCE(i.user_id::text, i.anon_identity_id::text, '')
 		FROM inserted i
 		LEFT JOIN anon_identities a ON a.id = i.anon_identity_id
 		LEFT JOIN users u ON u.id = i.user_id`
@@ -230,5 +232,6 @@ func scanCircle(s func(dest ...any) error, c *Circle) error {
 }
 
 func scanMessage(s func(dest ...any) error, m *CircleMessage) error {
-	return s(&m.ID, &m.AuthorName, &m.IsAnonymous, &m.Content, &m.ReactionCounts, &m.CreatedAt)
+	return s(&m.ID, &m.AuthorName, &m.IsAnonymous, &m.Content, &m.ReactionCounts,
+		&m.CreatedAt, &m.AuthorIdentityID)
 }

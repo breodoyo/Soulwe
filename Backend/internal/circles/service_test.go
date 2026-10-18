@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -147,12 +148,13 @@ func (f *fakeRepository) CreateMessage(ctx context.Context, circleID string, own
 	f.messageSeq++
 	key := ownerKey(owner)
 	m := CircleMessage{
-		ID:             fmt.Sprintf("msg-%d", f.messageSeq),
-		AuthorName:     f.authorName[key],
-		IsAnonymous:    owner.Anonymous(),
-		Content:        content,
-		ReactionCounts: map[string]int{},
-		CreatedAt:      testNow.Add(time.Duration(f.messageSeq) * time.Second),
+		ID:               fmt.Sprintf("msg-%d", f.messageSeq),
+		AuthorName:       f.authorName[key],
+		IsAnonymous:      owner.Anonymous(),
+		AuthorIdentityID: owner.ID(),
+		Content:          content,
+		ReactionCounts:   map[string]int{},
+		CreatedAt:        testNow.Add(time.Duration(f.messageSeq) * time.Second),
 	}
 	if owner.Anonymous() {
 		// Mirrors the SQL: an anonymous author falls back to the pseudonym.
@@ -163,7 +165,7 @@ func (f *fakeRepository) CreateMessage(ctx context.Context, circleID string, own
 }
 
 func TestService_List(t *testing.T) {
-	svc := NewService(newFakeRepository())
+	svc := NewService(newFakeRepository(), testNamingKey)
 
 	circles, err := svc.List(context.Background())
 	if err != nil {
@@ -183,7 +185,7 @@ func TestService_List(t *testing.T) {
 }
 
 func TestService_Get(t *testing.T) {
-	svc := NewService(newFakeRepository())
+	svc := NewService(newFakeRepository(), testNamingKey)
 	ctx := context.Background()
 
 	if err := svc.Join(ctx, anonOneOwner, circleA); err != nil {
@@ -224,7 +226,7 @@ func TestService_Get(t *testing.T) {
 }
 
 func TestService_JoinAndLeave(t *testing.T) {
-	svc := NewService(newFakeRepository())
+	svc := NewService(newFakeRepository(), testNamingKey)
 	ctx := context.Background()
 
 	t.Run("join then duplicate join conflicts", func(t *testing.T) {
@@ -243,7 +245,7 @@ func TestService_JoinAndLeave(t *testing.T) {
 	})
 
 	t.Run("leave is idempotent", func(t *testing.T) {
-		other := NewService(newFakeRepository())
+		other := NewService(newFakeRepository(), testNamingKey)
 		if err := other.Leave(ctx, anonTwoOwner, circleA); err != nil {
 			t.Fatalf("leaving a circle never joined must succeed, got %v", err)
 		}
@@ -280,7 +282,7 @@ func TestService_JoinAndLeave(t *testing.T) {
 }
 
 func TestService_SendAndListMessages(t *testing.T) {
-	svc := NewService(newFakeRepository())
+	svc := NewService(newFakeRepository(), testNamingKey)
 	ctx := context.Background()
 
 	if err := svc.Join(ctx, anonOneOwner, circleA); err != nil {
@@ -322,11 +324,12 @@ func TestService_SendAndListMessages(t *testing.T) {
 		if first.ID == "" || first.AuthorName == "" {
 			t.Errorf("expected id and author_name on the created message, got %+v", first)
 		}
-		if first.AuthorName != "Anon Baobab" {
-			t.Errorf("expected the anonymous creator's pseudonym, got %q", first.AuthorName)
-		}
+		assertFriendlyName(t, first.AuthorName, anonOne)
 		if !first.IsAnonymous {
 			t.Error("expected an anonymous author's message to be flagged is_anonymous")
+		}
+		if !first.IsMine {
+			t.Error("a message the caller sent must be marked is_mine")
 		}
 		second, err := svc.SendMessage(ctx, anonOneOwner, circleA, "It is so hard.")
 		if err != nil {
@@ -355,7 +358,7 @@ func TestService_SendAndListMessages(t *testing.T) {
 
 	t.Run("pagination honors before and clamps limit", func(t *testing.T) {
 		fake := newFakeRepository()
-		svc := NewService(fake)
+		svc := NewService(fake, testNamingKey)
 		if err := svc.Join(ctx, anonOneOwner, circleA); err != nil {
 			t.Fatalf("setup join: %v", err)
 		}
@@ -412,7 +415,7 @@ func TestService_SendAndListMessages(t *testing.T) {
 // signed-in member and an anonymous session through the same code path, each
 // under its own identity and display name.
 func TestService_RegisteredAndAnonymousTogether(t *testing.T) {
-	svc := NewService(newFakeRepository())
+	svc := NewService(newFakeRepository(), testNamingKey)
 	ctx := context.Background()
 
 	t.Run("a registered member can join like an anonymous session can", func(t *testing.T) {
@@ -431,7 +434,7 @@ func TestService_RegisteredAndAnonymousTogether(t *testing.T) {
 		}
 	})
 
-	t.Run("a registered author is named, an anonymous one is pseudonymous", func(t *testing.T) {
+	t.Run("every author wears a per-circle label, never a real name", func(t *testing.T) {
 		if err := svc.Join(ctx, anonOneOwner, circleA); err != nil {
 			t.Fatalf("anonymous join: %v", err)
 		}
@@ -440,36 +443,52 @@ func TestService_RegisteredAndAnonymousTogether(t *testing.T) {
 		if err != nil {
 			t.Fatalf("registered SendMessage: %v", err)
 		}
-		if open.AuthorName != "Bree" {
-			t.Errorf("expected the registered author's display name, got %q", open.AuthorName)
+		assertFriendlyName(t, open.AuthorName, userOne)
+		if strings.Contains(open.AuthorName, "Bree") {
+			t.Errorf("a registered member must post under a pseudonym, got %q", open.AuthorName)
 		}
 		if open.IsAnonymous {
 			t.Error("a registered author must not be labelled anonymous")
+		}
+		if !open.IsMine {
+			t.Error("a message the caller sent must be marked is_mine")
 		}
 
 		anon, err := svc.SendMessage(ctx, anonOneOwner, circleA, "Still anonymous though.")
 		if err != nil {
 			t.Fatalf("anonymous SendMessage: %v", err)
 		}
-		if anon.AuthorName != "Anon Baobab" {
-			t.Errorf("expected the anonymous author's pseudonym, got %q", anon.AuthorName)
+		assertFriendlyName(t, anon.AuthorName, anonOne)
+		if anon.AuthorName == open.AuthorName {
+			t.Errorf("two members must not share the label %q", open.AuthorName)
 		}
 		if !anon.IsAnonymous {
 			t.Error("an anonymous author must be labelled anonymous")
 		}
 
-		for _, reader := range []middleware.Owner{userOneOwner, anonOneOwner} {
-			messages, err := svc.ListMessages(ctx, reader, circleA, 10, nil)
+		for _, tc := range []struct {
+			reader  middleware.Owner
+			ownText string
+		}{
+			{userOneOwner, "Signed in, but still here."},
+			{anonOneOwner, "Still anonymous though."},
+		} {
+			messages, err := svc.ListMessages(ctx, tc.reader, circleA, 10, nil)
 			if err != nil {
 				t.Fatalf("ListMessages: %v", err)
 			}
 			if len(messages) != 2 {
 				t.Fatalf("expected both messages to be readable, got %d", len(messages))
 			}
+			for _, m := range messages {
+				if want := m.Content == tc.ownText; m.IsMine != want {
+					t.Errorf("is_mine=%t for %q read by its author, want %t", m.IsMine, m.Content, want)
+				}
+			}
 		}
 	})
 
-	t.Run("a registered member with no display name gets the neutral label", func(t *testing.T) {
+	t.Run("a registered member with no display name still gets a per-circle label", func(t *testing.T) {
 		if err := svc.Join(ctx, userTwoOwner, circleA); err != nil {
 			t.Fatalf("join: %v", err)
 		}
@@ -477,11 +496,15 @@ func TestService_RegisteredAndAnonymousTogether(t *testing.T) {
 		if err != nil {
 			t.Fatalf("SendMessage: %v", err)
 		}
-		if msg.AuthorName != DefaultAuthorName {
-			t.Errorf("expected the fallback %q, got %q", DefaultAuthorName, msg.AuthorName)
+		if msg.AuthorName == "" || msg.AuthorName == DefaultAuthorName {
+			t.Errorf("expected a per-circle label rather than the fallback %q, got %q", DefaultAuthorName, msg.AuthorName)
 		}
+		assertFriendlyName(t, msg.AuthorName, userTwo)
 		if msg.IsAnonymous {
 			t.Error("a registered member with no display name is not anonymous")
+		}
+		if !msg.IsMine {
+			t.Error("a message the caller sent must be marked is_mine")
 		}
 	})
 

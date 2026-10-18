@@ -25,10 +25,14 @@ type Service interface {
 
 type service struct {
 	circles Repository
+	names   nameDeriver
 }
 
-func NewService(circles Repository) *service {
-	return &service{circles: circles}
+// NewService wires the circle domain with the secret that derives per-circle
+// display names. The key must be server-side only: it is what keeps a label
+// reversible to nothing.
+func NewService(circles Repository, namingKey string) *service {
+	return &service{circles: circles, names: newNameDeriver(namingKey)}
 }
 
 func (s *service) List(ctx context.Context) ([]Circle, error) {
@@ -81,8 +85,9 @@ func (s *service) ListMessages(ctx context.Context, owner middleware.Owner, circ
 	if messages == nil {
 		messages = make([]CircleMessage, 0)
 	}
+	viewer, _ := middleware.IdentityFromOwner(owner)
 	for i := range messages {
-		normalizeMessage(&messages[i])
+		s.labelMessage(&messages[i], viewer, circleID)
 	}
 	return messages, nil
 }
@@ -99,8 +104,24 @@ func (s *service) SendMessage(ctx context.Context, owner middleware.Owner, circl
 	if err != nil {
 		return nil, err
 	}
+	// The author is the caller, so the created message is always their own.
+	if identity, ok := middleware.IdentityFromOwner(owner); ok {
+		message.AuthorName = s.names.derive(identity, circleID)
+	}
+	message.IsMine = true
 	normalizeMessage(message)
 	return message, nil
+}
+
+// labelMessage replaces whatever label the repository resolved with the
+// per-circle one and records whether the message belongs to the reader, so the
+// UI can mark "You" without any identity leaving the API.
+func (s *service) labelMessage(m *CircleMessage, viewerIdentity, circleID string) {
+	if m.AuthorIdentityID != "" {
+		m.AuthorName = s.names.derive(m.AuthorIdentityID, circleID)
+		m.IsMine = m.AuthorIdentityID == viewerIdentity && viewerIdentity != ""
+	}
+	normalizeMessage(m)
 }
 
 func (s *service) requireMember(ctx context.Context, owner middleware.Owner, circleID string) error {

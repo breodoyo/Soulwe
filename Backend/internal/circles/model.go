@@ -44,11 +44,17 @@ type Circle struct {
 	CreatedAt   time.Time `json:"-"`
 }
 
+// CircleMessage is the wire shape of a message. AuthorName is the per-circle
+// label the service derives; AuthorIdentityID is the raw author key the
+// repository resolves and is never serialized, and IsAnonymous stays internal
+// so the response never reveals whether the author is a registered account.
 type CircleMessage struct {
-	ID             string         `json:"id"`
-	AuthorName     string         `json:"author_name"`
-	IsAnonymous    bool           `json:"is_anonymous"`
-	Content        string         `json:"content"`
-	ReactionCounts map[string]int `json:"reaction_counts"`
-	CreatedAt      time.Time      `json:"created_at"`
+	ID               string         `json:"id"`
+	AuthorName       string         `json:"author_name"`
+	IsAnonymous      bool           `json:"-"`
+	AuthorIdentityID string         `json:"-"`
+	IsMine           bool           `json:"is_mine"`
+	Content          string         `json:"content"`
+	ReactionCounts   map[string]int `json:"reaction_counts"`
+	CreatedAt        time.Time      `json:"created_at"`
 }
