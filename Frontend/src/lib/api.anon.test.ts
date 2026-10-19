@@ -7,6 +7,22 @@ async function loadApi() {
   return mod
 }
 
+// fetch's first argument can be a string, URL or Request; the method may live in
+// the init object or on the Request itself. Normalise both forms before filtering.
+function fetchCallInfo(input: RequestInfo | URL, init?: RequestInit): { url: string; method: string } {
+  let url: string
+  if (typeof input === 'string') url = input
+  else if (input instanceof URL) url = input.href
+  else url = input.url
+  const method = (init?.method ?? (input instanceof Request ? input.method : undefined) ?? 'GET').toUpperCase()
+  return { url, method }
+}
+
+function isPostToAnonymousSession(input: RequestInfo | URL, init?: RequestInit): boolean {
+  const { url, method } = fetchCallInfo(input, init)
+  return url.endsWith('/api/v1/auth/anonymous') && method === 'POST'
+}
+
 describe('ensureAnonSession single-flight and recovery', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -43,10 +59,7 @@ describe('ensureAnonSession single-flight and recovery', () => {
     await Promise.all([p1, p2])
 
     // Count POSTs to /auth/anonymous
-    const postCalls = fetchSpy.mock.calls.filter(([req]) => {
-      const url = String(req)
-      return url.endsWith('/api/v1/auth/anonymous') && (req as Request).method === 'POST'
-    })
+    const postCalls = fetchSpy.mock.calls.filter(([req, init]) => isPostToAnonymousSession(req, init))
     expect(postCalls.length).toBe(1)
     expect(localStorage.getItem(ANON_TOKEN_KEY)).toBe('anon-token-1')
   })
@@ -73,10 +86,7 @@ describe('ensureAnonSession single-flight and recovery', () => {
     localStorage.setItem(ANON_TOKEN_KEY, 'existing-token')
     await ensureAnonSession()
     // Should have called me, not POSTed
-    const postCalls = fetchSpy.mock.calls.filter(([req]) => {
-      const url = String(req)
-      return url.endsWith('/api/v1/auth/anonymous') && (req as Request).method === 'POST'
-    })
+    const postCalls = fetchSpy.mock.calls.filter(([req, init]) => isPostToAnonymousSession(req, init))
     expect(postCalls.length).toBe(0)
     expect(getAnonToken()).toBe('existing-token')
   })
@@ -103,10 +113,7 @@ describe('ensureAnonSession single-flight and recovery', () => {
     localStorage.setItem(ANON_TOKEN_KEY, 'stale-token')
     await ensureAnonSession()
     // After 401 on me, it should have cleared and POSTed once
-    const postCalls = fetchSpy.mock.calls.filter(([req]) => {
-      const url = String(req)
-      return url.endsWith('/api/v1/auth/anonymous') && (req as Request).method === 'POST'
-    })
+    const postCalls = fetchSpy.mock.calls.filter(([req, init]) => isPostToAnonymousSession(req, init))
     expect(postCalls.length).toBe(1)
     expect(localStorage.getItem(ANON_TOKEN_KEY)).toBe('replacement')
     // Should not loop
