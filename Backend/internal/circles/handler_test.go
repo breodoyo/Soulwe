@@ -140,6 +140,7 @@ func message() *CircleMessage {
 		ID:             "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
 		AuthorName:     "Anon Baobab",
 		IsAnonymous:    true,
+		IsMine:         true,
 		Content:        "Lost my father last month.",
 		ReactionCounts: map[string]int{},
 		CreatedAt:      testNow,
@@ -362,8 +363,8 @@ func TestHandler_ListMessages(t *testing.T) {
 		if !strings.Contains(body, `"author_name":"Anon Baobab"`) {
 			t.Errorf("expected the author name in the response: %s", body)
 		}
-		if !strings.Contains(body, `"is_anonymous":true`) {
-			t.Errorf("expected is_anonymous on the message: %s", body)
+		if !strings.Contains(body, `"is_mine":true`) {
+			t.Errorf("expected is_mine on the message: %s", body)
 		}
 		for _, leak := range []string{"anon_identity_id", "user_id"} {
 			if strings.Contains(body, leak) {
@@ -439,8 +440,8 @@ func TestHandler_SendMessage(t *testing.T) {
 		if !strings.Contains(body, `"author_name":"Anon Baobab"`) || !strings.Contains(body, `"content":`) {
 			t.Errorf("unexpected message body: %s", body)
 		}
-		if !strings.Contains(body, `"is_anonymous":true`) {
-			t.Errorf("expected is_anonymous on the created message: %s", body)
+		if !strings.Contains(body, `"is_mine":true`) {
+			t.Errorf("expected is_mine on the created message: %s", body)
 		}
 		for _, leak := range []string{"anon_identity_id", "user_id"} {
 			if strings.Contains(body, leak) {
@@ -454,6 +455,7 @@ func TestHandler_SendMessage(t *testing.T) {
 			ID:             "cccccccc-cccc-cccc-cccc-cccccccccccc",
 			AuthorName:     "Bree",
 			IsAnonymous:    false,
+			IsMine:         true,
 			Content:        "Signing in, still here.",
 			ReactionCounts: map[string]int{},
 			CreatedAt:      testNow,
@@ -471,8 +473,8 @@ func TestHandler_SendMessage(t *testing.T) {
 		if !strings.Contains(body, `"author_name":"Bree"`) {
 			t.Errorf("expected the registered display name: %s", body)
 		}
-		if !strings.Contains(body, `"is_anonymous":false`) {
-			t.Errorf("expected is_anonymous false for a registered author: %s", body)
+		if !strings.Contains(body, `"is_mine":true`) {
+			t.Errorf("expected is_mine for the caller's own message: %s", body)
 		}
 		if strings.Contains(body, testUserID) {
 			t.Errorf("a registered author's user_id must never appear on the wire: %s", body)

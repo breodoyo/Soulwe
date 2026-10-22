@@ -4,24 +4,21 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 )
 
-// fakeRepository is an in-memory Repository that mimics the real table's
-// UNIQUE constraints on anon_name and token_hash.
+// fakeRepository is an in-memory, concurrency-safe Repository that mimics the
+// real table's UNIQUE constraints on anon_name, token_hash and device_uuid.
 type fakeRepository struct {
+	mu           sync.Mutex
 	byTokenHash  map[string]*AnonIdentity
 	byDeviceUUID map[string]*AnonIdentity
 	takenNames   map[string]bool
 	nextID       int
 	lastSeenAt   map[string]bool
-	rotations    int
 	creates      int
-	conflicts    int // upcoming Create calls that should collide
-
-	// deviceCreatedRacing simulates a concurrent request winning this device's
-	// insert; it fires once and leaves the row behind.
-	deviceCreatedRacing bool
+	conflicts    int // upcoming Create calls that should collide on name/token
 }
 
 func newFakeRepository() *fakeRepository {
@@ -34,37 +31,25 @@ func newFakeRepository() *fakeRepository {
 }
 
 func (f *fakeRepository) Create(_ context.Context, identity *AnonIdentity) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	if f.conflicts > 0 {
 		f.conflicts--
 		return ErrIdentityConflict
 	}
-	if f.deviceCreatedRacing && identity.DeviceUUID != nil {
-		f.deviceCreatedRacing = false // fire once
-		existing := &AnonIdentity{
-			ID:         "c0ffee00-0000-0000-0000-0000000000ff",
-			DeviceUUID: identity.DeviceUUID,
-			AnonName:   "Anon Existing",
-			TokenHash:  strings.Repeat("f", 64),
-		}
-		f.takenNames[existing.AnonName] = true
-		f.byTokenHash[existing.TokenHash] = existing
-		f.byDeviceUUID[*identity.DeviceUUID] = existing
+	if f.byTokenHash[identity.TokenHash] != nil || f.takenNames[identity.AnonName] {
 		return ErrIdentityConflict
 	}
-	if f.byTokenHash[identity.TokenHash] != nil {
-		return ErrIdentityConflict
+	if identity.DeviceUUID != nil && f.byDeviceUUID[*identity.DeviceUUID] != nil {
+		return ErrDeviceConflict
 	}
-	if f.takenNames[identity.AnonName] {
-		return ErrIdentityConflict
-	}
+
 	f.nextID++
 	identity.ID = string(rune('a'+f.nextID)) + strings.Repeat("0", 35)
 	f.takenNames[identity.AnonName] = true
 	f.byTokenHash[identity.TokenHash] = identity
 	if identity.DeviceUUID != nil {
-		if existing := f.byDeviceUUID[*identity.DeviceUUID]; existing != nil {
-			return ErrIdentityConflict
-		}
 		f.byDeviceUUID[*identity.DeviceUUID] = identity
 	}
 	f.creates++
@@ -72,6 +57,8 @@ func (f *fakeRepository) Create(_ context.Context, identity *AnonIdentity) error
 }
 
 func (f *fakeRepository) FindByTokenHash(_ context.Context, tokenHash string) (*AnonIdentity, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	identity, ok := f.byTokenHash[tokenHash]
 	if !ok {
 		return nil, ErrIdentityNotFound
@@ -79,38 +66,10 @@ func (f *fakeRepository) FindByTokenHash(_ context.Context, tokenHash string) (*
 	return identity, nil
 }
 
-func (f *fakeRepository) FindByDeviceUUID(_ context.Context, deviceUUID string) (*AnonIdentity, error) {
-	identity, ok := f.byDeviceUUID[deviceUUID]
-	if !ok {
-		return nil, ErrIdentityNotFound
-	}
-	return identity, nil
-}
-
 func (f *fakeRepository) UpdateLastSeen(_ context.Context, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.lastSeenAt[id] = true
-	return nil
-}
-
-func (f *fakeRepository) RotateToken(_ context.Context, id, tokenHash string) error {
-	identity := f.byID(id)
-	if identity == nil {
-		return ErrIdentityNotFound
-	}
-	delete(f.byTokenHash, identity.TokenHash)
-	identity.TokenHash = tokenHash
-	f.byTokenHash[tokenHash] = identity
-	f.lastSeenAt[id] = true
-	f.rotations++
-	return nil
-}
-
-func (f *fakeRepository) byID(id string) *AnonIdentity {
-	for _, identity := range f.byTokenHash {
-		if identity.ID == id {
-			return identity
-		}
-	}
 	return nil
 }
 
@@ -140,7 +99,41 @@ func TestServiceCreateSession(t *testing.T) {
 		}
 	})
 
-	t.Run("same device is idempotent and keeps the same anonymous id", func(t *testing.T) {
+	t.Run("two concurrent calls both succeed with different identities", func(t *testing.T) {
+		repo := newFakeRepository()
+		svc := NewService(repo)
+
+		const calls = 2
+		sessions := make([]*Session, calls)
+		errs := make([]error, calls)
+
+		var wg sync.WaitGroup
+		for i := 0; i < calls; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				sessions[i], errs[i] = svc.CreateSession(context.Background(), "")
+			}(i)
+		}
+		wg.Wait()
+
+		for i, err := range errs {
+			if err != nil {
+				t.Fatalf("concurrent call %d returned error: %v", i, err)
+			}
+		}
+		if sessions[0].AnonymousID == sessions[1].AnonymousID {
+			t.Errorf("concurrent calls shared an identity id %q", sessions[0].AnonymousID)
+		}
+		if sessions[0].Token == sessions[1].Token {
+			t.Error("concurrent calls shared a token")
+		}
+		if repo.creates != calls {
+			t.Errorf("expected %d identities, got %d", calls, repo.creates)
+		}
+	})
+
+	t.Run("a repeated device call mints a new identity and never reissues the old one", func(t *testing.T) {
 		repo := newFakeRepository()
 		svc := NewService(repo)
 		deviceUUID := "550e8400-e29b-41d4-a716-446655440000"
@@ -154,20 +147,44 @@ func TestServiceCreateSession(t *testing.T) {
 			t.Fatalf("second CreateSession returned error: %v", err)
 		}
 
-		if second.AnonymousID != first.AnonymousID {
-			t.Errorf("same device must keep anonymous_id %q, got %q", first.AnonymousID, second.AnonymousID)
+		if second.AnonymousID == first.AnonymousID {
+			t.Errorf("a known device UUID must not reissue identity %q", first.AnonymousID)
 		}
 		if second.Token == first.Token {
-			t.Error("the token should rotate on a repeated device call")
+			t.Error("expected distinct tokens for distinct identities")
 		}
-		if repo.creates != 1 {
-			t.Errorf("same device must not create a second identity, creates=%d", repo.creates)
+		// The first session must remain valid: the second call never touched it.
+		if id, ok, err := svc.Authenticate(context.Background(), first.Token); err != nil || !ok || id != first.AnonymousID {
+			t.Errorf("first token must keep authenticating its identity: id=%q ok=%v err=%v", id, ok, err)
 		}
-		if repo.rotations != 1 {
-			t.Errorf("expected one token rotation, got %d", repo.rotations)
+		if repo.creates != 2 {
+			t.Errorf("expected two identities, got %d", repo.creates)
 		}
-		if _, ok := repo.byTokenHash[HashToken(first.Token)]; ok {
-			t.Error("old token hash should be replaced after rotation")
+	})
+
+	t.Run("a device UUID already claimed yields a fresh identity, not the owner's", func(t *testing.T) {
+		repo := newFakeRepository()
+		svc := NewService(repo)
+		deviceUUID := "550e8400-e29b-41d4-a716-446655440000"
+		owner := &AnonIdentity{
+			ID:         "c0ffee00-0000-0000-0000-0000000000ff",
+			DeviceUUID: &deviceUUID,
+			AnonName:   "Anon Existing",
+			TokenHash:  strings.Repeat("f", 64),
+		}
+		repo.byDeviceUUID[deviceUUID] = owner
+		repo.byTokenHash[owner.TokenHash] = owner
+		repo.takenNames[owner.AnonName] = true
+
+		session, err := svc.CreateSession(context.Background(), deviceUUID)
+		if err != nil {
+			t.Fatalf("CreateSession returned error: %v", err)
+		}
+		if session.AnonymousID == owner.ID {
+			t.Error("knowing a device UUID must not hand back the owner's identity")
+		}
+		if _, ok := repo.byTokenHash[HashToken(session.Token)]; !ok {
+			t.Error("expected the new session's token hash to be stored")
 		}
 	})
 
@@ -188,33 +205,6 @@ func TestServiceCreateSession(t *testing.T) {
 		}
 	})
 
-	t.Run("loses a concurrent create race but reuses the winner's identity", func(t *testing.T) {
-		// Our lookup misses, another request inserts first, and our insert
-		// collides on the device_uuid index on every retry; the service must
-		// re-check and rotate the winner instead of returning a 500.
-		repo := newFakeRepository()
-		repo.deviceCreatedRacing = true
-		svc := NewService(repo)
-		deviceUUID := "550e8400-e29b-41d4-a716-446655440000"
-
-		session, err := svc.CreateSession(context.Background(), deviceUUID)
-		if err != nil {
-			t.Fatalf("CreateSession returned error instead of reusing the race winner: %v", err)
-		}
-		if session.AnonymousID != "c0ffee00-0000-0000-0000-0000000000ff" {
-			t.Errorf("expected the concurrent winner's anonymous id, got %q", session.AnonymousID)
-		}
-		if repo.creates != 0 {
-			t.Errorf("expected no successful insert from the losing request, creates=%d", repo.creates)
-		}
-		if repo.rotations != 1 {
-			t.Errorf("expected the winner's token to be rotated once, rotations=%d", repo.rotations)
-		}
-		if session.Token == "" {
-			t.Error("expected a fresh token to rotate the winner's identity")
-		}
-	})
-
 	t.Run("gives up after exhausting retries", func(t *testing.T) {
 		repo := newFakeRepository()
 		repo.conflicts = maxCreateAttempts + 3
@@ -228,7 +218,7 @@ func TestServiceCreateSession(t *testing.T) {
 }
 
 func TestServiceAuthenticate(t *testing.T) {
-	t.Run("valid token returns the identity id", func(t *testing.T) {
+	t.Run("a valid token repeatedly returns the same identity", func(t *testing.T) {
 		repo := newFakeRepository()
 		svc := NewService(repo)
 
@@ -237,15 +227,39 @@ func TestServiceAuthenticate(t *testing.T) {
 			t.Fatalf("CreateSession returned error: %v", err)
 		}
 
-		id, ok, err := svc.Authenticate(context.Background(), session.Token)
+		for i := 0; i < 3; i++ {
+			id, ok, err := svc.Authenticate(context.Background(), session.Token)
+			if err != nil {
+				t.Fatalf("Authenticate returned error: %v", err)
+			}
+			if !ok {
+				t.Fatal("expected the freshly minted token to authenticate")
+			}
+			if id != session.AnonymousID {
+				t.Errorf("expected id %q, got %q", session.AnonymousID, id)
+			}
+		}
+	})
+
+	t.Run("a wrong token never returns another user's session", func(t *testing.T) {
+		repo := newFakeRepository()
+		svc := NewService(repo)
+
+		victim, err := svc.CreateSession(context.Background(), "")
 		if err != nil {
-			t.Fatalf("Authenticate returned error: %v", err)
+			t.Fatalf("CreateSession returned error: %v", err)
 		}
-		if !ok {
-			t.Fatal("expected the freshly minted token to authenticate")
+
+		wrong, err := GenerateRawToken()
+		if err != nil {
+			t.Fatalf("GenerateRawToken returned error: %v", err)
 		}
-		if id != session.AnonymousID {
-			t.Errorf("expected id %q, got %q", session.AnonymousID, id)
+		id, ok, err := svc.Authenticate(context.Background(), wrong)
+		if err != nil {
+			t.Fatalf("Authenticate returned error for a wrong token: %v", err)
+		}
+		if ok || id != "" {
+			t.Errorf("a wrong token must not resolve to an identity, got ok=%v id=%q (victim=%q)", ok, id, victim.AnonymousID)
 		}
 	})
 

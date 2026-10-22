@@ -6,6 +6,7 @@ import {
 import { api } from '@/lib/api'
 import { clearAnonToken, ensureAnonSession, getAccessToken } from '@/lib/api'
 import { useAuth } from '@/auth/AuthContext'
+import { crisisHelplines } from '@/landingContent'
 import { isApiError, type Circle, type CircleMessage } from '@/types'
 import styles from './CirclePage.module.css'
 
@@ -28,23 +29,12 @@ function circleIcon(key: string | null) {
   return (key && CIRCLE_ICONS[key]) || MessageCircle
 }
 
-const ANON_COLORS = ['#0F766E', '#D4780A', '#16A34A', '#44403C', '#78716C']
-
 function errorMessage(err: unknown, fallback: string): string {
   return isApiError(err) ? err.message : fallback
 }
 
 function initialsOf(name: string): string {
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
-}
-
-// Deterministic per-author colour so a bubble matches its avatar, keyed on the name and never on an identity.
-function avatarColor(name: string): string {
-  let hash = 0
-  for (let i = 0; i < name.length; i++) {
-    hash = (hash * 31 + name.charCodeAt(i)) >>> 0
-  }
-  return ANON_COLORS[hash % ANON_COLORS.length]
 }
 
 function formatMessageTime(iso: string): string {
@@ -56,6 +46,13 @@ function formatMessageTime(iso: string): string {
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours}h ago`
   return date.toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })
+}
+
+// Full local time for the tooltip and screen readers; the visible label stays relative.
+function formatMessageTimeFull(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
 export default function CirclePage() {
@@ -79,7 +76,7 @@ export default function CirclePage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState<string | null>(null)
 
-  // Message history (chronological: oldest → newest)
+// Message history (chronological: oldest -> newest)
   const [messages, setMessages] = useState<CircleMessage[]>([])
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [messagesError, setMessagesError] = useState<string | null>(null)
@@ -100,6 +97,25 @@ export default function CirclePage() {
   const [pageNotice, setPageNotice] = useState<string | null>(null)
 
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // The leave confirmation is a modal <dialog>: the browser traps focus while
+  // it is open, and focus goes back to the button that opened it on close.
+  const leaveDialogRef = useRef<HTMLDialogElement>(null)
+  const leaveReturnFocusRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    const dialog = leaveDialogRef.current
+    if (!dialog) return
+    if (leaveConfirm) {
+      if (!dialog.open) dialog.showModal()
+    } else if (dialog.open) {
+      dialog.close()
+      leaveReturnFocusRef.current?.focus()
+      leaveReturnFocusRef.current = null
+    }
+  }, [leaveConfirm])
+
+  const closeLeaveDialog = () => setLeaveConfirm(false)
 
   const [sessionNotice, setSessionNotice] = useState<string | null>(null)
 
@@ -139,7 +155,7 @@ export default function CirclePage() {
         if (cancelled) return
         setSessionState('error')
         setSessionError(
-          errorMessage(err, 'We could not set up your session right now. Please try again.'),
+          errorMessage(err, "We could not start your session. Reload the page."),
         )
       }
     })()
@@ -288,7 +304,7 @@ export default function CirclePage() {
         return
       }
       if (isApiError(err) && err.code === 'ALREADY_MEMBER') {
-        // Already a member (e.g. a stale view) — treat as joined.
+        // Already a member (e.g. a stale view) - treat as joined.
         await afterJoined(circleId)
       } else {
         setActionError(
@@ -300,12 +316,9 @@ export default function CirclePage() {
     }
   }
 
+  // Called only from the confirmation dialog; the sidebar button opens it.
   const handleLeave = async () => {
     if (leaving || !activeCircleId) return
-    if (!leaveConfirm) {
-      setLeaveConfirm(true)
-      return
-    }
     const circleId = activeCircleId
     setLeaving(true)
     setActionError(null)
@@ -356,7 +369,14 @@ export default function CirclePage() {
 
   useEffect(() => {
     if (activeCircleId && messages.length > 0) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      const list = bottomRef.current?.parentElement
+      // The conversation card owns the scroll on desktop, so drive its own
+      // viewport instead of dragging the page past the circle header.
+      if (list && list.scrollHeight > list.clientHeight + 1) {
+        list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' })
+      } else {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
     }
   }, [messages, activeCircleId])
 
@@ -364,7 +384,7 @@ export default function CirclePage() {
     return (
       <div className={styles.page}>
         <p className={styles.status} role="status">
-          {signedIn ? 'Opening the circles…' : 'Setting up your anonymous session…'}
+          {signedIn ? 'Opening the circles...' : 'Setting up your anonymous session...'}
         </p>
       </div>
     )
@@ -376,8 +396,10 @@ export default function CirclePage() {
         <div className={styles.heroWrap}>
           <img src="/circle.png.jpg" alt="Community circle" className={styles.heroImage} />
           <div className={styles.heroOverlay}>
-            <h1 className={styles.heroHeading}>Healing happens together.</h1>
-            <p className={styles.heroSub}>Connect with people who understand, share experiences, and find strength in community.</p>
+            <div className={styles.heroContent}>
+              <h1 className={styles.heroHeading}>Healing happens together.</h1>
+              <p className={styles.heroSub}>Connect with people who understand, share experiences, and find strength in community.</p>
+            </div>
           </div>
         </div>
         <div className={styles.errorNote} role="alert">
@@ -399,80 +421,94 @@ export default function CirclePage() {
           <div className={styles.heroWrap}>
             <img src="/circle.png.jpg" alt="Community circle" className={styles.heroImage} />
             <div className={styles.heroOverlay}>
-              <h1 className={styles.heroHeading}>Healing happens together.</h1>
-              <p className={styles.heroSub}>Connect with people who understand, share experiences, and find strength in community.</p>
+              <div className={styles.heroContent}>
+                <h1 className={styles.heroHeading}>Healing happens together.</h1>
+                <p className={styles.heroSub}>Connect with people who understand, share experiences, and find strength in community.</p>
+              </div>
             </div>
           </div>
 
-          {sessionNotice && <p className={styles.noticeInfo} role="status">{sessionNotice}</p>}
+          <div className={styles.layout}>
+            <aside className={styles.sidebar}>
+              <section className={styles.howItWorks} aria-labelledby="how-circles-work">
+                <h2 id="how-circles-work" className={styles.howHeading}>How circles work</h2>
+                <div className={styles.anonNotice} role="note">
+                  <span className={styles.anonNoticeIcon} aria-hidden="true">
+                    <Lock />
+                  </span>
+                  {signedIn ? (
+                    <p>
+                      You are posting as yourself. Guests in this circle stay anonymous, and
+                      conversations stay within the circle.
+                    </p>
+                  ) : (
+                    <p>All circles are anonymous. Your name is never shown. Conversations stay within the circle.</p>
+                  )}
+                </div>
+              </section>
+            </aside>
 
-          <div className={styles.anonNotice} role="note">
-            <span className={styles.anonNoticeIcon} aria-hidden="true">
-              <Lock />
-            </span>
-            {signedIn ? (
-              <p>
-                You are posting as yourself. Guests in this circle stay anonymous, and
-                conversations stay within the circle.
-              </p>
-            ) : (
-              <p>All circles are anonymous. Your name is never shown. Conversations stay within the circle.</p>
-            )}
-          </div>
+            <main className={styles.main}>
+              {sessionNotice && <p className={styles.noticeInfo} role="status">{sessionNotice}</p>}
 
-          <p className={styles.sectionLabel}>Open circles</p>
+              <p className={styles.sectionLabel}>Open circles</p>
 
-          {circles === null && (
-            <p className={styles.status} role="status">Loading circles…</p>
-          )}
+              {circles === null && (
+                 <p className={styles.status} role="status">Loading circles...</p>
+              )}
 
-          {circles !== null && circlesError && (
-            <div className={styles.errorNote} role="alert">
-              <p>{circlesError}</p>
-              <button className={styles.inlineBtn} onClick={() => setCirclesTick(t => t + 1)}>
-                Try again
-              </button>
-            </div>
-          )}
-
-          {circles !== null && !circlesError && circles.length === 0 && (
-            <p className={styles.emptyNote}>No circles are open right now. Please check back soon.</p>
-          )}
-
-          {circles !== null && !circlesError && circles.length > 0 && (
-            <div className={styles.circleList}>
-              {circles.map(c => {
-                const Icon = circleIcon(c.icon)
-                return (
-                  <button
-                    key={c.id}
-                    className={styles.circleCard}
-                    onClick={() => openCircle(c.id)}
-                    aria-label={`Open ${c.name}`}
-                  >
-                    <span className={styles.circleIcon} aria-hidden="true">
-                      <Icon />
-                    </span>
-                    <div className={styles.circleInfo}>
-                      <h2 className={styles.circleName}>{c.name}</h2>
-                      {c.description && <p className={styles.circleDesc}>{c.description}</p>}
-                    </div>
-                    <div className={styles.circleMeta}>
-                      <span className={styles.memberCount}>
-                        {c.member_count} {c.member_count === 1 ? 'member' : 'members'}
-                      </span>
-                    </div>
+              {circles !== null && circlesError && (
+                <div className={styles.errorNote} role="alert">
+                  <p>{circlesError}</p>
+                  <button className={styles.inlineBtn} onClick={() => setCirclesTick(t => t + 1)}>
+                    Try again
                   </button>
-                )
-              })}
-            </div>
-          )}
-        </>
+                </div>
+              )}
+
+              {circles !== null && !circlesError && circles.length === 0 && (
+                <p className={styles.emptyNote}>No circles are open right now. Please check back soon.</p>
+              )}
+
+              {circles !== null && !circlesError && circles.length > 0 && (
+                <div className={styles.circleGrid}>
+                  {circles.map(c => {
+                    const Icon = circleIcon(c.icon)
+                    return (
+                      <button
+                        key={c.id}
+                        className={styles.circleCard}
+                        onClick={() => openCircle(c.id)}
+                        aria-label="Open"
+                      >
+                        <div className={styles.cardHeader}>
+                          <span className={styles.circleIconTile} aria-hidden="true">
+                            <Icon />
+                          </span>
+                          <div className={styles.circleInfo}>
+                            <h2 className={styles.circleName}>{c.name}</h2>
+                            {c.description && <p className={styles.circleDesc}>{c.description}</p>}
+                          </div>
+                        </div>
+                        <div className={styles.cardFooter}>
+                          <span className={styles.memberCount}>
+                            {c.member_count === 0 ? "Be the first to join" : `${c.member_count} ${c.member_count === 1 ? "member" : "members"}`}
+                          </span>
+                          <span className={styles.cardAction}>Open</span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </main>
+          </div>        </>
       )}
 
       {/* Thread view */}
       {activeCircleId && (
         <div className={styles.thread}>
+          <div className={styles.threadMain}>
           <button className={styles.backBtn} onClick={closeCircle} aria-label="Back to circles">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
               <polyline points="15 18 9 12 15 6" />
@@ -489,47 +525,16 @@ export default function CirclePage() {
               {detail?.description && <p className={styles.threadDesc}>{detail.description}</p>}
               {detail && (
                 <p className={styles.threadMeta}>
-                  {detail.member_count} {detail.member_count === 1 ? 'member' : 'members'}
+                  {detail.member_count === 0 ? 'Be the first to join' : `${detail.member_count} ${detail.member_count === 1 ? 'member' : 'members'}`}
                 </p>
               )}
 
-              {/* Sits just under the member count, above the header's divider
-                  line; at the thread bottom the sticky reply box would cover it. */}
-              {!detailLoading && !detailError && detail && detail.is_member && (
-                <>
-                  <div className={styles.leaveRow}>
-                    {leaveConfirm ? (
-                      <>
-                        <span className={styles.leavePrompt}>Leave this circle?</span>
-                        <button
-                          className={styles.dangerBtn}
-                          onClick={handleLeave}
-                          disabled={leaving}
-                        >
-                          {leaving ? 'Leaving…' : 'Confirm leave'}
-                        </button>
-                        <button
-                          className={styles.inlineBtn}
-                          onClick={() => setLeaveConfirm(false)}
-                        >
-                          Stay
-                        </button>
-                      </>
-                    ) : (
-                      <button className={styles.leaveBtn} onClick={handleLeave}>
-                        Leave circle
-                      </button>
-                    )}
-                  </div>
-                  {actionError && <p className={styles.errorText} role="alert">{actionError}</p>}
-                </>
-              )}
             </div>
           </div>
 
           {pageNotice && <p className={styles.noticeSuccess} role="status">{pageNotice}</p>}
 
-          {detailLoading && <p className={styles.status} role="status">Loading circle…</p>}
+          {detailLoading && <p className={styles.status} role="status">Loading circle...</p>}
 
           {!detailLoading && detailError && (
             <div className={styles.errorNote} role="alert">
@@ -551,15 +556,21 @@ export default function CirclePage() {
                 onClick={handleJoin}
                 disabled={joining}
               >
-                {joining ? 'Joining…' : 'Join this circle'}
+                {joining ? 'Joining...' : 'Join this circle'}
               </button>
             </div>
           )}
 
           {!detailLoading && !detailError && detail && detail.is_member && (
-            <>
+            <section className={styles.conversationCard} aria-labelledby="conversation-heading">
+              <div className={styles.conversationHead}>
+                <h2 id="conversation-heading" className={styles.conversationHeading}>
+                  Conversation
+                </h2>
+                {actionError && <p className={styles.errorText} role="alert">{actionError}</p>}
+              </div>
               <div className={styles.messageList} role="log" aria-label="Circle messages" aria-live="polite">
-                {messagesLoading && <p className={styles.status} role="status">Loading messages…</p>}
+                 {messagesLoading && <p className={styles.status} role="status">Loading messages...</p>}
 
                 {!messagesLoading && messagesError && (
                   <div className={styles.errorNote} role="alert">
@@ -587,32 +598,31 @@ export default function CirclePage() {
                         onClick={() => loadMessages(activeCircleId, 'older')}
                         disabled={loadingOlder}
                       >
-                        {loadingOlder ? 'Loading…' : 'Load older messages'}
+                        {loadingOlder ? 'Loading...' : 'Load older messages'}
                       </button>
                     )}
                     {olderError && <p className={styles.errorText} role="alert">{olderError}</p>}
                     {messages.map(m => (
-                      <div key={m.id} className={styles.msg}>
-                        <div
-                          className={styles.msgAvatar}
-                          style={{ background: avatarColor(m.author_name) }}
-                          aria-hidden="true"
-                        >
+                      <div
+                        key={m.id}
+                        className={m.is_mine ? `${styles.msg} ${styles.msgMine}` : styles.msg}
+                      >
+                        <div className={styles.msgAvatar} aria-hidden="true">
                           {initialsOf(m.author_name)}
                         </div>
                         <div className={styles.msgBubble}>
                           <p className={styles.msgName}>
-                            {m.author_name}
-                            {/* An anonymous author is already a pseudonym, so
-                                say so; a registered member is posting under
-                                their own name and needs no badge. */}
-                            {m.is_anonymous && (
-                              <span className={styles.msgAnonTag}>anonymous</span>
-                            )}
+                            {m.is_mine ? 'You' : m.author_name}
                           </p>
                           <p className={styles.msgText}>{m.content}</p>
                           <div className={styles.msgFooter}>
-                            <span className={styles.msgTime}>{formatMessageTime(m.created_at)}</span>
+                            <span
+                              className={styles.msgTime}
+                              title={formatMessageTimeFull(m.created_at)}
+                            >
+                              <span className="sr-only">{formatMessageTimeFull(m.created_at)}</span>
+                              <span aria-hidden="true">{formatMessageTime(m.created_at)}</span>
+                            </span>
                             {Object.keys(m.reaction_counts).length > 0 && (
                               <div className={styles.msgReacts} aria-label="Reactions">
                                 {Object.entries(m.reaction_counts).map(([emoji, count]) => (
@@ -660,6 +670,7 @@ export default function CirclePage() {
                   className={styles.sendBtn}
                   onClick={handleSend}
                   disabled={sending || !reply.trim()}
+                  aria-disabled={sending || !reply.trim()}
                   aria-label="Send message"
                 >
                   {sending
@@ -672,10 +683,100 @@ export default function CirclePage() {
                     )}
                 </button>
               </div>
-            </>
+            </section>
           )}
+          </div>
+
+          <aside className={styles.threadSidebar} aria-label="Circle information">
+            <section className={styles.sideCard} aria-labelledby="circle-guidelines">
+              <h2 id="circle-guidelines" className={styles.sideCardHeading}>
+                Circle guidelines
+              </h2>
+              {/* TODO(copy): placeholder wording, pending product review. Every line must
+                  stay a true statement about how Soulwe works today — never promise
+                  safety, confidentiality, or anonymity beyond what the code delivers. */}
+              <ul className={styles.sideList}>
+                <li>Everything you post is visible to everyone who has joined this circle.</li>
+                <li>Other members see a name generated for this circle, not your account name.</li>
+                <li>Messages cannot be edited or deleted after they are posted.</li>
+                <li>Do not share contact details, including your own.</li>
+                <li>You can leave at any time and rejoin later.</li>
+              </ul>
+            </section>
+
+            <section className={styles.sideCard} aria-labelledby="urgent-help">
+              <h2 id="urgent-help" className={styles.sideCardHeading}>Need urgent help?</h2>
+              <p className={styles.sideCardText}>
+                Soulwe is not an emergency service. If you or someone near you is in
+                immediate danger, contact emergency services where you are.
+              </p>
+              {crisisHelplines.length > 0 && (
+                <ul className={styles.crisisList}>
+                  {crisisHelplines.map(line => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            {!detailLoading && !detailError && detail && detail.is_member && (
+              <button
+                className={styles.leaveBtn}
+                onClick={e => {
+                  // Captured here (not in the effect) so the opener is the
+                  // button itself even when focus never moved to it.
+                  leaveReturnFocusRef.current = e.currentTarget
+                  setLeaveConfirm(true)
+                }}
+              >
+                Leave circle
+              </button>
+            )}
+          </aside>
+
+          <dialog
+            className={styles.leaveDialog}
+            aria-labelledby="leave-dialog-title"
+            ref={leaveDialogRef}
+            onCancel={e => {
+              e.preventDefault()
+              closeLeaveDialog()
+            }}
+          >
+            <h2 id="leave-dialog-title" className={styles.leaveDialogTitle}>
+              Leave this circle?
+            </h2>
+            <p className={styles.leaveDialogText}>You can rejoin later.</p>
+            <div className={styles.leaveDialogActions}>
+              <button className={styles.leaveDialogCancel} onClick={closeLeaveDialog}>
+                Cancel
+              </button>
+              <button
+                className={styles.dangerBtn}
+                onClick={handleLeave}
+                disabled={leaving}
+              >
+                {leaving ? 'Leaving...' : 'Leave'}
+              </button>
+            </div>
+          </dialog>
         </div>
       )}
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

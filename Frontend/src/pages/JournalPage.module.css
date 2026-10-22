@@ -1,19 +1,60 @@
+/* Journal page — sunrise theme.
+   The palette itself lives in src/styles/sunrise.css, scoped to the `.sunrise`
+   class which JournalPage adds to its root element. This module only maps the
+   existing class names onto that palette and arranges the desktop layout.
+   Contrast (measured, WCAG 2.1):
+     ink #241810        on cream #FFF8EC  16.40  body
+     ink #241810        on white #FFFFFF  17.31  writing card
+     ink #241810        on sand  #FCE7C2  14.30  detail / blessing cards
+     ink #241810        on sun   #F6A31B   8.39  primary / active controls
+     cream #FFF8EC      on leaf-deep #1F4D36 9.15  selected chips
+     terracotta #B5482A on cream           5.07  accents / day number
+     muted #6E5844      on white           6.68  placeholder / counters
+     muted #6E5844      on cream           6.33  secondary text
+     ink-mid #5B4633    on sand            7.32  labels on cards
+     sun-deep #9A5600   on sand            4.68  eyebrow on blessing card
+     #B91C1C            on cream           6.13  error text
+*/
 .page {
-  padding: var(--space-4);
+  background: var(--cream);
+  min-height: calc(100vh - var(--nav-height));
+  /* Date and word-count text must read at >=13px; the shared --text-xs is 11px. */
+  --text-xs: 13px;
+}
+
+.container {
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-6) var(--space-8);
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  max-width: var(--max-content);
-  margin: 0 auto;
 }
 
-.header { }
+@media (min-width: 640px) {
+  .container { max-width: 720px; }
+}
+
+@media (min-width: 1024px) {
+  .container {
+    max-width: var(--max-site);
+    padding-top: var(--space-8);
+    gap: var(--space-6);
+  }
+}
+
+/* ── Header row (title left, mode toggle right on desktop) ── */
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.headText { min-width: 0; }
 
 .heading {
   font-family: var(--font-display);
   font-size: var(--text-xl);
-  /* The page background is --bg (#FFFBF5), so the heading needs the dark ink.
-     --cream is light text reserved for the dark cards below. */
   color: var(--ink);
   margin-bottom: 3px;
 }
@@ -24,6 +65,55 @@
 }
 
 .sub em { font-style: italic; color: var(--clay); }
+
+/* ── Two-column layout ── */
+.layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.formCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.entriesPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .head {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-6);
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 8fr) minmax(0, 5fr);
+    gap: 32px;
+    align-items: start;
+  }
+
+  .entriesPanel {
+    position: sticky;
+    top: calc(var(--nav-height) + var(--space-6));
+    max-height: calc(100vh - var(--nav-height) - 48px);
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid var(--sand);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    gap: var(--space-4);
+  }
+}
 
 /* ── Prompt chips ── */
 .promptStrip {
@@ -38,12 +128,15 @@
 
 .promptChip {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   font-size: var(--text-xs);
   padding: 6px 14px;
   border-radius: var(--radius-full);
   border: 1px solid var(--border);
-  background: var(--night-mid);
-  color: var(--muted);
+  background: var(--cream);
+  color: var(--ink);
   white-space: nowrap;
   transition:
     background var(--duration-base) var(--ease),
@@ -52,20 +145,20 @@
 }
 
 .promptChip:hover {
-  color: var(--cream);
-  border-color: rgba(196,113,74,0.4);
+  color: var(--ink-hover);
+  border-color: var(--ink-mid);
 }
 
 .promptChipActive {
-  background: var(--clay);
-  color: #fff;
-  border-color: var(--clay);
+  background: var(--leaf-deep);
+  color: var(--cream);
+  border-color: var(--leaf-deep);
 }
 
 /* ── Write box ── */
 .writeBox {
-  background: var(--night-mid);
-  border: 1px solid var(--border);
+  background: #fff;
+  border: 1px solid var(--sand);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
 }
@@ -81,12 +174,21 @@
   min-height: 140px;
   background: transparent;
   font-size: var(--text-base);
-  color: var(--cream);
-  line-height: 1.75;
+  color: var(--ink);
+  line-height: 1.7;
   resize: none;
 }
 
 .textarea::placeholder { color: var(--muted); }
+
+/* Clear focus ring on the writing surfaces (terracotta #B5482A is 5.35:1 on
+   white and 5.07:1 on cream — comfortably above the 3:1 focus minimum). */
+.textarea:focus-visible,
+.prayerTextarea:focus-visible,
+.editTextarea:focus-visible {
+  outline: 2px solid var(--terracotta);
+  outline-offset: 2px;
+}
 
 .writeFooter {
   display: flex;
@@ -99,6 +201,18 @@
 .wordCount {
   font-size: var(--text-xs);
   color: var(--muted);
+}
+
+@media (min-width: 1024px) {
+  .writeBox {
+    min-height: 380px;
+    display: flex;
+    flex-direction: column;
+  }
+  .textarea {
+    flex: 1;
+    font-size: 18px;
+  }
 }
 
 /* ── Section label ── */
@@ -119,37 +233,36 @@
 }
 
 .tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   font-size: var(--text-xs);
   padding: 6px 14px;
   border-radius: var(--radius-full);
   border: 1px solid var(--border);
-  background: var(--night-mid);
-  /* The chip sits on the dark card, where the light-palette --muted grey only
-     reaches 2.7:1. Cream at 70% is the same treatment HomePage already uses
-     for its dark-surface labels, and clears AA at 6.8:1. */
-  color: rgba(250, 246, 241, 0.7);
+  background: var(--cream);
+  color: var(--ink);
   transition:
     background var(--duration-fast) var(--ease),
     color var(--duration-fast) var(--ease),
     border-color var(--duration-fast) var(--ease);
 }
 
-.tag:hover { color: var(--cream); border-color: var(--night-soft); }
+.tag:hover { color: var(--ink-hover); border-color: var(--ink-mid); }
 
 .tagActive {
-  background: rgba(196,113,74,0.15);
-  border-color: var(--clay-muted);
-  /* --clay-light is a fill/border tint and is too pale to read on this pale
-     clay background, so the active label uses the muted text tone. */
-  color: var(--clay-muted);
+  background: var(--leaf-deep);
+  color: var(--cream);
+  border-color: var(--leaf-deep);
 }
 
 /* ── Save button ── */
 .saveBtn {
   width: 100%;
+  min-height: 44px;
   padding: var(--space-3) var(--space-4);
-  background: var(--clay);
-  color: #fff;
+  background: var(--ink);
+  color: var(--cream);
   border-radius: var(--radius-md);
   font-size: var(--text-base);
   font-weight: 500;
@@ -157,16 +270,16 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  transition: opacity var(--duration-base) var(--ease);
+  transition:
+    background var(--duration-base) var(--ease),
+    opacity var(--duration-base) var(--ease);
 }
 
-.saveBtn:hover:not(:disabled) { opacity: 0.9; }
+.saveBtn:hover:not(:disabled) { background: var(--ink-hover); }
 .saveBtn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .saveBtnLoading { opacity: 0.7; }
 
-/* Icons that replaced the old emoji glyphs. .saveBtn is already flex with a
-   gap, so the icon just needs a size; the others get their own layout. */
 .saveBtnIcon {
   width: 18px;
   height: 18px;
@@ -176,8 +289,8 @@
 .spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255,255,255,0.3);
-  border-top-color: #fff;
+  border: 2px solid rgba(255, 248, 236, 0.3);
+  border-top-color: var(--cream);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   flex-shrink: 0;
@@ -187,10 +300,10 @@
 
 /* ── AI Reflection ── */
 .reflection {
-  background: linear-gradient(145deg, #2C1F1A 0%, #3D2B24 100%);
-  border: 1px solid rgba(196,113,74,0.25);
+  background: #fff;
+  border: 1px solid var(--sand);
   border-radius: var(--radius-lg);
-  padding: var(--space-4) var(--space-4);
+  padding: var(--space-4);
   animation: fadeSlideUp var(--duration-slow) var(--ease);
 }
 
@@ -201,7 +314,7 @@
 
 .reflectionEyebrow {
   font-size: var(--text-xs);
-  color: var(--clay);
+  color: var(--terracotta);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -210,24 +323,18 @@
 
 .reflectionText {
   font-size: var(--text-sm);
-  color: rgba(250,246,241,0.9);
+  color: var(--ink);
   line-height: 1.75;
   margin-bottom: var(--space-4);
-}
-
-.reflectionActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
 }
 
 .reflectionBtn {
   font-size: var(--text-xs);
   padding: 6px 14px;
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid var(--border);
   border-radius: var(--radius-full);
-  background: rgba(255,255,255,0.06);
-  color: rgba(250,246,241,0.75);
+  background: var(--cream);
+  color: var(--ink-mid);
   transition:
     background var(--duration-base) var(--ease),
     border-color var(--duration-base) var(--ease),
@@ -235,9 +342,9 @@
 }
 
 .reflectionBtn:hover {
-  background: rgba(196,113,74,0.25);
-  border-color: var(--clay);
-  color: #fff;
+  background: var(--sand);
+  border-color: var(--sun-muted);
+  color: var(--ink);
 }
 
 /* ── Past entries ── */
@@ -264,7 +371,7 @@
   transition: background var(--duration-fast) var(--ease);
 }
 
-.entryItem:hover { background: rgba(245, 158, 42, 0.06); }
+.entryItem:hover { background: rgba(246, 163, 27, 0.08); }
 
 .entryItem:focus-visible {
   outline: 2px solid var(--sun-deep);
@@ -272,7 +379,7 @@
 }
 
 .entryItemActive {
-  background: rgba(245, 158, 42, 0.08);
+  background: rgba(246, 163, 27, 0.12);
 }
 
 .entryItem:last-child { border-bottom: none; }
@@ -289,7 +396,7 @@
 .entryDay {
   font-family: var(--font-display);
   font-size: var(--text-xl);
-  color: var(--clay);
+  color: var(--terracotta);
   line-height: 1;
 }
 
@@ -299,11 +406,11 @@
   margin-top: 1px;
 }
 
-.entryBody { flex: 1; }
+.entryBody { flex: 1; min-width: 0; }
 
 .entryPreview {
   font-size: var(--text-sm);
-  color: rgba(250,246,241,0.8);
+  color: var(--muted);
   line-height: 1.55;
   margin-bottom: var(--space-2);
   display: -webkit-box;
@@ -319,8 +426,8 @@
 }
 
 .entryTag {
-  font-size: 10px;
-  background: rgba(196,113,74,0.12);
+  font-size: 12px;
+  background: var(--sand);
   color: var(--clay-muted);
   padding: 2px 8px;
   border-radius: var(--radius-full);
@@ -335,10 +442,10 @@
 }
 
 .reflectionBadge {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
-  background: var(--teal-light);
-  color: var(--teal-deep);
+  background: var(--sand);
+  color: var(--leaf-deep);
   padding: 2px 8px;
   border-radius: var(--radius-full);
   margin-left: var(--space-2);
@@ -348,10 +455,11 @@
 /* ── Load more / helper buttons ── */
 .smallBtn {
   font-size: var(--text-xs);
+  min-height: 32px;
   padding: 6px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--bg-mid);
+  background: var(--cream);
   color: var(--muted);
   cursor: pointer;
   transition:
@@ -369,6 +477,7 @@
 
 .loadMoreBtn {
   width: 100%;
+  min-height: 44px;
   padding: var(--space-3);
   font-size: var(--text-sm);
   border: 1px dashed var(--border);
@@ -404,35 +513,25 @@
   padding: var(--space-4) 0;
 }
 
-/* A page whose content is entirely the user's own data shows a plain empty
-   state for a guest. It is not a gate: the page opens, navigation is intact,
-   and the sign-in is offered as an ordinary inline link. */
-.emptyState {
-  padding: var(--space-5) 0;
-  max-width: 46ch;
-}
-
-.emptyTitle {
-  font-size: var(--text-sm);
-  color: var(--ink);
-  margin-bottom: var(--space-2);
-}
-
-.emptyBody {
-  font-size: var(--text-sm);
-  color: var(--muted);
-  line-height: 1.6;
-  margin-bottom: var(--space-3);
-}
-
 /* ── Notices ── */
 .noticeError,
 .noticeSuccess,
 .noticeInfo {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   font-size: var(--text-sm);
   border-radius: var(--radius-md);
   padding: var(--space-3) var(--space-4);
   line-height: 1.6;
+}
+
+.noticeIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .noticeError {
@@ -442,20 +541,20 @@
 }
 
 .noticeSuccess {
-  background: var(--teal-light);
-  border: 1px solid var(--teal);
-  color: var(--teal-deep);
+  background: var(--sand);
+  border: 1px solid var(--leaf);
+  color: var(--leaf-deep);
 }
 
 .noticeInfo {
-  background: var(--bg-mid);
+  background: var(--sand);
   border: 1px solid var(--border-soft);
   color: var(--muted);
 }
 
 /* ── Entry detail ── */
 .detailCard {
-  background: var(--bg-mid);
+  background: var(--sand);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
@@ -480,12 +579,12 @@
 
 .detailDate {
   font-size: var(--text-xs);
-  color: var(--muted);
+  color: var(--ink-mid);
 }
 
 .detailWords {
   font-size: var(--text-xs);
-  color: var(--muted);
+  color: var(--ink-mid);
 }
 
 .entryContent {
@@ -504,7 +603,7 @@
 
 .reflectStatus {
   font-size: var(--text-xs);
-  color: var(--muted);
+  color: var(--ink-mid);
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -513,13 +612,13 @@
 .reflectStatus .spinner {
   width: 14px;
   height: 14px;
-  border-color: rgba(28, 25, 23, 0.2);
+  border-color: rgba(36, 24, 16, 0.2);
   border-top-color: var(--ink);
 }
 
 .noReflection {
   font-size: var(--text-sm);
-  color: var(--muted);
+  color: var(--ink-mid);
   padding: var(--space-3) var(--space-4);
   border: 1px dashed var(--border);
   border-radius: var(--radius-md);
@@ -637,24 +736,11 @@
   border-top: 1px solid var(--border);
 }
 
-/* ── Desktop ── */
-@media (min-width: 768px) {
-  .page {
-    padding: var(--space-8) var(--space-8);
-  }
-}
-
-@media (min-width: 1280px) {
-  .page {
-    padding: var(--space-10) var(--space-10);
-  }
-}
-
 /* ── Mode toggle ── */
 .modeToggle {
   display: flex;
-  background: var(--bg-mid);
-  border: 1px solid var(--border-soft);
+  background: var(--cream);
+  border: 1px solid var(--border);
   border-radius: var(--radius-full);
   padding: 4px;
   gap: 4px;
@@ -662,6 +748,7 @@
 
 .modeBtn {
   flex: 1;
+  min-height: 44px;
   padding: 8px var(--space-4);
   border-radius: var(--radius-full);
   font-size: var(--text-sm);
@@ -671,7 +758,9 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: all var(--duration-base) var(--ease);
+  transition:
+    background var(--duration-base) var(--ease),
+    color var(--duration-base) var(--ease);
 }
 
 .modeBtnIcon {
@@ -683,7 +772,7 @@
 .modeBtn:hover { color: var(--ink); }
 
 .modeBtnActive {
-  background: #fff;
+  background: var(--sun);
   color: var(--ink);
   box-shadow: var(--shadow-sm);
 }
@@ -699,11 +788,11 @@
   font-family: var(--font-display);
   font-size: var(--text-sm);
   font-style: italic;
-  color: var(--muted);
+  color: var(--ink-mid);
   line-height: 1.65;
   padding: var(--space-3) var(--space-4);
   border-left: 3px solid var(--sun-muted);
-  background: var(--sun-light);
+  background: var(--sand);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
@@ -734,7 +823,7 @@
   width: 15px;
   height: 15px;
   flex-shrink: 0;
-  color: var(--clay);
+  color: var(--terracotta);
 }
 
 .prayerPrompt {
@@ -761,11 +850,11 @@
   border-color: var(--sun-muted);
 }
 
-.prayerTextarea::placeholder { color: var(--subtle); }
+.prayerTextarea::placeholder { color: var(--muted); }
 
 /* ── Blessing card ── */
 .blessingCard {
-  background: linear-gradient(135deg, #FEF3DC 0%, #FEE8B8 100%);
+  background: var(--sand);
   border: 1px solid var(--sun-muted);
   border-radius: var(--radius-lg);
   padding: var(--space-4) var(--space-5);
@@ -802,9 +891,9 @@
 }
 
 .entryModeTag {
-  font-size: 10px;
-  background: var(--sun-light);
-  color: var(--sun-deep);
+  font-size: 12px;
+  background: var(--sand);
+  color: var(--ink-mid);
   padding: 2px 8px;
   border-radius: var(--radius-full);
   font-weight: 500;
@@ -814,7 +903,7 @@
 }
 
 .entryModeIcon {
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 12px;
   flex-shrink: 0;
 }

@@ -4,7 +4,6 @@ package anon
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -64,33 +63,28 @@ func TestAnonSessionIntegration(t *testing.T) {
 		cleanup(t, pool, session.AnonymousID)
 	})
 
-	t.Run("repeated device call rotates the token but keeps the same identity", func(t *testing.T) {
+	t.Run("a repeated device call creates a separate identity and never reissues the first", func(t *testing.T) {
 		deviceUUID := fmt.Sprintf("550e8400-e29b-41d4-a716-%012d", time.Now().UnixNano()%1_000_000_000_000)
 		first, err := svc.CreateSession(ctx, deviceUUID)
 		if err != nil {
 			t.Fatalf("first CreateSession returned error: %v", err)
 		}
+		defer cleanup(t, pool, first.AnonymousID)
+
 		second, err := svc.CreateSession(ctx, deviceUUID)
 		if err != nil {
 			t.Fatalf("second CreateSession returned error: %v", err)
 		}
+		defer cleanup(t, pool, second.AnonymousID)
 
-		if second.AnonymousID != first.AnonymousID {
-			t.Errorf("expected the same anonymous id %q, got %q", first.AnonymousID, second.AnonymousID)
-		}
-		if second.Token == first.Token {
-			t.Error("expected the token to rotate on a repeated device call")
+		if second.AnonymousID == first.AnonymousID {
+			t.Errorf("a known device UUID must not reissue identity %q", first.AnonymousID)
 		}
 
-		if id, ok, err := svc.Authenticate(ctx, first.Token); err != nil || ok {
-			t.Errorf("old token must no longer authenticate: ok=%v err=%v", ok, err)
-			_ = id
+		// The first session must keep working; the second call never touched it.
+		if id, ok, err := svc.Authenticate(ctx, first.Token); err != nil || !ok || id != first.AnonymousID {
+			t.Errorf("first token must keep authenticating its identity: id=%q ok=%v err=%v", id, ok, err)
 		}
-		if id, ok, err := svc.Authenticate(ctx, second.Token); err != nil || !ok || id != first.AnonymousID {
-			t.Errorf("new token must authenticate to the same identity: id=%q ok=%v err=%v", id, ok, err)
-		}
-
-		cleanup(t, pool, first.AnonymousID)
 	})
 
 	t.Run("Authenticate finds the identity and refreshes last_seen_at", func(t *testing.T) {
@@ -138,13 +132,6 @@ func TestAnonSessionIntegration(t *testing.T) {
 		}
 		if ok || id != "" {
 			t.Errorf("expected ok=false with empty id, got ok=%v id=%q", ok, id)
-		}
-	})
-
-	t.Run("FindByDeviceUUID on an unknown device returns ErrIdentityNotFound", func(t *testing.T) {
-		_, err := repo.FindByDeviceUUID(ctx, "00000000-0000-0000-0000-000000000000")
-		if !errors.Is(err, ErrIdentityNotFound) {
-			t.Fatalf("expected ErrIdentityNotFound, got %v", err)
 		}
 	})
 

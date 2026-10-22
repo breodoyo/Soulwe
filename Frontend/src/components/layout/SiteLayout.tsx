@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
+import { crisisHelplines } from '@/landingContent'
 import styles from './SiteLayout.module.css'
 
 interface NavItem {
@@ -19,11 +20,15 @@ const navLinks: NavItem[] = [
   { to: '/breathe',   label: 'Breathe'   },
 ]
 
+// The footer is a site-map, not an app menu: legal and contact pages only.
 const footerLinks: NavItem[] = [
-  ...navLinks,
-  { to: '/home',    label: 'Check in' },
-  { to: '/profile', label: 'Profile'  },
+  { to: '/privacy', label: 'Privacy' },
+  { to: '/terms',   label: 'Terms'   },
+  { to: '/contact', label: 'Contact' },
 ]
+
+// The crisis strip sits above the footer on every page; same-page anchor.
+const crisisLink: NavItem = { to: '#crisis', label: 'Crisis help' }
 
 function BrandMark() {
   return (
@@ -61,16 +66,8 @@ export default function SiteLayout() {
   const { status, user, logout } = useAuth()
   const { pathname, hash } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [scrolled, setScrolled] = useState(false)
   const firstRender = useRef(true)
   const isAuthed = status === 'authenticated'
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 4)
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
 
   // Any navigation dismisses the mobile menu.
   useEffect(() => {
@@ -112,10 +109,7 @@ export default function SiteLayout() {
 
       <a className={styles.skipLink} href="#main-content">Skip to main content</a>
 
-      <header
-        className={[styles.header, scrolled ? styles.headerScrolled : ''].join(' ')}
-        role="banner"
-      >
+      <header className={styles.header} role="banner">
         <div className={styles.headerInner}>
           <Link to="/" className={styles.brand} aria-label="Soulwe home page">
             <BrandMark />
@@ -207,6 +201,28 @@ export default function SiteLayout() {
         <Outlet />
       </main>
 
+      {/* Crisis strip: plain, always visible, no helpline published from memory. */}
+      <section className={styles.crisis} id="crisis" aria-labelledby="crisis-heading">
+        <div className={styles.crisisInner}>
+          <h2 className={styles.crisisHeading} id="crisis-heading">
+            If you are in crisis
+          </h2>
+          <p className={styles.crisisText}>
+            Soulwe is not an emergency service. If you or someone near you is in
+            immediate danger, contact emergency services where you are.
+          </p>
+          {/* Helplines come from landingContent.ts and only render once real,
+              verified entries exist there. */}
+          {crisisHelplines.length > 0 && (
+            <ul className={styles.crisisList}>
+              {crisisHelplines.map(line => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
+
       <footer className={styles.footer} role="contentinfo">
         <div className={styles.footerInner}>
           <Link to="/" className={styles.footerBrand}>
@@ -220,6 +236,7 @@ export default function SiteLayout() {
             {footerLinks.map(item => (
               <NavItemLink key={item.to} item={item} />
             ))}
+            <NavItemLink item={crisisLink} />
           </nav>
           <div className={styles.footerMeta}>
             <p className={styles.footerCopy}>© 2026 Soulwe.</p>
@@ -228,7 +245,7 @@ export default function SiteLayout() {
                 Signed in{user?.display_name ? ` as ${user.display_name}` : ''}
               </p>
             ) : (
-              <p className={styles.sessionLine}>Browsing anonymously — no account needed.</p>
+              <p className={styles.sessionLine}>Browsing anonymously, no account needed.</p>
             )}
           </div>
         </div>

@@ -249,7 +249,7 @@ func main() {
 	journalHandler := journal.NewHandler(journalService)
 
 	// Memberships and messages are keyed to anonymous identities.
-	circlesHandler := circles.NewHandler(circles.NewService(circles.NewPostgresRepository(pool)))
+	circlesHandler := circles.NewHandler(circles.NewService(circles.NewPostgresRepository(pool), cfg.NamingKey))
 
 	therapistsHandler := therapists.NewHandler(therapists.NewService(therapists.NewPostgresRepository(pool)))
 

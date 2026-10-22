@@ -1,833 +1,794 @@
+/* Landing page. One container (--max-site, 1120px, 24px gutters) matches the
+   site header so nav, hero and every section share the same edges. */
+
 .page {
-  min-height: 100dvh;
+  /* Body copy is 16px and captions 14px on this page, per accessibility pass;
+     the root tokens stay smaller for the app screens. */
+  font-size: 16px;
+  --text-xs: 14px;
+  --text-sm: 14px;
+  --text-base: 16px;
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-body);
 }
 
-/* ── Shared inner wrapper ── */
 .inner {
-  max-width: 960px;
+  width: 100%;
+  max-width: var(--max-site);
   margin: 0 auto;
-  padding: 0 var(--space-5);
+  padding: 0 var(--space-6);
+  box-sizing: border-box;
 }
 
-/* ── Hero ── */
-/* The hero is exclusive: the sticky site nav sits above it in flow, so the
-   first screen is the nav plus the message and nothing else. */
-.hero {
-  min-height: calc(100dvh - var(--nav-height));
-  display: flex;
-  flex-direction: column;
+/* ── Buttons: flat, no glow, no blur shadows ── */
+.btnPrimary {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  /* Extra bottom room so the scroll cue never sits on the hero's content. */
-  padding: 72px var(--space-5) 84px;
-  gap: var(--space-10);
-  position: relative;
-  overflow: hidden;
-}
-
-/* Warm gradient wash behind hero */
-.hero::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: url('/soulwe.webp');
-  /* contain, not cover. The source is 52x143 — a very tall, narrow strip — so
-     cover scaled it roughly 28x on a desktop viewport and cropped it to a thin
-     band, which read as a smeared, stretched image. contain shows the whole
-     photo undistorted; no-repeat stops the letterboxed remainder tiling. */
-  background-size: contain;
-  /* Nudged off dead-centre so the photo sits clear of the headline column
-     rather than running straight down the middle of it. */
-  background-position: calc(50% + 56px) center;
-  background-repeat: no-repeat;
-  opacity: 0.75;
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* The gradient wash that used to sit here (rgba cream → amber, 135deg) is gone:
-   it was a scrim to keep the headline legible over the photo, and it was
-   muting the image badly. .hero::before and the hero content now stack
-   directly, with the content at z-index 2 above the photo at z-index 0. */
-
-@media (min-width: 900px) {
-  .hero {
-    flex-direction: row;
-    padding: 72px var(--space-10) 84px;
-    gap: var(--space-10);
-    min-height: calc(100dvh - var(--nav-height));
-  }
-}
-
-.heroLeft {
-  flex: 1;
-  max-width: 560px;
-  position: relative;
-  z-index: 2;
-}
-
-.heroRight {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-  z-index: 2;
-}
-
-.heroHeading {
-  font-family: var(--font-display);
-  font-size: clamp(38px, 5.5vw, 68px);
-  color: var(--ink);
-  line-height: 1.1;
-  letter-spacing: -0.03em;
-  margin-bottom: var(--space-5);
-}
-
-.heroSub {
-  font-size: var(--text-lg);
-  color: var(--muted);
-  line-height: 1.75;
-  margin-bottom: var(--space-8);
-  max-width: 480px;
-}
-
-.heroCtaPrimary {
-  display: inline-block;
+  min-height: 48px;
+  padding: 0 var(--space-8);
   background: var(--ink);
   color: var(--cream);
-  font-size: var(--text-base);
+  font-size: 16px;
   font-weight: 500;
-  padding: 14px var(--space-8);
   border-radius: var(--radius-full);
-  margin-bottom: var(--space-6);
-  transition: all var(--duration-base) var(--ease);
-  box-shadow: 0 4px 20px rgba(28,25,23,0.2);
+  transition: background var(--duration-base) var(--ease);
 }
 
-.heroCtaPrimary:hover {
-  background: var(--sun-deep);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 28px rgba(212,120,10,0.35);
-}
+.btnPrimary:hover { background: var(--ink-mid); }
 
-/* Feature pills row — like Healyn's bottom strip */
-.heroPills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-
-/* The hero photo shows through behind these at 0.75 opacity and no hero-wide
-   scrim, so --muted text landed on an unpredictable backdrop and lost contrast
-   (worst on "Kenyan therapists", which wraps onto the busiest part of the
-   photo). Each pill therefore carries its own near-opaque backdrop plus --ink
-   text, so legibility no longer depends on what the photo happens to do
-   underneath — and the photo stays unmasked everywhere else. */
-.heroPill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--text-sm);
-  color: var(--ink);
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: rgba(255, 251, 245, 0.88);
-  border: 1px solid var(--border-soft);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-
-.pillStar {
-  color: var(--sun-deep);
-  font-size: 14px;
-}
-
-/* Right side */
-.heroRight {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-}
-
-.heroVisual {
-  position: relative;
-  width: 100%;
-  max-width: 420px;
-  min-height: 500px;
-  display: flex;
+/* On the dark circles band: amber fill with dark text keeps AA contrast. */
+.btnSun {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-/* Large glowing orb */
-.heroOrb {
-  width: 340px;
-  height: 340px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 38% 38%, #FEE8B8 0%, #F59E2A 50%, #D4780A 100%);
-  opacity: 0.12;
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  filter: blur(40px);
-}
-
-/* Warm amber overlay on the photo so it blends with our theme */
-.heroOrb::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    to bottom,
-    rgba(255,251,245,0.15) 0%,
-    rgba(245,158,42,0.12) 50%,
-    rgba(255,251,245,0.4) 100%
-  );
-  border-radius: var(--radius-xl);
-}
-
-/* Floating affirmation card */
-.heroCard {
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255,255,255,0.6);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-  box-shadow: 0 8px 40px rgba(28,25,23,0.12);
-  position: relative;
-  z-index: 2;
-  animation: floatCard 6s ease-in-out infinite;
-  margin: var(--space-6);
-}
-
-@keyframes floatCard {
-  0%, 100% { transform: translateY(0); }
-  50%       { transform: translateY(-10px); }
-}
-
-.heroCardEyebrow {
-  font-size: var(--text-xs);
-  color: var(--sun-deep);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  margin-bottom: var(--space-3);
-}
-
-.heroCardVerse {
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  font-style: italic;
-  color: var(--ink);
-  line-height: 1.6;
-  margin-bottom: var(--space-2);
-}
-
-.heroCardRef {
-  font-size: var(--text-xs);
-  color: var(--muted);
-  font-weight: 500;
-}
-
-/* Floating stat pill */
-.heroStat {
-  position: absolute;
-  bottom: -16px;
-  right: -16px;
+  min-height: 48px;
+  padding: 0 var(--space-8);
   background: var(--sun);
-  border-radius: var(--radius-lg);
-  padding: var(--space-3) var(--space-4);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  box-shadow: 0 4px 20px rgba(245,158,42,0.4);
-  z-index: 3;
-  animation: floatStat 5s ease-in-out infinite reverse;
-}
-
-@keyframes floatStat {
-  0%, 100% { transform: translateY(0); }
-  50%       { transform: translateY(-6px); }
-}
-
-.heroStatNum {
-  font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  color: #fff;
-  line-height: 1;
-}
-
-.heroStatLabel {
-  font-size: 10px;
-  color: rgba(255,255,255,0.8);
-  text-align: center;
-  line-height: 1.3;
-  max-width: 80px;
-}
-
-/* ── Stats bar ── */
-.statsBar {
-  display: flex;
-  flex-wrap: wrap;
-  background: var(--ink);
-  padding: var(--space-6) var(--space-5);
-}
-
-.statItem {
-  flex: 1;
-  min-width: 120px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: var(--space-3) var(--space-4);
-  border-right: 1px solid rgba(255,255,255,0.07);
-}
-
-.statItem:last-child { border-right: none; }
-
-.statNum {
-  font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  color: var(--sun);
-  line-height: 1;
-}
-
-.statLabel {
-  font-size: var(--text-xs);
-  color: rgba(255,255,255,0.45);
-  text-align: center;
-}
-
-/* ── Shared section styles ── */
-.eyebrow {
-  display: block;
-  font-size: var(--text-xs);
+  color: var(--ink);
+  font-size: 16px;
   font-weight: 500;
-  color: var(--sun-deep);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: var(--space-3);
+  border-radius: var(--radius-full);
+  transition: background var(--duration-base) var(--ease);
 }
 
-.eyebrowLight {
-  display: block;
-  font-size: var(--text-xs);
+.btnSun:hover { background: var(--sun-muted); }
+
+.textLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 16px;
   font-weight: 500;
-  color: var(--sun);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: var(--space-3);
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
+.textLink:hover { color: var(--ink); text-decoration-thickness: 2px; }
+
+/* ── Shared section type ── */
 .sectionHeading {
   font-family: var(--font-display);
-  font-size: clamp(26px, 4vw, 44px);
+  font-size: clamp(26px, 3.5vw, 40px);
   color: var(--ink);
   line-height: 1.2;
   letter-spacing: -0.02em;
-  margin-bottom: var(--space-4);
-}
-
-.sectionHeading em {
-  color: var(--sun-deep);
-  font-style: italic;
+  margin-bottom: var(--space-3);
 }
 
 .sectionHeadingLight {
   font-family: var(--font-display);
-  font-size: clamp(26px, 4vw, 44px);
+  font-size: clamp(26px, 3.5vw, 40px);
   color: var(--cream);
   line-height: 1.2;
   letter-spacing: -0.02em;
   margin-bottom: var(--space-4);
 }
 
-.sectionSub {
-  font-size: var(--text-base);
-  color: var(--muted);
+.sectionLead {
+  font-size: 16px;
+  color: var(--ink-mid);
   line-height: 1.75;
-  max-width: 600px;
+  max-width: 52ch;
   margin-bottom: var(--space-8);
 }
 
-.sectionSubLight {
-  font-size: var(--text-base);
-  color: rgba(255,255,255,0.55);
-  line-height: 1.75;
-  max-width: 600px;
-  margin-bottom: var(--space-8);
-}
-
-/* ── Scroll cue ── */
-/* Anchored to the bottom of the hero so it never displaces the headline. */
-.scrollCue {
-  position: absolute;
-  bottom: var(--space-6);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 3;
+/* ── Hero: full-bleed golden-hillside photo. One flat sun overlay covers
+      the whole photo at 75% opacity, the same everywhere (no gradient,
+      scrim, blur or glow). Ink text over the composite stays at least
+      4.8:1, even over the darkest near-black foreground pixels. ── */
+.hero {
+  position: relative;
+  min-height: min(90vh, 860px);
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
-  text-decoration: none;
+  background: var(--sun);
+  overflow: hidden;
+}
+
+/* Edge-to-edge photo. Cover, panned up a little so the soft sky and the
+   golden hill both stay in frame (the subject sits low). width/height
+   attributes plus the min-height container keep layout stable (no shift). */
+.heroImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 42%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* One flat sun overlay across the whole photo, edge to edge, at the same
+   opacity everywhere. 75% is the lowest opacity at which ink keeps 4.5:1
+   over the darkest foreground pixels (4.83:1); it is a tint, not a panel. */
+.heroOverlay {
+  position: absolute;
+  inset: 0;
+  background: var(--sun);
   opacity: 0.75;
-  transition: opacity var(--duration-base) var(--ease);
+  z-index: 1;
 }
 
-.scrollCue:hover { opacity: 1; }
+.heroLayer {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+}
 
-.scrollCueText {
-  font-size: var(--text-xs);
-  color: var(--muted);
-  letter-spacing: 0.08em;
+/* Text sits on the flat sun overlay (ink over the composite, >= 4.8:1). */
+.heroText {
+  max-width: min(560px, 44vw);
+  padding: var(--space-10) 0;
+}
+
+/* ── Today's affirmation card: floats over the photo at the upper right,
+      inside the container's right edge and clear of the headline, mood row
+      and buttons. Cream card, sand hairline border, one soft plain shadow.
+      No blur, glow, gradient or animation. ── */
+.heroCard {
+  position: absolute;
+  top: 24%;
+  right: max(var(--space-6), calc((100% - var(--max-site)) / 2 + var(--space-6)));
+  z-index: 3;
+  width: 360px;
+  background: var(--cream);
+  border: 1px solid var(--sand);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  box-shadow: 0 8px 24px rgba(36, 24, 16, 0.18);
+}
+
+/* Terracotta eyebrow: 5.07:1 on cream. */
+.heroCardEyebrow {
+  font-size: 13px;
+  font-weight: 600;
   text-transform: uppercase;
-  white-space: nowrap;
+  letter-spacing: 0.08em;
+  color: var(--terracotta);
+  margin-bottom: var(--space-3);
 }
 
-.scrollCueArrow {
+/* Italic serif verse: ink on cream, 16.4:1. */
+.heroCardVerse {
+  font-family: var(--font-display);
   font-size: 18px;
-  line-height: 1;
-  color: var(--sun-deep);
-  animation: cueBob 2s ease-in-out infinite;
+  font-style: italic;
+  color: var(--ink);
+  line-height: 1.55;
+  margin-bottom: var(--space-2);
 }
 
-@keyframes cueBob {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(4px); }
+/* Small muted ink reference: 6.33:1 on cream. */
+.heroCardRef {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
 }
 
-.scrollCue:focus-visible {
-  outline: 2px solid var(--sun-deep);
-  outline-offset: 4px;
-  border-radius: var(--radius-sm);
+.heroHeading {
+  font-family: var(--font-display);
+  font-size: clamp(2.15rem, 6vw, 5rem);
+  color: var(--ink);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin-bottom: var(--space-5);
+}
+
+/* Emphasis stays italic in ink: over the photo composite no third colour
+   (leaf-deep 2.97:1, terracotta 2.11:1) holds contrast on the darkest
+   pixels, while ink holds >= 4.8:1. */
+.heroAccent {
+  font-style: italic;
+  color: var(--ink);
+}
+
+/* ── Mood check-in: radiogroup, local state only, nothing sent or stored ── */
+.moodCheck {
+  margin-bottom: var(--space-6);
+}
+
+.moodHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.moodLabel {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.moodToggle {
+  background: none;
+  border: none;
+  padding: 0 var(--space-2);
+  min-height: 44px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.moodRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.moodBtn {
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  background: transparent;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-full);
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background var(--duration-base) var(--ease);
+}
+
+.moodBtn:hover { background: rgb(255 251 245 / 0.85); }
+
+.moodBtnOn {
+  border-color: var(--ink);
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* On the sun field a local ink focus ring stays >= 3:1 everywhere. */
+.heroText :focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .scrollCueArrow { animation: none; }
+  .moodBtn { transition: none; }
 }
 
-/* ── Features ── */
+.verseBlock {
+  margin-top: var(--space-3);
+  max-width: 46ch;
+  display: grid;
+}
+
+/* The hidden sizing copy and the visible content share one grid cell, so the
+   block is exactly as tall as the taller of the two. The sizer always holds
+   the longest verse plus the help line, so the reserved height is fixed and
+   choosing a mood (or hiding Scripture) never moves the copy below. */
+.verseSizer,
+.verseContent {
+  grid-area: 1 / 1;
+}
+
+.verseSizer {
+  visibility: hidden;
+}
+
+.verseText {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 16px;
+  color: var(--ink);
+  line-height: 1.6;
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--clay);
+}
+
+.verseRef {
+  margin-top: var(--space-2);
+  padding-left: var(--space-4);
+  font-size: 13px;
+  font-variant: small-caps;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+
+.versePlain {
+  font-size: 15px;
+  color: var(--ink);
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--clay);
+}
+
+.verseHelp {
+  margin-top: var(--space-2);
+  padding-left: var(--space-4);
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.verseHelpLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--ink);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.heroSub {
+  font-size: 18px;
+  color: var(--ink);
+  line-height: 1.7;
+  max-width: 46ch;
+  margin-bottom: var(--space-6);
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-6);
+}
+
+/* On the sun field, keep the hero links at full ink for a clean hover. */
+.heroText .textLink:hover { color: var(--ink); }
+
+/* ── Trust band: sand strip, three items, thin dividers ── */
+.heroBand {
+  background: var(--bg-soft);
+  border-top: 1px solid var(--border-soft);
+  padding: var(--space-5) 0;
+}
+
+.trustStrip {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.trustStrip li {
+  font-size: 15px;
+  color: var(--ink-mid);
+}
+
+@media (min-width: 900px) {
+  .trustStrip {
+    flex-direction: row;
+    align-items: center;
+    gap: 0;
+  }
+
+  .trustStrip li {
+    padding: 0 var(--space-6);
+    border-left: 1px solid var(--clay-light);
+  }
+
+  .trustStrip li:first-child {
+    padding-left: 0;
+    border-left: none;
+  }
+
+  .heroBand .inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: var(--space-3) var(--space-10);
+  }
+}
+
+/* ── Mobile: photo on top at ~40vh, then the text on a solid sun field. The
+      copy is not over the photo here, so the sun overlay is hidden and the
+      photo stays clear. Nothing exceeds the viewport width, so no horizontal
+      scroll. ── */
+@media (max-width: 767px) {
+  .hero {
+    flex-direction: column;
+    align-items: stretch;
+    min-height: 0;
+  }
+
+  .heroImg {
+    position: static;
+    width: 100%;
+    height: 40vh;
+    min-height: 220px;
+    object-position: center;
+  }
+
+  .heroOverlay {
+    display: none;
+  }
+
+  .heroText {
+    max-width: 560px;
+    padding: var(--space-8) 0 var(--space-10);
+  }
+
+  /* The card leaves the photo and becomes a normal block under the
+     call-to-action buttons, full width of the container. */
+  .heroCard {
+    position: static;
+    width: auto;
+    margin: 0 var(--space-6) var(--space-8);
+  }
+}
+
+/* ── Features: cream cards on a sand band, one icon accent per card ── */
 .features {
-  padding: 80px 0;
-  text-align: center;
-  /* The site nav is sticky, so an anchor jump would otherwise tuck the section
-     heading underneath it. */
+  padding: var(--space-14) 0;
+  background: var(--sand);
   scroll-margin-top: 80px;
 }
 
-.featuresScroller {
-  position: relative;
-  margin-top: var(--space-8);
-}
-
-/* A one-row track that scrolls sideways. Cards keep a fixed basis and snap to
-   the start, so the next card peeks in and the row reads as scrollable rather
-   than as a truncated grid. */
-.featuresTrack {
-  display: flex;
+.featuresGrid {
+  display: grid;
+  grid-template-columns: 1fr;
   gap: var(--space-4);
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  text-align: left;
-  /* Room for the scrollbar and for the edge fades, which sit outside the
-     track's own padding so they never scroll with the cards. */
-  padding: var(--space-2) var(--space-5) var(--space-5);
-  scrollbar-width: thin;
-  scrollbar-color: var(--sun-muted) transparent;
 }
 
-.featuresTrack::-webkit-scrollbar { height: 6px; }
-.featuresTrack::-webkit-scrollbar-track { background: transparent; }
-.featuresTrack::-webkit-scrollbar-thumb {
-  background: var(--sun-muted);
-  border-radius: var(--radius-full);
+@media (min-width: 640px) {
+  .featuresGrid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (min-width: 1024px) {
+  .featuresGrid { grid-template-columns: repeat(4, 1fr); }
 }
 
 .featureCard {
-  flex: 0 0 auto;
-  /* ~280px reads well next to a 960px column; the peeking card is what signals
-     there is more to the right. */
-  width: min(280px, 78vw);
-  scroll-snap-align: start;
-  display: flex;
-  flex-direction: column;
-  background: #fff;
+  background: var(--cream);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   padding: var(--space-6);
-  box-shadow: var(--shadow-sm);
-  transition: transform var(--duration-base) var(--ease), box-shadow var(--duration-base) var(--ease);
-}
-
-.featureCard:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-card);
+  min-width: 0;
 }
 
 .featureIcon {
   display: block;
+  width: 22px;
+  height: 22px;
+  color: var(--ink);
   margin-bottom: var(--space-4);
-  color: var(--sun-deep);
 }
 
-/* Sizing lives here rather than in JSX so the feature cards and the circle
-   badges can both render a lucide <svg> at their own scale. */
-.featureIcon svg {
-  width: 30px;
-  height: 30px;
-  stroke-width: 1.6;
-}
+/* One accent per card. Icons are decorative (aria-hidden), so this is
+   stylistic; the sun accent is deliberately the only low-contrast one. */
+.featureIconSun { color: var(--sun); }
+.featureIconTerracotta { color: var(--terracotta); }
+.featureIconLeaf { color: var(--leaf); }
+.featureIconInk { color: var(--ink); }
 
 .featureTitle {
-  font-size: var(--text-base);
+  font-size: 16px;
   font-weight: 500;
   color: var(--ink);
   margin-bottom: var(--space-2);
 }
 
 .featureDesc {
-  font-size: var(--text-sm);
+  font-size: 16px;
   color: var(--muted);
   line-height: 1.65;
 }
 
-/* Soft edges so a card is never sliced by the section boundary. Purely
-   decorative, so the fades are hidden from assistive tech. */
-.featuresScroller::before,
-.featuresScroller::after {
-  content: '';
-  position: absolute;
-  top: var(--space-2);
-  bottom: var(--space-5);
-  width: 40px;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.featuresScroller::before {
-  left: 0;
-  background: linear-gradient(to right, var(--bg), transparent);
-}
-
-.featuresScroller::after {
-  right: 0;
-  background: linear-gradient(to left, var(--bg), transparent);
-}
-
-/* ── Problem ── */
-.problem {
-  padding: 80px 0;
-  background: var(--bg-mid);
-  border-top: 1px solid var(--border-soft);
-  border-bottom: 1px solid var(--border-soft);
-  text-align: center;
-}
-
-.problemGrid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-4);
-  margin: var(--space-8) 0;
-}
-
-@media (min-width: 640px) {
-  .problemGrid { grid-template-columns: repeat(3, 1fr); }
-}
-
-.problemCard {
-  background: #fff;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  padding: var(--space-8) var(--space-5);
-  box-shadow: var(--shadow-sm);
-}
-
-.problemNum {
-  display: block;
-  font-family: var(--font-display);
-  font-size: var(--text-3xl);
-  color: var(--sun-deep);
-  margin-bottom: var(--space-3);
-  line-height: 1;
-}
-
-.problemText {
-  font-size: var(--text-sm);
-  color: var(--muted);
-  line-height: 1.65;
-}
-
-.problemClose {
-  font-size: var(--text-base);
+.featureExtra {
+  margin-top: var(--space-6);
+  font-size: 16px;
   color: var(--ink-mid);
   line-height: 1.75;
-  max-width: 480px;
-  margin: 0 auto;
+  max-width: 60ch;
 }
 
-/* ── Circles ── */
-.circlesSection {
-  padding: 80px 0;
-  background: var(--ink);
+/* ── Circles: leaf-deep band, cream copy, sun button with ink text ── */
+.circles {
+  padding: var(--space-14) 0;
+  background: var(--leaf-deep);
   text-align: center;
   scroll-margin-top: 80px;
 }
 
-.circlesPills {
+.circlesIntro {
+  font-size: 16px;
+  color: var(--cream);
+  line-height: 1.75;
+  max-width: 60ch;
+  margin: 0 auto var(--space-8);
+  text-align: center;
+}
+
+.circlesLabel {
+  font-size: 14px;
+  color: var(--cream);
+  margin-bottom: var(--space-3);
+}
+
+.circlesList {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
   justify-content: center;
-  margin-bottom: var(--space-8);
+  gap: var(--space-2) var(--space-6);
+  max-width: 720px;
+  margin: 0 auto var(--space-8);
 }
 
-.circleBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--text-sm);
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
-  color: rgba(255,255,255,0.75);
-  padding: 8px 18px;
-  border-radius: var(--radius-full);
-  transition: all var(--duration-base) var(--ease);
+.circlesList li {
+  font-size: 16px;
+  color: var(--cream);
 }
 
-.circleBadge:hover {
-  background: rgba(245,158,42,0.15);
-  border-color: rgba(245,158,42,0.3);
-  color: var(--sun);
-}
-
-.circlesBtn {
-  display: inline-block;
-  background: var(--sun);
-  color: #fff;
-  font-size: var(--text-base);
-  font-weight: 500;
-  padding: 14px var(--space-8);
-  border-radius: var(--radius-full);
-  box-shadow: 0 4px 24px rgba(245,158,42,0.35);
-  transition: all var(--duration-base) var(--ease);
-}
-
-.circlesBtn:hover {
-  background: var(--sun-deep);
-  transform: translateY(-1px);
-}
-
-/* ── Therapists ── */
+/* ── Therapists: cream band, directory rows in cream, honest placeholder
+      panel on sand ── */
 .therapists {
-  padding: 80px 0;
-  background: var(--bg-mid);
+  padding: var(--space-14) 0;
+  background: var(--cream);
   border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
   scroll-margin-top: 80px;
 }
 
-.therapistsInner {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 0 var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-10);
+.therapistsGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-8);
+  align-items: center;
 }
 
-@media (min-width: 768px) {
-  .therapistsInner { flex-direction: row; align-items: center; }
+@media (min-width: 900px) {
+  .therapistsGrid {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-12);
+  }
 }
 
-.therapistsLeft { flex: 1; }
+.therapistsText { min-width: 0; }
 
-.therapistsDesc {
-  font-size: var(--text-base);
-  color: var(--muted);
-  line-height: 1.75;
-  margin-bottom: var(--space-6);
-  max-width: 440px;
-}
+.therapistsPanel { min-width: 0; }
 
-.therapistsBtn {
-  display: inline-block;
-  background: var(--ink);
-  color: #fff;
-  font-size: var(--text-base);
-  font-weight: 500;
-  padding: 14px var(--space-8);
-  border-radius: var(--radius-full);
-  transition: all var(--duration-base) var(--ease);
-}
-
-.therapistsBtn:hover {
-  background: var(--sun-deep);
-  transform: translateY(-1px);
-}
-
-.therapistsRight {
-  flex: 1;
+.therapistList {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
 
-.therapistMiniCard {
-  background: #fff;
+.therapistRow {
+  background: var(--cream);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
   padding: var(--space-4);
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  box-shadow: var(--shadow-sm);
-  transition: transform var(--duration-base) var(--ease);
 }
 
-.therapistMiniCard:hover { transform: translateX(4px); }
+.therapistInfo { flex: 1; min-width: 0; }
 
-.therapistMiniAvatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: var(--sun-light);
-  border: 2px solid var(--sun-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
-  font-size: var(--text-base);
-  font-style: italic;
-  color: var(--sun-deep);
-  flex-shrink: 0;
-}
-
-.therapistMiniInfo { flex: 1; }
-
-.therapistMiniName {
-  font-size: var(--text-sm);
+.therapistName {
+  font-size: 16px;
   font-weight: 500;
   color: var(--ink);
 }
 
-.therapistMiniLang {
-  font-size: var(--text-xs);
-  color: var(--teal);
-  margin: 1px 0;
+.therapistLang {
+  font-size: 14px;
+  color: var(--teal-deep);
+  margin-top: 2px;
 }
 
-.therapistMiniSpec {
-  font-size: var(--text-xs);
+.therapistMeta {
+  font-size: 14px;
   color: var(--muted);
+  margin-top: 2px;
 }
 
-.therapistMiniPrice {
-  font-size: var(--text-sm);
+/* Terracotta is 5.07:1 on cream here; --sun-deep would fail AA at this size. */
+.therapistPrice {
+  font-size: 14px;
   font-weight: 500;
-  color: var(--sun-deep);
+  color: var(--clay);
   white-space: nowrap;
 }
 
-/* ── Final CTA ── */
-.finalCta {
-  padding: 100px 0;
-  text-align: center;
-  position: relative;
-  overflow: hidden;
+.therapistPlaceholder {
+  background: var(--sand);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8) var(--space-6);
 }
 
-.finalCta::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 600px;
-  height: 400px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(245,158,42,0.1) 0%, transparent 70%);
-  pointer-events: none;
+.therapistPlaceholder h3 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--ink);
+  margin-bottom: var(--space-2);
 }
 
-.finalCtaInner {
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 0 var(--space-5);
-  position: relative;
+.therapistPlaceholder p {
+  font-size: 16px;
+  color: var(--muted);
+  line-height: 1.65;
+  margin-bottom: var(--space-4);
+  max-width: 40ch;
 }
 
-.finalCtaMark {
-  width: 60px;
-  height: 60px;
+/* ── Stats band: sun background, ink text (8.39:1) ── */
+.stats {
   background: var(--sun);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto var(--space-6);
-  box-shadow: 0 4px 24px rgba(245,158,42,0.35);
+  padding: var(--space-8) 0;
 }
 
-.finalCtaMark svg {
-  width: 30px;
-  height: 30px;
-  color: #fff;
+.statsList {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .statsList { grid-template-columns: repeat(3, 1fr); }
+}
+
+.statItem {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  text-align: center;
+}
+
+@media (min-width: 768px) {
+  .statItem {
+    border-right: 1px solid rgba(36, 24, 16, 0.25);
+  }
+  .statItem:last-child { border-right: none; }
+}
+
+.statNum {
+  font-family: var(--font-display);
+  font-size: 28px;
+  color: var(--ink);
+  line-height: 1.2;
+}
+
+.statLabel {
+  font-size: 16px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+/* ── Why Soulwe exists ── */
+.problem {
+  padding: var(--space-14) 0;
+}
+
+.problemGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-8);
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .problemGrid {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-12);
+  }
+}
+
+.problemText { min-width: 0; }
+
+.problemClose {
+  font-size: 16px;
+  color: var(--ink-mid);
+  line-height: 1.75;
+  max-width: 42ch;
+  margin-top: var(--space-4);
+}
+
+.problemFigures { min-width: 0; }
+
+.figure {
+  padding: var(--space-5) 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.figure:first-child { border-top: 1px solid var(--border-soft); }
+
+.figureNum {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 36px;
+  color: var(--ink);
+  line-height: 1.1;
+  margin-bottom: var(--space-2);
+}
+
+.figureText {
+  font-size: 16px;
+  color: var(--ink-mid);
+  line-height: 1.65;
+  max-width: 44ch;
+}
+
+.footnoteRef {
+  color: var(--sun-deep);
+  margin-left: 2px;
+}
+
+.footnote {
+  margin-top: var(--space-4);
+  font-size: 14px;
+  color: var(--clay);
+  line-height: 1.6;
+  max-width: 52ch;
+}
+
+.footnoteLink {
+  color: var(--clay);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.footnoteLink:hover { color: var(--clay-muted); }
+
+/* ── Final CTA: sun band with a large ink button (cream text on ink,
+      16.40:1); ink text on the band is 8.39:1 ── */
+.finalCta {
+  padding: var(--space-14) 0;
+  background: var(--sun);
+  border-top: 1px solid var(--border-soft);
 }
 
 .finalCtaHeading {
   font-family: var(--font-display);
-  font-size: clamp(30px, 5vw, 52px);
+  font-size: clamp(30px, 4vw, 48px);
   color: var(--ink);
-  line-height: 1.2;
+  line-height: 1.15;
   letter-spacing: -0.02em;
+  max-width: 20ch;
   margin-bottom: var(--space-4);
 }
 
 .finalCtaSub {
-  font-size: var(--text-base);
-  color: var(--muted);
+  font-size: 16px;
+  color: var(--ink);
   line-height: 1.75;
-  margin-bottom: var(--space-8);
+  max-width: 48ch;
+  margin-bottom: var(--space-6);
 }
 
-.finalCtaBtn {
-  /* Without this the <Link> stayed display:inline and the margin-bottom below
-     was ignored entirely, so the Psalm verse sat flush against the button. */
-  display: inline-block;
-  background: var(--ink);
-  color: var(--cream);
-  font-size: var(--text-lg);
-  font-weight: 500;
-  padding: 16px var(--space-10);
-  border-radius: var(--radius-full);
-  box-shadow: 0 4px 24px rgba(28,25,23,0.2);
-  transition: all var(--duration-base) var(--ease);
-  margin-bottom: var(--space-8);
+.finalCta .btnPrimary {
+  min-height: 56px;
+  padding: 0 var(--space-10);
+  font-size: 18px;
 }
 
-.finalCtaBtn:hover {
-  background: var(--sun-deep);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 32px rgba(212,120,10,0.35);
-}
-
-.finalCtaVerse {
-  font-family: var(--font-display);
-  font-size: var(--text-sm);
-  font-style: italic;
-  color: var(--muted);
-  line-height: 1.65;
-  max-width: 460px;
-  margin: 0 auto;
+@media (max-width: 639px) {
+  .features,
+  .circles,
+  .therapists,
+  .problem,
+  .finalCta { padding-top: 56px; padding-bottom: 56px; }
 }

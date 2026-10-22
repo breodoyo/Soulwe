@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -130,6 +131,22 @@ func TestHandlerAnonymousCreate(t *testing.T) {
 			t.Errorf("internal error detail leaked to the client: %s", body)
 		}
 		assertErrorCode(t, rec, "INTERNAL_SERVER_ERROR")
+	})
+
+	t.Run("returns 409, not 500, when the service reports an identity conflict", func(t *testing.T) {
+		svc := &fakeService{
+			createSessionFunc: func(context.Context, string) (*Session, error) {
+				return nil, fmt.Errorf("anon create session: %w", ErrIdentityConflict)
+			},
+		}
+		rec := performAnonymousCreate(t, svc, "")
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("expected 409, got %d: %s", rec.Code, rec.Body.String())
+		}
+		assertErrorCode(t, rec, "SESSION_CONFLICT")
+		if body := rec.Body.String(); strings.Contains(body, "conflicts with an existing row") {
+			t.Errorf("internal conflict detail leaked to the client: %s", body)
+		}
 	})
 
 	t.Run("the raw token is never included in any error response", func(t *testing.T) {

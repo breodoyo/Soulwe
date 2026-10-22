@@ -389,7 +389,7 @@ export const api = {
       )
     },
 
-    // Members only. 201 returns the server-resolved author_name and is_anonymous.
+    // Members only. 201 returns the server-derived author_name and is_mine.
     sendMessage: (id: string, content: string): Promise<CircleMessageResponse> => {
       const payload: CreateCircleMessagePayload = { content }
       return request<CircleMessageResponse>(`/circles/${encodeURIComponent(id)}/messages`, {
