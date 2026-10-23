@@ -33,7 +33,9 @@ const (
 	DefaultClaudeModel = "claude-3-5-haiku-latest"
 
 	// DefaultGeminiModel is the Gemini model used when LLM_MODEL is unset.
-	DefaultGeminiModel = "gemini-2.5-flash"
+	// Gemini 2.5 Flash is retired for new API keys, so default to a current
+	// Flash model that is still served.
+	DefaultGeminiModel = "gemini-3.5-flash"
 
 	// GeminiBaseURL prefixes the Gemini generateContent endpoint. The model name
 	// and the ":generateContent" method are appended to it.
@@ -41,6 +43,10 @@ const (
 
 	// MaxTokens bounds the reflection length so requests stay fast and cheap.
 	MaxTokens = 220
+
+	// GeminiMaxTokens leaves room for Gemini's thinking tokens, which otherwise
+	// consume the whole output budget and return an empty candidate.
+	GeminiMaxTokens = 1024
 
 	// RequestTimeout bounds one reflection call; a shorter caller deadline wins.
 	RequestTimeout = 45 * time.Second
@@ -54,9 +60,14 @@ const (
 // unavailable. It is safe to surface; it reveals no key material.
 var ErrNotConfigured = errors.New("llm: provider is not configured")
 
-// ErrBlocked reports that a provider refused to answer (for example a safety
-// block or an empty completion). Callers may substitute a safe fallback.
+// ErrBlocked reports that a provider refused to answer for a safety reason.
+// Callers may substitute a safe fallback.
 var ErrBlocked = errors.New("llm: response was blocked")
+
+// ErrEmpty reports that a provider answered successfully but produced no text
+// (for example its output budget was exhausted or it returned no candidates).
+// It is distinct from ErrBlocked so failures can be diagnosed from the log.
+var ErrEmpty = errors.New("llm: response contained no text")
 
 // maxLoggedError caps the provider error text in a log line, so an upstream
 // message can never grow one log entry into a payload.
@@ -225,6 +236,18 @@ func logCall(provider, model string, start time.Time, err error) {
 			attrs = append(attrs, slog.String("http_status_plain", plain))
 		}
 	}
+	var failure *geminiFailure
+	if errors.As(err, &failure) {
+		if failure.caseName != "" {
+			attrs = append(attrs, slog.String("case", failure.caseName))
+		}
+		if failure.finishReason != "" {
+			attrs = append(attrs, slog.String("finish_reason", failure.finishReason))
+		}
+		if failure.blockReason != "" {
+			attrs = append(attrs, slog.String("block_reason", failure.blockReason))
+		}
+	}
 	slog.Warn("llm request failed", attrs...)
 }
 
@@ -251,6 +274,8 @@ func errorType(err error) string {
 		return "canceled"
 	case errors.Is(err, ErrBlocked):
 		return "blocked"
+	case errors.Is(err, ErrEmpty):
+		return "empty response"
 	default:
 		return "upstream"
 	}

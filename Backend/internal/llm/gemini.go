@@ -26,6 +26,46 @@ type geminiResponse struct {
 	} `json:"promptFeedback"`
 }
 
+// geminiFailure records why Gemini produced no text. finishReason and
+// blockReason are provider enums, never user data, so they are safe to log.
+type geminiFailure struct {
+	err          error
+	caseName     string
+	finishReason string
+	blockReason  string
+}
+
+func (e *geminiFailure) Error() string {
+	detail := e.caseName
+	if e.finishReason != "" {
+		detail += ", finishReason=" + e.finishReason
+	}
+	if e.blockReason != "" {
+		detail += ", blockReason=" + e.blockReason
+	}
+	return fmt.Sprintf("llm: gemini %s: %v", detail, e.err)
+}
+
+func (e *geminiFailure) Unwrap() error { return e.err }
+
+// supportsZeroThinkingBudget reports whether the model accepts
+// thinkingBudget=0. Current Flash models document zero; sending the field to
+// other models (or to image/audio variants) would make the request fail.
+func supportsZeroThinkingBudget(model string) bool {
+	m := strings.ToLower(strings.TrimSpace(model))
+	if !strings.Contains(m, "flash") {
+		return false
+	}
+	switch {
+	case strings.Contains(m, "image"), strings.Contains(m, "tts"),
+		strings.Contains(m, "audio"), strings.Contains(m, "live"):
+		return false
+	}
+	return strings.HasPrefix(m, "gemini-2.5-flash") ||
+		strings.HasPrefix(m, "gemini-3") ||
+		strings.HasPrefix(m, "gemini-flash")
+}
+
 // Gemini is the Google Gemini implementation of Reflector. It holds only the
 // API key and model; it never stores or logs content.
 type Gemini struct {
@@ -51,14 +91,22 @@ func newGemini(apiKey, model, url string) *Gemini {
 }
 
 // Reflect returns the trimmed reflection, or ErrNotConfigured when no API key is
-// set. A safety block or an empty candidate is reported as ErrBlocked. Journal
-// content never appears in the returned error.
+// set. A safety block is reported as ErrBlocked; any other empty answer (an
+// exhausted output budget, no candidates, blank text) is reported as ErrEmpty.
+// Journal content never appears in the returned error.
 func (g *Gemini) Reflect(ctx context.Context, entry string, moodTags []string) (out string, err error) {
 	start := time.Now()
 	defer func() { logCall(ProviderGemini, g.model, start, err) }()
 
 	if strings.TrimSpace(g.apiKey) == "" {
 		return "", ErrNotConfigured
+	}
+
+	generationConfig := map[string]any{
+		"maxOutputTokens": GeminiMaxTokens,
+	}
+	if supportsZeroThinkingBudget(g.model) {
+		generationConfig["thinkingConfig"] = map[string]any{"thinkingBudget": 0}
 	}
 
 	body, err := json.Marshal(map[string]any{
@@ -71,9 +119,7 @@ func (g *Gemini) Reflect(ctx context.Context, entry string, moodTags []string) (
 				"parts": []map[string]string{{"text": reflectionPrompt(entry, moodTags)}},
 			},
 		},
-		"generationConfig": map[string]any{
-			"maxOutputTokens": MaxTokens,
-		},
+		"generationConfig": generationConfig,
 	})
 	if err != nil {
 		return "", fmt.Errorf("llm: build gemini request: %w", err)
@@ -106,14 +152,42 @@ func (g *Gemini) Reflect(ctx context.Context, entry string, moodTags []string) (
 		return "", fmt.Errorf("llm: decode gemini response: %w", err)
 	}
 	if parsed.PromptFeedback.BlockReason != "" {
-		return "", fmt.Errorf("llm: gemini blocked the prompt: %w", ErrBlocked)
+		return "", &geminiFailure{
+			err:         ErrBlocked,
+			caseName:    "prompt_blocked",
+			blockReason: parsed.PromptFeedback.BlockReason,
+		}
 	}
+	if len(parsed.Candidates) == 0 {
+		return "", &geminiFailure{err: ErrEmpty, caseName: "no_candidates"}
+	}
+
+	var finishReasons []string
 	for _, candidate := range parsed.Candidates {
+		if candidate.FinishReason != "" {
+			finishReasons = append(finishReasons, candidate.FinishReason)
+		}
 		for _, part := range candidate.Content.Parts {
 			if strings.TrimSpace(part.Text) != "" {
 				return strings.TrimSpace(part.Text), nil
 			}
 		}
 	}
-	return "", fmt.Errorf("llm: gemini returned no text: %w", ErrBlocked)
+
+	for _, reason := range finishReasons {
+		if reason == "SAFETY" {
+			return "", &geminiFailure{err: ErrBlocked, caseName: "finish_safety", finishReason: reason}
+		}
+	}
+	for _, reason := range finishReasons {
+		if reason == "MAX_TOKENS" {
+			return "", &geminiFailure{err: ErrEmpty, caseName: "max_tokens_empty", finishReason: reason}
+		}
+	}
+
+	finishReason := ""
+	if len(finishReasons) > 0 {
+		finishReason = finishReasons[0]
+	}
+	return "", &geminiFailure{err: ErrEmpty, caseName: "empty_text", finishReason: finishReason}
 }
