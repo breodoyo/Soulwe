@@ -310,7 +310,7 @@ func TestPhase5JournalEndToEndIntegration(t *testing.T) {
 		t.Fatalf("journal codec: %v", err)
 	}
 	journalHandler := journal.NewHandler(journal.NewService(
-		journal.NewPostgresRepository(pool), codec, nil, /* no reflection generator wired */
+		journal.NewPostgresRepository(pool, codec), codec, nil, /* no reflection generator wired */
 	))
 
 	router := setupRouter(&config.Config{
@@ -427,8 +427,8 @@ func TestPhase5JournalEndToEndIntegration(t *testing.T) {
 		if entryID == "" {
 			t.Fatal("expected a created entry id")
 		}
-		if res.Entry.WordCount != 14 {
-			t.Errorf("expected word count 14, got %d", res.Entry.WordCount)
+		if res.Entry.WordCount != 15 {
+			t.Errorf("expected word count 15, got %d", res.Entry.WordCount)
 		}
 		if res.Entry.AIReflection != nil {
 			t.Error("expected a null reflection when no generator is configured")

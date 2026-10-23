@@ -41,7 +41,6 @@ type service struct {
 
 // NewService wires the service; reflection may be nil when no AI provider key is set.
 func NewService(entries Repository, codec *cipher.AESGCM, reflection llm.Reflector) *service {
-
 	return &service{entries: entries, codec: codec, reflection: reflection}
 }
 
@@ -227,13 +226,14 @@ func (s *service) Delete(ctx context.Context, owner middleware.Owner, entryID st
 }
 
 func (s *service) Reflect(ctx context.Context, owner middleware.Owner, entryID string) (*JournalEntry, error) {
-	if s.reflection == nil {
-		return nil, ErrAIReflectionUnavailable
-	}
-
+	// Resolve ownership before reporting provider availability so another
+	// user's entry is indistinguishable from one that does not exist.
 	entry, err := s.Get(ctx, owner, entryID)
 	if err != nil {
 		return nil, err
+	}
+	if s.reflection == nil {
+		return nil, ErrAIReflectionUnavailable
 	}
 
 	reflection, err := s.reflection.Reflect(ctx, entry.Content, entry.MoodTags)

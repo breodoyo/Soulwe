@@ -131,16 +131,20 @@ CREATE TABLE journal_entries (
     content_iv      BYTEA NOT NULL,        -- initialisation vector (per entry)
     mood_tags       TEXT[],                -- ['Anxious', 'Hopeful']
     prompt_used     TEXT,                  -- which prompt chip they tapped
-    ai_reflection   TEXT,                  -- Claude's response (plaintext, not encrypted)
+    ai_reflection      TEXT,               -- legacy plaintext, read-only after migration 021
+    ai_reflection_enc  BYTEA,              -- AES-256-GCM encrypted reflection
+    ai_reflection_iv   BYTEA,              -- initialisation vector (per reflection write)
     word_count      INTEGER,
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
-**Why encrypt content but not ai_reflection?**
-The AI reflection is Claude's output, not the user's private thoughts. We may
-display aggregate (anonymised) insights from reflections in the future to
-improve prompts. The user's own words stay encrypted.
+**Why encrypt the AI reflection too?**
+A reflection can quote or paraphrase the entry, so it can reveal the same
+private material as the entry itself. New writes seal it into
+`ai_reflection_enc`/`ai_reflection_iv` under the same key and owner binding as
+`content_enc`; the `ai_reflection` column is only read to keep rows written
+before migration 021 working.
 
 **Encryption contract (implemented in Phase 5):**
 - A single server-side AES-256-GCM key comes from `JOURNAL_ENCRYPTION_KEY`
@@ -149,11 +153,14 @@ improve prompts. The user's own words stay encrypted.
   ciphertext lives in `content_enc`. Encrypting the same text twice never
   produces the same ciphertext.
 - The ciphertext is bound to its owner: decryption authenticates against the
-  entry's `user_id` (as additional authenticated data), so one user's
+  entry's owner identity (as additional authenticated data), so one user's
   encrypted row cannot be decrypted or swapped under another user's identity.
-- Decryption happens only in the service layer, and only to return an entry to
-  its owner. Journal plaintext and ciphertext never appear in API responses
-  (list payloads exclude `content` entirely), logs, or errors.
+- The AI reflection uses the same key and owner binding. Every reflection write
+  mints a fresh IV, and a content change clears all three reflection columns.
+- Decryption happens only on read paths that return data to its owner: content
+  is opened in the service layer, and the repository opens the reflection while
+  scanning the row. Journal plaintext and ciphertext never appear in API
+  responses (list payloads exclude `content` entirely), logs, or errors.
 
 **Journal types:**
 The schema has no journal-type column; the product defines a single regular
