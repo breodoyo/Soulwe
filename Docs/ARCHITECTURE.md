@@ -211,7 +211,7 @@ is never duplicated into message rows and cannot drift out of sync.
 
 ### AI data handling
 
-Journal content sent to Claude is not stored by Soulwe after the reflection is returned.
+Journal content sent to Claude is not stored by Soulwe after the reflection is returned. The returned reflection is stored encrypted at rest, because it can quote or paraphrase the entry.
 
 Anthropic's data policies are disclosed to users through Soulwe's privacy notice.
 

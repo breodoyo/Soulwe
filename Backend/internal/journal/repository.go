@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"Backend/internal/cipher"
 	"Backend/internal/middleware"
 
 	"github.com/jackc/pgx/v5"
@@ -27,21 +28,25 @@ type Repository interface {
 }
 
 type PostgresRepository struct {
-	pool *pgxpool.Pool
+	pool  *pgxpool.Pool
+	codec *cipher.AESGCM
 }
 
-func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
-	return &PostgresRepository{pool: pool}
+// NewPostgresRepository wires the repository. The codec encrypts the AI
+// reflection with the same AES-256-GCM key and ownership AAD as the entry
+// content, so it is required in production wiring.
+func NewPostgresRepository(pool *pgxpool.Pool, codec *cipher.AESGCM) *PostgresRepository {
+	return &PostgresRepository{pool: pool, codec: codec}
 }
 
-const journalColumns = `id, user_id, anon_identity_id, content_enc, content_iv, mood_tags, prompt_used, ai_reflection, word_count, created_at`
+const journalColumns = `id, user_id, anon_identity_id, content_enc, content_iv, mood_tags, prompt_used, ai_reflection, ai_reflection_enc, ai_reflection_iv, word_count, created_at`
 
 const ownerPredicate = `user_id IS NOT DISTINCT FROM $1 AND anon_identity_id IS NOT DISTINCT FROM $2`
 
 const (
 	createJournalSQL = `
-		INSERT INTO journal_entries (user_id, anon_identity_id, content_enc, content_iv, mood_tags, prompt_used, word_count)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO journal_entries (user_id, anon_identity_id, content_enc, content_iv, mood_tags, prompt_used, ai_reflection, ai_reflection_enc, ai_reflection_iv, word_count)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id, created_at`
 
 	// The before cursor is an exclusive created_at bound; id breaks ties.
@@ -63,15 +68,23 @@ const (
 			content_enc    = CASE WHEN $7 THEN $4 ELSE content_enc END,
 			content_iv     = CASE WHEN $7 THEN $5 ELSE content_iv END,
 			word_count     = CASE WHEN $7 THEN $9 ELSE word_count END,
-			mood_tags      = $6,
-			prompt_used    = $8,
-			ai_reflection  = CASE WHEN $7 THEN NULL ELSE ai_reflection END
+			mood_tags         = $6,
+			prompt_used       = $8,
+			ai_reflection     = CASE WHEN $7 THEN NULL ELSE ai_reflection END,
+			ai_reflection_enc = CASE WHEN $7 THEN NULL ELSE ai_reflection_enc END,
+			ai_reflection_iv  = CASE WHEN $7 THEN NULL ELSE ai_reflection_iv END
 		WHERE id = $3 AND ` + ownerPredicate + `
 		RETURNING ` + journalColumns
 
 	deleteJournalSQL = `DELETE FROM journal_entries WHERE id = $3 AND ` + ownerPredicate + ` RETURNING id`
 
-	updateReflectionSQL = `UPDATE journal_entries SET ai_reflection = $4 WHERE id = $3 AND ` + ownerPredicate + ` RETURNING id`
+	updateReflectionSQL = `
+		UPDATE journal_entries SET
+			ai_reflection     = $4,
+			ai_reflection_enc = $5,
+			ai_reflection_iv  = $6
+		WHERE id = $3 AND ` + ownerPredicate + `
+		RETURNING id`
 )
 
 func ownerArgs(owner middleware.Owner) (any, any, bool) {
@@ -94,8 +107,14 @@ func (r *PostgresRepository) Create(ctx context.Context, entry *JournalEntry) er
 		return errors.New("journal create: no owner")
 	}
 
-	err := r.pool.QueryRow(ctx, createJournalSQL,
-		userID, anonID, entry.ContentEnc, entry.ContentIV, entry.MoodTags, entry.PromptUsed, entry.WordCount,
+	owner := middleware.Owner{UserID: entry.UserID, AnonIdentityID: entry.AnonIdentityID}
+	legacy, enc, iv, err := r.sealReflection(owner, entry.AIReflection)
+	if err != nil {
+		return fmt.Errorf("journal create reflection: %w", err)
+	}
+
+	err = r.pool.QueryRow(ctx, createJournalSQL,
+		userID, anonID, entry.ContentEnc, entry.ContentIV, entry.MoodTags, entry.PromptUsed, legacy, enc, iv, entry.WordCount,
 	).Scan(&entry.ID, &entry.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("journal create: %w", err)
@@ -113,7 +132,7 @@ func (r *PostgresRepository) ListByOwner(ctx context.Context, owner middleware.O
 	args := []any{userID, anonID, limit}
 	if before != nil {
 		query = listJournalsBeforeSQL
-		args = append(args, *before)
+		args = []any{userID, anonID, *before, limit}
 	}
 
 	rows, err := r.pool.Query(ctx, query, args...)
@@ -125,7 +144,7 @@ func (r *PostgresRepository) ListByOwner(ctx context.Context, owner middleware.O
 	entries := make([]JournalEntry, 0)
 	for rows.Next() {
 		var e JournalEntry
-		if err := scanEntry(rows.Scan, &e); err != nil {
+		if err := r.scanEntry(rows.Scan, &e, owner); err != nil {
 			return nil, fmt.Errorf("journal list: scan: %w", err)
 		}
 		entries = append(entries, e)
@@ -143,7 +162,7 @@ func (r *PostgresRepository) GetByID(ctx context.Context, owner middleware.Owner
 	}
 
 	entry := &JournalEntry{}
-	err := scanEntry(r.pool.QueryRow(ctx, getJournalSQL, userID, anonID, entryID).Scan, entry)
+	err := r.scanEntry(r.pool.QueryRow(ctx, getJournalSQL, userID, anonID, entryID).Scan, entry, owner)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrJournalEntryNotFound
 	}
@@ -160,9 +179,9 @@ func (r *PostgresRepository) Update(ctx context.Context, owner middleware.Owner,
 	}
 
 	scanned := &JournalEntry{}
-	err := scanEntry(r.pool.QueryRow(ctx, updateJournalSQL,
+	err := r.scanEntry(r.pool.QueryRow(ctx, updateJournalSQL,
 		userID, anonID, entryID, entry.ContentEnc, entry.ContentIV, entry.MoodTags, contentChanged, entry.PromptUsed, entry.WordCount,
-	).Scan, scanned)
+	).Scan, scanned, owner)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrJournalEntryNotFound
 	}
@@ -196,8 +215,13 @@ func (r *PostgresRepository) UpdateReflection(ctx context.Context, owner middlew
 		return errors.New("journal update reflection: no owner")
 	}
 
+	legacy, enc, iv, err := r.sealReflection(owner, &reflection)
+	if err != nil {
+		return fmt.Errorf("journal update reflection: %w", err)
+	}
+
 	var updatedID string
-	err := r.pool.QueryRow(ctx, updateReflectionSQL, userID, anonID, entryID, reflection).Scan(&updatedID)
+	err = r.pool.QueryRow(ctx, updateReflectionSQL, userID, anonID, entryID, legacy, enc, iv).Scan(&updatedID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrJournalEntryNotFound
 	}
@@ -207,9 +231,55 @@ func (r *PostgresRepository) UpdateReflection(ctx context.Context, owner middlew
 	return nil
 }
 
-func scanEntry(s func(dest ...any) error, e *JournalEntry) error {
-	var userID, anonID *string
-	if err := s(&e.ID, &userID, &anonID, &e.ContentEnc, &e.ContentIV, &e.MoodTags, &e.PromptUsed, &e.AIReflection, &e.WordCount, &e.CreatedAt); err != nil {
+// sealReflection prepares an AI reflection for storage. The text is sealed
+// into fresh ciphertext and nonce columns, and the legacy plaintext column is
+// cleared. A missing codec is an error rather than a plaintext write.
+func (r *PostgresRepository) sealReflection(owner middleware.Owner, reflection *string) (legacy *string, enc, iv []byte, err error) {
+	if reflection == nil || *reflection == "" {
+		return nil, nil, nil, nil
+	}
+	if r.codec == nil {
+		return nil, nil, nil, errors.New("journal: reflection encryption codec is not configured")
+	}
+
+	aad, err := encryptionAAD(owner)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	enc, iv, err = r.codec.Encrypt([]byte(*reflection), aad)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return nil, enc, iv, nil
+}
+
+// openReflection returns the plaintext reflection, decrypting the sealed
+// columns when present. A legacy plaintext value is returned unchanged so rows
+// written before encryption was added keep working without a crash.
+func (r *PostgresRepository) openReflection(owner middleware.Owner, legacy *string, enc, iv []byte) (*string, error) {
+	if len(enc) == 0 {
+		return legacy, nil
+	}
+	if r.codec == nil {
+		return nil, errors.New("journal: reflection is encrypted but no codec is configured")
+	}
+
+	aad, err := encryptionAAD(owner)
+	if err != nil {
+		return nil, err
+	}
+	plain, err := r.codec.Decrypt(enc, iv, aad)
+	if err != nil {
+		return nil, fmt.Errorf("journal decrypt reflection: %w", err)
+	}
+	reflection := string(plain)
+	return &reflection, nil
+}
+
+func (r *PostgresRepository) scanEntry(s func(dest ...any) error, e *JournalEntry, owner middleware.Owner) error {
+	var userID, anonID, legacy *string
+	var enc, iv []byte
+	if err := s(&e.ID, &userID, &anonID, &e.ContentEnc, &e.ContentIV, &e.MoodTags, &e.PromptUsed, &legacy, &enc, &iv, &e.WordCount, &e.CreatedAt); err != nil {
 		return err
 	}
 	if userID != nil {
@@ -218,5 +288,11 @@ func scanEntry(s func(dest ...any) error, e *JournalEntry) error {
 	if anonID != nil {
 		e.AnonIdentityID = *anonID
 	}
+
+	reflection, err := r.openReflection(owner, legacy, enc, iv)
+	if err != nil {
+		return err
+	}
+	e.AIReflection = reflection
 	return nil
 }

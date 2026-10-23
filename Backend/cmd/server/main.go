@@ -245,7 +245,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("AI reflection configuration error: %v", err)
 	}
-	journalService := journal.NewService(journal.NewPostgresRepository(pool), journalCodec, reflection)
+	journalService := journal.NewService(journal.NewPostgresRepository(pool, journalCodec), journalCodec, reflection)
 	journalHandler := journal.NewHandler(journalService)
 
 	// Memberships and messages are keyed to anonymous identities.

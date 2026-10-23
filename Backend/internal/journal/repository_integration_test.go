@@ -42,11 +42,11 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 	defer pool.Close()
 
 	users := user.NewPostgresRepository(pool)
-	repo := NewPostgresRepository(pool)
 	codec, err := cipher.NewAESGCM([]byte(integrationKey))
 	if err != nil {
 		t.Fatalf("codec: %v", err)
 	}
+	repo := NewPostgresRepository(pool, codec)
 
 	const passwordHash = "$2a$12$abcdefghijklmnopqrstuv" // arbitrary bcrypt-shaped value
 
@@ -102,6 +102,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 
 	t.Run("Create stores ciphertext and returns a UUID entry", func(t *testing.T) {
 		entry := newEntry(integrationText, []string{"Heavy", "Loved"})
+		entry.AIReflection = ptr("a stored reflection")
 		if err := repo.Create(ctx, entry); err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
@@ -119,6 +120,27 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		}
 		if bytes.Contains(storedEnc, []byte("rain")) {
 			t.Error("plaintext appears inside the stored ciphertext")
+		}
+
+		const reflectionText = "a stored reflection"
+		var legacyReflection *string
+		var storedReflectionEnc, storedReflectionIV []byte
+		if err := pool.QueryRow(ctx,
+			"SELECT ai_reflection, ai_reflection_enc, ai_reflection_iv FROM journal_entries WHERE id = $1",
+			entry.ID).Scan(&legacyReflection, &storedReflectionEnc, &storedReflectionIV); err != nil {
+			t.Fatalf("raw reflection SELECT failed: %v", err)
+		}
+		if legacyReflection != nil {
+			t.Error("the plaintext reflection column must be cleared on write")
+		}
+		if len(storedReflectionEnc) == 0 {
+			t.Error("expected the reflection to be encrypted at rest")
+		}
+		if bytes.Contains(storedReflectionEnc, []byte(reflectionText)) {
+			t.Error("plaintext appears inside the stored reflection ciphertext")
+		}
+		if len(storedReflectionIV) != cipher.NonceSize {
+			t.Errorf("expected a %d-byte reflection IV, got %d", cipher.NonceSize, len(storedReflectionIV))
 		}
 
 		got, err := repo.GetByID(ctx, ownerFor(ownerID), entry.ID)
@@ -140,6 +162,88 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		}
 		if got.PromptUsed == nil || *got.PromptUsed != "My day" {
 			t.Errorf("unexpected prompt_used: %v", got.PromptUsed)
+		}
+		if got.AIReflection == nil || *got.AIReflection != "a stored reflection" {
+			t.Errorf("expected the reflection to be persisted on create, got %v", got.AIReflection)
+		}
+	})
+
+	t.Run("a NULL reflection reads back as empty", func(t *testing.T) {
+		entry := newEntry("no reflection yet.", nil)
+		if err := repo.Create(ctx, entry); err != nil {
+			t.Fatalf("Create returned error: %v", err)
+		}
+
+		got, err := repo.GetByID(ctx, ownerFor(ownerID), entry.ID)
+		if err != nil {
+			t.Fatalf("GetByID returned error: %v", err)
+		}
+		if got.AIReflection != nil {
+			t.Errorf("expected no reflection, got %v", got.AIReflection)
+		}
+
+		var legacy *string
+		var enc, iv []byte
+		if err := pool.QueryRow(ctx,
+			"SELECT ai_reflection, ai_reflection_enc, ai_reflection_iv FROM journal_entries WHERE id = $1",
+			entry.ID).Scan(&legacy, &enc, &iv); err != nil {
+			t.Fatalf("raw reflection SELECT failed: %v", err)
+		}
+		if legacy != nil || enc != nil || iv != nil {
+			t.Errorf("expected all reflection columns to be NULL, got legacy=%v enc=%v iv=%v", legacy, enc, iv)
+		}
+	})
+
+	t.Run("a legacy plaintext reflection is still readable", func(t *testing.T) {
+		entry := newEntry("an old entry.", nil)
+		if err := repo.Create(ctx, entry); err != nil {
+			t.Fatalf("Create returned error: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			"UPDATE journal_entries SET ai_reflection = $1 WHERE id = $2",
+			"legacy unencrypted reflection", entry.ID); err != nil {
+			t.Fatalf("seeding a legacy reflection failed: %v", err)
+		}
+
+		got, err := repo.GetByID(ctx, ownerFor(ownerID), entry.ID)
+		if err != nil {
+			t.Fatalf("GetByID returned error: %v", err)
+		}
+		if got.AIReflection == nil || *got.AIReflection != "legacy unencrypted reflection" {
+			t.Errorf("expected the legacy reflection to be returned unchanged, got %v", got.AIReflection)
+		}
+	})
+
+	t.Run("each reflection write uses a fresh nonce", func(t *testing.T) {
+		entry := newEntry("nonce check.", nil)
+		entry.AIReflection = ptr("same reflection")
+		if err := repo.Create(ctx, entry); err != nil {
+			t.Fatalf("Create returned error: %v", err)
+		}
+
+		var firstIV []byte
+		if err := pool.QueryRow(ctx,
+			"SELECT ai_reflection_iv FROM journal_entries WHERE id = $1", entry.ID).Scan(&firstIV); err != nil {
+			t.Fatalf("raw IV SELECT failed: %v", err)
+		}
+		if err := repo.UpdateReflection(ctx, ownerFor(ownerID), entry.ID, "same reflection"); err != nil {
+			t.Fatalf("UpdateReflection returned error: %v", err)
+		}
+		var secondIV []byte
+		if err := pool.QueryRow(ctx,
+			"SELECT ai_reflection_iv FROM journal_entries WHERE id = $1", entry.ID).Scan(&secondIV); err != nil {
+			t.Fatalf("raw IV SELECT failed: %v", err)
+		}
+		if bytes.Equal(firstIV, secondIV) {
+			t.Error("re-encrypting the same reflection reused its nonce")
+		}
+
+		got, err := repo.GetByID(ctx, ownerFor(ownerID), entry.ID)
+		if err != nil {
+			t.Fatalf("GetByID returned error: %v", err)
+		}
+		if got.AIReflection == nil || *got.AIReflection != "same reflection" {
+			t.Errorf("expected the re-encrypted reflection to round trip, got %v", got.AIReflection)
 		}
 	})
 

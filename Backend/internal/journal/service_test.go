@@ -793,6 +793,16 @@ func TestReflect(t *testing.T) {
 		}
 	})
 
+	t.Run("ownership is checked before provider availability", func(t *testing.T) {
+		repo := newFakeRepository()
+		svc := NewService(repo, codec, nil)
+		created, _ := svc.Create(context.Background(), owner("user-1"), secretText, nil, nil)
+		_, err := svc.Reflect(context.Background(), owner("user-2"), created.ID)
+		if !errors.Is(err, ErrJournalEntryNotFound) {
+			t.Fatalf("expected ErrJournalEntryNotFound, got %v", err)
+		}
+	})
+
 	t.Run("generator failure is surfaced safely", func(t *testing.T) {
 		repo := newFakeRepository()
 		svc := NewService(repo, codec, &fakeReflection{err: errors.New("provider exploded")})
