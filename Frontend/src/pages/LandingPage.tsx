@@ -1,6 +1,6 @@
 import { useEffect, useState, type KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { PenLine, Leaf, Handshake, Wind } from 'lucide-react'
+import { PenLine, Leaf, Handshake, Wind, ArrowRight } from 'lucide-react'
 import { api } from '@/lib/api'
 import { statsSourceUrl } from '@/landingContent'
 import { moodVerses } from '@/moodVerses'
@@ -20,25 +20,30 @@ const features = [
     icon: PenLine,
     accent: 'sun',
     title: 'A private journal',
-    desc: 'Write freely, in your own words. Your journal is private to you. Optional AI reflections send the entry you choose to an AI provider.',
+    desc: 'Write freely, in your own words. Stored encrypted and never shown to other people.',
+    link: { to: '/journal', label: 'Open your journal' },
+    extraLink: { to: '/privacy', label: 'How your entry is handled' },
   },
   {
     icon: Leaf,
     accent: 'terracotta',
     title: 'Peer support circles',
-    desc: 'Anonymous groups around grief, work pressure, family expectations and faith. You pick a nickname. Nobody sees your name.',
+    desc: 'Anonymous groups for grief, work, family and faith. A different anonymous name in every circle.',
+    link: { to: '/circles', label: 'Browse circles' },
   },
   {
     icon: Handshake,
     accent: 'leaf',
     title: 'Talk to a therapist',
-    desc: 'Kenyan therapists who work in Swahili, Dholuo, Kikuyu and English. Sessions from KES 500.',
+    desc: 'Kenyan therapists are joining soon, with sessions in several local languages.',
+    link: { to: '/therapists', label: "See what's coming" },
   },
   {
     icon: Wind,
     accent: 'ink',
     title: 'Guided breathing',
-    desc: 'Short, guided exercises you can do anywhere, any time you feel panic rising.',
+    desc: 'Short, guided exercises for whenever you need a moment to settle.',
+    link: { to: '/breathe', label: 'Try breathing' },
   },
 ]
 
@@ -317,34 +322,51 @@ export default function LandingPage() {
         </div>
       </div>
 
-      {/* ── Features: left-aligned heading, static grid ── */}
+      {/* ── Features: cards with links ── */}
       <section className={styles.features} id="features">
         <div className={styles.inner}>
-          <h2 className={styles.sectionHeading}>What Soulwe gives you</h2>
-          <p className={styles.sectionLead}>
-            Four tools that work together, and you can start without an account.
+          <h2 className={styles.sectionHeading} style={{ textAlign: 'center' }}>What Soulwe gives you</h2>
+          <p className={styles.sectionLead} style={{ textAlign: 'center', margin: '0 auto var(--space-6)' }}>
+            Four quiet places to look after yourself, at your own pace. You can begin without an account.
           </p>
-          <div className={styles.featuresGrid}>
-            {features.map(f => {
-              const Icon = f.icon
-              return (
-                <div key={f.title} className={styles.featureCard}>
-                  <Icon
-                    className={[
-                      styles.featureIcon,
-                      featureAccentClass[f.accent] ?? '',
-                    ].join(' ')}
-                    aria-hidden="true"
-                  />
-                  <h3 className={styles.featureTitle}>{f.title}</h3>
-                  <p className={styles.featureDesc}>{f.desc}</p>
-                </div>
-              )
-            })}
+        </div>
+        <div className={styles.featuresBand}>
+          <div className={styles.inner}>
+            <div className={styles.featuresGrid}>
+              {features.map(f => {
+                const Icon = f.icon
+                return (
+                  <div key={f.title} className={styles.featureCard}>
+                    <div className={styles.featureIconWrap}>
+                      <Icon
+                        className={[
+                          styles.featureIcon,
+                          featureAccentClass[f.accent] ?? '',
+                        ].join(' ')}
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <h3 className={styles.featureTitle}>{f.title}</h3>
+                    <p className={styles.featureDesc}>{f.desc}</p>
+                    {f.extraLink && (
+                      <Link className={styles.featurePrivacyLink} to={f.extraLink.to}>
+                        {f.extraLink.label}
+                      </Link>
+                    )}
+                    {f.link && (
+                      <Link className={styles.featureLink} to={f.link.to}>
+                        {f.link.label} <ArrowRight aria-hidden="true" size={18} />
+                      </Link>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
-          <p className={styles.featureExtra}>
-            Also included: daily mood check-ins. Name how you are feeling, from
-            heavy to grateful, and watch it add up over time.
+        </div>
+        <div className={styles.inner}>
+          <p className={styles.featureExtra} style={{ textAlign: 'center', margin: 'var(--space-6) auto 0' }}>
+            A gentle daily check-in. Say how you are, from heavy to grateful, and look back at how your days have been.
           </p>
         </div>
       </section>
