@@ -71,13 +71,7 @@ function formatPrice(t: Therapist): string {
   return `${t.currency} ${t.session_price}`
 }
 
-// The longest verse is used to reserve the check-in space: an invisible copy of
-// it sits in the same grid cell as the visible verse, so the block is always
-// exactly as tall as the tallest verse at the current width, and switching
-// moods never shifts the layout below.
-const longestVerse = moodVerses.reduce((longest, verse) =>
-  verse.text.length > longest.text.length ? verse : longest,
-)
+// Verse layout is handled by the panel; no extra sizer needed.
 
 // Preference for the hero check-in: faith is optional, so Scripture can be
 // hidden. Verses are always ON by default. The key is versioned (now v3): a
@@ -161,19 +155,17 @@ export default function LandingPage() {
   return (
     <div className={`${styles.page} sunrise`}>
 
-      {/* ── Hero: full-bleed golden-hillside photo (circle.png.jpg, the
-             community-circle shot: people along the warm hillside, soft sky
-             above). ONE flat sun overlay at 75% covers the whole photo, edge
-             to edge, at the same opacity everywhere (no gradient, scrim, blur
-             or glow). Ink copy over the composite holds at least 4.8:1, even
-             over the darkest (near-black) foreground pixels. ── */}
+      {/* ── Hero: full-bleed hero.jpg. ONE flat sun overlay at 75% covers the
+             whole photo, edge to edge, at the same opacity everywhere (no
+             gradient, scrim, blur or glow). Ink copy over the composite holds
+             at least 4.8:1, even over the darkest foreground pixels. ── */}
       <section className={styles.hero}>
         <img
           className={styles.heroImg}
-          src="/circle.png.jpg"
-          alt=""
-          width={3674}
-          height={2448}
+          src="/hero.jpg"
+          alt="Two women sit close together in tall golden grass, eyes closed, resting their heads together"
+          width={5760}
+          height={3840}
           fetchPriority="high"
           decoding="async"
         />
@@ -182,142 +174,137 @@ export default function LandingPage() {
         <div className={styles.heroLayer}>
           <div className={styles.inner}>
             <div className={styles.heroText}>
-              <h1 className={styles.heroHeading}>
-                Your soul deserves the{' '}
-                <span className={styles.heroAccent}>same care</span> as your
-                body.
-              </h1>
+              <div className={styles.heroPanel}>
+                <h1 className={styles.heroHeading}>
+                  Your soul deserves the{' '}
+                  <span className={styles.heroAccent}>same care</span> as your
+                  body.
+                </h1>
 
-              <div className={styles.moodCheck}>
-                <div className={styles.moodHead}>
-                  <p className={styles.moodLabel} id="mood-question">
-                    How is your soul today?
-                  </p>
-                  <button
-                    type="button"
-                    className={styles.moodToggle}
-                    aria-pressed={hideScripture}
-                    onClick={toggleScripture}
-                  >
-                    {hideScripture ? 'Show Scripture' : 'Hide Scripture'}
-                  </button>
-                </div>
-                <div
-                  className={styles.moodRow}
-                  role="radiogroup"
-                  aria-labelledby="mood-question"
-                >
-                  {moodVerses.map((verse, index) => (
+                <p className={styles.heroSub}>
+                  {therapists.length > 0 ? (
+                    <>
+                      Peer support circles, a private journal, and Kenyan
+                      therapists who work in Swahili, Dholuo and Kikuyu.
+                    </>
+                  ) : (
+                    <>
+                      Peer support circles, a private journal, and Kenyan
+                      therapists joining soon, in Swahili, Dholuo and Kikuyu.
+                    </>
+                  )}
+                </p>
+
+                <div className={styles.moodCheck}>
+                  <div className={styles.moodHead}>
+                    <p className={styles.moodLabel} id="mood-question">
+                      How is your soul today?
+                    </p>
                     <button
-                      key={verse.mood}
                       type="button"
-                      role="radio"
-                      aria-checked={heroMood === verse.mood}
-                      tabIndex={
-                        heroMood === null
-                          ? index === 0
+                      className={styles.moodToggle}
+                      aria-pressed={hideScripture}
+                      onClick={toggleScripture}
+                    >
+                      {hideScripture ? 'Show Scripture' : 'Hide Scripture'}
+                    </button>
+                  </div>
+                  <div
+                    className={styles.moodRow}
+                    role="radiogroup"
+                    aria-labelledby="mood-question"
+                  >
+                    {moodVerses.map((verse, index) => (
+                      <button
+                        key={verse.mood}
+                        type="button"
+                        role="radio"
+                        aria-checked={heroMood === verse.mood}
+                        tabIndex={
+                          heroMood === null
+                            ? index === 0
+                              ? 0
+                              : -1
+                            : heroMood === verse.mood
                             ? 0
                             : -1
-                          : heroMood === verse.mood
-                          ? 0
-                          : -1
-                      }
-                      className={[
-                        styles.moodBtn,
-                        heroMood === verse.mood ? styles.moodBtnOn : '',
-                      ].join(' ')}
-                      onClick={() => setHeroMood(verse.mood)}
-                      onKeyDown={event => onMoodKeyDown(event, index)}
-                    >
-                      {verse.mood}
-                    </button>
-                  ))}
-                </div>
-                <div className={styles.verseBlock} aria-live="polite">
-                  {/* Invisible sizing copy: the longest verse plus the Heavy
-                      help line, always present, so the block reserves the
-                      tallest state at the current width and choosing a mood
-                      never shifts the copy below. */}
-                  <div className={styles.verseSizer} aria-hidden="true">
-                    <p className={styles.verseText}>
-                      &ldquo;{longestVerse.text}&rdquo;
-                    </p>
-                    <p className={styles.verseRef}>
-                      {longestVerse.reference} ({longestVerse.translation})
-                    </p>
-                    <p className={styles.verseHelp}>
-                      If today feels like too much, help is here.
-                    </p>
+                        }
+                        className={[
+                          styles.moodBtn,
+                          heroMood === verse.mood ? styles.moodBtnOn : '',
+                        ].join(' ')}
+                        onClick={() => setHeroMood(verse.mood)}
+                        onKeyDown={event => onMoodKeyDown(event, index)}
+                      >
+                        {verse.mood}
+                      </button>
+                    ))}
                   </div>
-                  <div className={styles.verseContent}>
-                    {hideScripture || activeVerse === undefined ? (
-                      <p className={styles.versePlain}>
-                        Rest is welcome here. Stay as long as you like.
-                      </p>
-                    ) : (
-                      <>
-                        <p className={styles.verseText}>
-                          &ldquo;{activeVerse.text}&rdquo;
+                  <div className={styles.verseBlock} aria-live="polite">
+                    <div className={styles.verseContent}>
+                      {hideScripture || activeVerse === undefined ? (
+                        <p className={styles.versePlain}>
+                          Rest is welcome here. Stay as long as you like.
                         </p>
-                        <p className={styles.verseRef}>
-                          {activeVerse.reference} ({activeVerse.translation})
-                        </p>
-                      </>
-                    )}
-                    {heroMood === 'Heavy' && (
-                      <p className={styles.verseHelp}>
-                        If today feels like too much,{' '}
-                        <a className={styles.verseHelpLink} href="#crisis">
-                          help is here
-                        </a>
-                        .
-                      </p>
-                    )}
+                      ) : (
+                        <>
+                          <p className={styles.verseText}>
+                            &ldquo;{activeVerse.text}&rdquo;
+                          </p>
+                          <p className={styles.verseRef}>
+                            {activeVerse.reference} ({activeVerse.translation})
+                          </p>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <p className={styles.heroSub}>
-                {therapists.length > 0 ? (
-                  <>
-                    Peer support circles, a private journal, and Kenyan
-                    therapists who work in Swahili, Dholuo and Kikuyu.
-                  </>
-                ) : (
-                  <>
-                    Peer support circles, a private journal, and Kenyan
-                    therapists joining soon, in Swahili, Dholuo and Kikuyu.
-                  </>
+                {heroMood === 'Heavy' && (
+                  <p className={styles.verseHelp}>
+                    If today feels like too much,{' '}
+                    <a className={styles.verseHelpLink} href="#crisis">
+                      help is here
+                    </a>
+                    .
+                  </p>
                 )}
-              </p>
 
-              <div className={styles.heroActions}>
-                <Link className={styles.btnPrimary} to="/home">
-                  Enter Soulwe
-                </Link>
-                <a className={styles.textLink} href="#features">
-                  See how it works
-                </a>
+                <div className={styles.heroActions}>
+                  <Link className={styles.btnPrimary} to="/home">
+                    Enter Soulwe
+                  </Link>
+                  <a className={styles.textLink} href="#features">
+                    See how it works
+                  </a>
+                </div>
               </div>
+
+              {heroMood === 'Heavy' && (
+                <p className={styles.verseHelpBelow}>
+                  If today feels like too much,{' '}
+                  <a className={styles.verseHelpLink} href="#crisis">
+                    help is here
+                  </a>
+                  .
+                </p>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Today's affirmation: a cream card floating over the photo, upper
-            right, inside the container's right edge. It is hidden together
-            with Scripture. On mobile it drops below the call-to-action
-            buttons and spans the container width. */}
-        {!hideScripture && (
-          <aside className={styles.heroCard} aria-label="Today's affirmation">
-            <p className={styles.heroCardEyebrow}>Today&rsquo;s affirmation</p>
-            <p className={styles.heroCardVerse}>
-              &ldquo;{cardVerse.text}&rdquo;
-            </p>
-            <p className={styles.heroCardRef}>
-              {cardVerse.reference} ({cardVerse.translation})
-            </p>
-          </aside>
-        )}
+        {/* Today's affirmation: a cream card floating over the photo, lower
+            right, inside the container's right edge. Always rendered regardless
+            of Scripture toggle. */}
+        <aside className={styles.heroCard} aria-label="Today's affirmation">
+          <p className={styles.heroCardEyebrow}>Today&rsquo;s affirmation</p>
+          <p className={styles.heroCardVerse}>
+            &ldquo;{cardVerse.text}&rdquo;
+          </p>
+          <p className={styles.heroCardRef}>
+            {cardVerse.reference} ({cardVerse.translation})
+          </p>
+        </aside>
       </section>
 
       <div className={styles.heroBand}>

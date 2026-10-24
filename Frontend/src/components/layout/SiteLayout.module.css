@@ -5,25 +5,25 @@
   background: var(--bg);
 }
 
-/* Visible only while focused, then pinned to the viewport top. */
+/* Visible only while focused, then pinned to the viewport top left above the nav. */
 .skipLink {
   position: fixed;
   top: 0;
-  left: 50%;
-  transform: translate(-50%, -120%);
+  left: 0;
+  transform: translateY(-120%);
   z-index: 100;
   padding: var(--space-3) var(--space-5);
   background: var(--ink);
   color: var(--cream);
   font-size: var(--text-sm);
   font-weight: 500;
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  border-radius: 0 0 var(--radius-md) 0;
   transition: transform var(--duration-base) var(--ease);
 }
 
 .skipLink:focus,
 .skipLink:focus-visible {
-  transform: translate(-50%, 0);
+  transform: translateY(0);
   outline: 2px solid var(--sun-deep);
   outline-offset: 2px;
 }
