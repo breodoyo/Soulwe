@@ -634,20 +634,27 @@
   }
 }
 
-/* ── Features: cream cards on a sand band, one icon accent per card ── */
+/* ── Features: cream background with sand band behind cards ── */
 .features {
   padding: var(--space-14) 0;
-  background: var(--sand);
+  background: var(--bg);
   scroll-margin-top: 80px;
+}
+
+.featuresBand {
+  background: #FCE7C2;
+  padding: var(--space-6) 0;
+  margin: var(--space-6) 0;
 }
 
 .featuresGrid {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--space-4);
+  text-align: left;
 }
 
-@media (min-width: 640px) {
+@media (min-width: 768px) {
   .featuresGrid { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -656,47 +663,129 @@
 }
 
 .featureCard {
-  background: var(--cream);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  padding: var(--space-6);
+  background: #FFFDF7;
+  border: 1px solid #F0DDB8;
+  border-radius: 20px;
+  padding: 28px;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  box-shadow: 0 1px 2px rgba(36, 24, 16, 0.06);
+  transition: transform var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease);
+  height: 100%;
+}
+
+.featureCard:hover {
+  transform: translateY(-2px);
+  border-color: #e6d0a3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .featureCard {
+    transition: none;
+  }
+  .featureCard:hover {
+    transform: none;
+  }
+}
+
+.featureIconWrap {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #FFF8EC;
+  border: 1px solid #F0DDB8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .featureIcon {
   display: block;
-  width: 22px;
-  height: 22px;
-  color: var(--ink);
-  margin-bottom: var(--space-4);
+  width: 28px;
+  height: 28px;
 }
 
-/* One accent per card. Icons are decorative (aria-hidden), so this is
-   stylistic; the sun accent is deliberately the only low-contrast one. */
 .featureIconSun { color: var(--sun); }
 .featureIconTerracotta { color: var(--terracotta); }
 .featureIconLeaf { color: var(--leaf); }
 .featureIconInk { color: var(--ink); }
 
 .featureTitle {
-  font-size: 16px;
-  font-weight: 500;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 400;
   color: var(--ink);
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-1);
 }
 
 .featureDesc {
   font-size: 16px;
-  color: var(--muted);
-  line-height: 1.65;
+  color: rgba(28, 25, 23, 0.8);
+  line-height: 1.7;
+}
+
+.featureLink {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1F4D36;
+  text-decoration: none;
+}
+
+.featureLink:hover {
+  text-decoration: underline;
+}
+
+.featureLink:focus-visible {
+  outline: 2px solid #1F4D36;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.featurePrivacyLink {
+  margin-top: var(--space-2);
+  font-size: 14px;
+  color: #1F4D36;
+  text-decoration: underline;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .featureExtra {
-  margin-top: var(--space-6);
+  margin-top: var(--space-8);
   font-size: 16px;
   color: var(--ink-mid);
   line-height: 1.75;
   max-width: 60ch;
+}
+
+@media (max-width: 639px) {
+  .featuresGrid {
+    grid-template-columns: 1fr;
+    text-align: left;
+    gap: var(--space-4);
+  }
+  .featureCard {
+    width: 100%;
+  }
+}
+
+@media (max-width: 375px) {
+  .featuresGrid {
+    gap: var(--space-3);
+  }
+  .featureCard {
+    padding: 22px;
+  }
 }
 
 /* ── Circles: leaf-deep band, cream copy, sun button with ink text ── */
