@@ -95,42 +95,35 @@
   margin-bottom: var(--space-8);
 }
 
-/* ── Hero: full-bleed golden-hillside photo. One flat sun overlay covers
-      the whole photo at 75% opacity, the same everywhere (no gradient,
-      scrim, blur or glow). Ink text over the composite stays at least
-      4.8:1, even over the darkest near-black foreground pixels. ── */
+/* ── Hero: full-bleed hero.jpg with true colours. Left-to-right cream
+      gradient scrim behind text only, fading to transparent by ~55%. No
+      full-photo tint. ── */
 .hero {
   position: relative;
-  min-height: min(90vh, 860px);
+  min-height: 520px;
+  height: min(calc(100vh - var(--nav-height)), 640px);
   display: flex;
   align-items: center;
-  background: var(--sun);
+  background: var(--bg);
   overflow: hidden;
 }
 
-/* Edge-to-edge photo. Cover, panned up a little so the soft sky and the
-   golden hill both stay in frame (the subject sits low). width/height
-   attributes plus the min-height container keep layout stable (no shift). */
+/* Photo runs edge to edge across full width, in true colour, no tint/fade. */
 .heroImg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 42%;
+  object-position: left 40%;
+  transform: scale(1.28);
+  transform-origin: left center;
   z-index: 0;
   pointer-events: none;
 }
 
-/* One flat sun overlay across the whole photo, edge to edge, at the same
-   opacity everywhere. 75% is the lowest opacity at which ink keeps 4.5:1
-   over the darkest foreground pixels (4.83:1); it is a tint, not a panel. */
 .heroOverlay {
-  position: absolute;
-  inset: 0;
-  background: var(--sun);
-  opacity: 0.75;
-  z-index: 1;
+  display: none;
 }
 
 .heroLayer {
@@ -139,22 +132,27 @@
   width: 100%;
 }
 
-/* Text sits on the flat sun overlay (ink over the composite, >= 4.8:1). */
+/* Text sits on panel, ink colour. */
 .heroText {
-  max-width: min(560px, 44vw);
-  padding: var(--space-10) 0;
+  max-width: min(480px, 48vw);
+  padding: var(--space-8) 0;
 }
 
-/* ── Today's affirmation card: floats over the photo at the upper right,
-      inside the container's right edge and clear of the headline, mood row
-      and buttons. Cream card, sand hairline border, one soft plain shadow.
-      No blur, glow, gradient or animation. ── */
+.heroPanel {
+  background: rgba(255, 248, 236, 0.88);
+  border-radius: 20px;
+  padding: 24px 28px;
+  max-width: 480px;
+  box-shadow: none;
+}
+
+/* Today's affirmation card at lower right, over sleeve/grass, away from faces. */
 .heroCard {
   position: absolute;
-  top: 24%;
+  bottom: var(--space-8);
   right: max(var(--space-6), calc((100% - var(--max-site)) / 2 + var(--space-6)));
   z-index: 3;
-  width: 360px;
+  width: 340px;
   background: var(--cream);
   border: 1px solid var(--sand);
   border-radius: var(--radius-md);
@@ -191,11 +189,12 @@
 
 .heroHeading {
   font-family: var(--font-display);
-  font-size: clamp(2.15rem, 6vw, 5rem);
+  font-size: clamp(2.25rem, 4vw, 3.25rem);
   color: var(--ink);
-  line-height: 1.1;
+  line-height: 1.08;
   letter-spacing: -0.02em;
-  margin-bottom: var(--space-5);
+  max-width: 100%;
+  margin-bottom: var(--space-3);
 }
 
 /* Emphasis stays italic in ink: over the photo composite no third colour
@@ -208,7 +207,7 @@
 
 /* ── Mood check-in: radiogroup, local state only, nothing sent or stored ── */
 .moodCheck {
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-3);
 }
 
 .moodHead {
@@ -223,6 +222,8 @@
   font-size: 14px;
   font-weight: 500;
   color: var(--ink);
+  display: inline-flex;
+  align-items: center;
 }
 
 .moodToggle {
@@ -261,7 +262,7 @@
 
 .moodBtnOn {
   border-color: var(--ink);
-  background: var(--bg);
+  background: rgba(255, 248, 236, 0.6);
   color: var(--ink);
   font-weight: 600;
 }
@@ -303,6 +304,7 @@
   line-height: 1.6;
   padding-left: var(--space-4);
   border-left: 2px solid var(--clay);
+  display: block;
 }
 
 .verseRef {
@@ -312,6 +314,7 @@
   font-variant: small-caps;
   letter-spacing: 0.08em;
   color: var(--ink);
+  display: block;
 }
 
 .versePlain {
@@ -319,13 +322,21 @@
   color: var(--ink);
   padding-left: var(--space-4);
   border-left: 2px solid var(--clay);
+  display: block;
 }
 
 .verseHelp {
   margin-top: var(--space-2);
-  padding-left: var(--space-4);
   font-size: 14px;
   color: var(--ink);
+  display: block;
+}
+
+.verseHelpBelow {
+  margin-top: var(--space-2);
+  font-size: 14px;
+  color: var(--ink);
+  display: none;
 }
 
 .verseHelpLink {
@@ -339,11 +350,12 @@
 }
 
 .heroSub {
-  font-size: 18px;
+  font-size: 17px;
   color: var(--ink);
-  line-height: 1.7;
+  line-height: 1.65;
   max-width: 46ch;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-4);
+  display: block;
 }
 
 .heroActions {
@@ -355,6 +367,26 @@
 
 /* On the sun field, keep the hero links at full ink for a clean hover. */
 .heroText .textLink:hover { color: var(--ink); }
+.heroActions .textLink {
+  background: transparent;
+  padding: 0;
+}
+.heroActions .btnPrimary {
+  background: var(--ink);
+  color: var(--cream);
+  min-height: 48px;
+  padding: 0 var(--space-8);
+}
+.heroActions .btnPrimary:hover {
+  background: var(--ink-mid);
+}
+.heroActions .btnPrimary:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.heroActions .btnPrimary:active {
+  background: #15100c;
+}
 
 /* ── Trust band: sand strip, three items, thin dividers ── */
 .heroBand {
@@ -401,6 +433,95 @@
   }
 }
 
+@media (min-width: 1280px) {
+  .heroImg {
+    object-position: left 38%;
+    transform: scale(1.3);
+  }
+}
+
+@media (min-width: 1366px) {
+  .heroImg {
+    object-position: left 36%;
+    transform: scale(1.32);
+  }
+  .heroText {
+    max-width: min(480px, 46vw);
+  }
+}
+
+@media (min-width: 1440px) {
+  .heroImg {
+    object-position: left 35%;
+    transform: scale(1.34);
+  }
+  .heroText {
+    max-width: min(480px, 46vw);
+  }
+}
+
+@media (max-height: 800px) and (min-width: 1024px) {
+  .hero {
+    height: min(calc(100vh - var(--nav-height)), 640px);
+    min-height: 520px;
+  }
+  .heroText {
+    padding: var(--space-6) 0;
+  }
+  .heroPanel {
+    padding: 22px 26px;
+  }
+  .heroHeading {
+    font-size: clamp(2.1rem, 3.8vw, 3rem);
+    margin-bottom: var(--space-3);
+  }
+  .moodCheck {
+    margin-bottom: var(--space-3);
+  }
+  .heroSub {
+    font-size: 16px;
+    margin-bottom: var(--space-3);
+  }
+  .heroCard {
+    bottom: var(--space-6);
+  }
+}
+
+@media (max-height: 768px) and (min-width: 1366px) {
+  .hero {
+    height: min(calc(100vh - var(--nav-height)), 640px);
+    min-height: 520px;
+  }
+  .heroText {
+    padding: var(--space-5) 0;
+  }
+  .heroPanel {
+    padding: 20px 24px;
+  }
+  .heroHeading {
+    font-size: clamp(2.1rem, 3.6vw, 2.9rem);
+    margin-bottom: var(--space-2);
+  }
+  .moodCheck {
+    margin-bottom: var(--space-2);
+  }
+  .heroSub {
+    font-size: 16px;
+    margin-bottom: var(--space-2);
+  }
+  .verseHelp {
+    display: none;
+  }
+  .verseHelpBelow {
+    display: block;
+    margin-top: var(--space-2);
+  }
+  .heroCard {
+    bottom: var(--space-4);
+    width: 320px;
+  }
+}
+
 /* ── Mobile: photo on top at ~40vh, then the text on a solid sun field. The
       copy is not over the photo here, so the sun overlay is hidden and the
       photo stays clear. Nothing exceeds the viewport width, so no horizontal
@@ -410,31 +531,106 @@
     flex-direction: column;
     align-items: stretch;
     min-height: 0;
+    height: auto;
+    background: var(--bg);
   }
 
   .heroImg {
-    position: static;
+    position: relative;
+    inset: auto;
     width: 100%;
-    height: 40vh;
-    min-height: 220px;
-    object-position: center;
+    height: min(38vh, 260px);
+    min-height: 200px;
+    object-fit: cover;
+    object-position: 60% center;
+    transform: scale(1);
+    transform-origin: center;
   }
 
   .heroOverlay {
     display: none;
   }
 
-  .heroText {
-    max-width: 560px;
-    padding: var(--space-8) 0 var(--space-10);
+  .heroLayer {
+    position: relative;
+    z-index: 2;
   }
 
-  /* The card leaves the photo and becomes a normal block under the
-     call-to-action buttons, full width of the container. */
+  .heroText {
+    max-width: 100%;
+    padding: var(--space-5) 20px var(--space-6);
+    box-sizing: border-box;
+  }
+
+  .heroPanel {
+    max-width: 100%;
+    width: 100%;
+    padding: 20px 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .heroHeading {
+    max-width: 100%;
+    font-size: clamp(1.9rem, 8vw, 2.4rem);
+    line-height: 1.15;
+  }
+
+  .heroSub {
+    font-size: 16px;
+  }
+
+  .moodBtn {
+    min-height: 44px;
+  }
+
+  .moodToggle {
+    min-height: 44px;
+  }
+
+  .heroActions .btnPrimary {
+    min-height: 48px;
+  }
+
+  .heroActions .textLink {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .moodRow {
+    gap: var(--space-2);
+    row-gap: var(--space-2);
+  }
+
+  /* The card is full width below buttons, not overlapping photo. */
   .heroCard {
     position: static;
-    width: auto;
-    margin: 0 var(--space-6) var(--space-8);
+    width: 100%;
+    margin-top: var(--space-5);
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 375px) {
+  .heroText {
+    padding: var(--space-5) 20px var(--space-6);
+    box-sizing: border-box;
+  }
+  .heroPanel {
+    padding: 18px 0;
+  }
+  .heroHeading {
+    font-size: clamp(1.9rem, 10vw, 2.3rem);
+  }
+  .moodRow {
+    gap: var(--space-1);
+    row-gap: var(--space-1);
+  }
+  .moodBtn {
+    padding: 0 var(--space-3);
+    font-size: 13px;
+    min-height: 44px;
   }
 }
 
