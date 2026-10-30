@@ -27,8 +27,8 @@ export default function PrivacyPage() {
 
           <h2>Circles</h2>
           <p>
-            Circles are anonymous. You choose a nickname, and other members see
-            that nickname, not your name or account.
+            Circles are anonymous. You get a different anonymous name in each circle, and other members see
+            that name, not your real name or account.
           </p>
           <p className={styles.todo}>
             TODO(real data): state exactly what circle activity is stored, for
