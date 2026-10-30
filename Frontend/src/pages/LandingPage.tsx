@@ -2,7 +2,6 @@ import { useEffect, useState, type KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { PenLine, Leaf, Handshake, Wind, ArrowRight } from 'lucide-react'
 import { api } from '@/lib/api'
-import { statsSourceUrl } from '@/landingContent'
 import { moodVerses } from '@/moodVerses'
 import { dailyVerses, dailyVerseIndex } from '@/dailyVerses'
 import type { Therapist } from '@/types'
@@ -377,10 +376,10 @@ export default function LandingPage() {
           <h2 className={styles.sectionHeadingLight}>
             You are not the only one carrying this.
           </h2>
-          <p className={styles.circlesIntro}>
-            Anonymous groups for grief, work stress, family pressure and doubts
-            about faith. You pick a nickname. Nobody sees your name.
-          </p>
+            <p className={styles.circlesIntro}>
+              Anonymous groups for grief, work stress, family pressure and doubts
+              about faith. You get a different anonymous name in each circle. Nobody sees your real name.
+            </p>
           <p className={styles.circlesLabel}>Circles include</p>
           <ul className={styles.circlesList}>
             {circleTopics.map(name => (
@@ -397,137 +396,76 @@ export default function LandingPage() {
       <section className={styles.therapists} id="therapists">
         <div className={styles.inner}>
           <div className={styles.therapistsGrid}>
-            <div className={styles.therapistsText}>
-              <h2 className={styles.sectionHeading}>
-                Therapists who speak your language
-              </h2>
-              <p className={styles.sectionLead}>
-                Sessions in Swahili, Dholuo, Kikuyu and English, from KES 500.
-                You choose who you talk to and when.
-              </p>
-              <Link className={styles.btnPrimary} to="/therapist">
-                Find your therapist
-              </Link>
+            <div className={styles.therapistsMedia}>
+              <img
+                className={styles.therapistsImg}
+                src="/placeholder.jpg"
+                alt="Two women in colourful African-print clothing stand close together in warm evening light"
+                width={840}
+                height={1050}
+                loading="lazy"
+              />
             </div>
+            <div className={styles.therapistsContent}>
+              <div className={styles.therapistsText}>
+                <h2 className={styles.sectionHeading}>
+                  Care that speaks your language.
+                </h2>
+                <p className={styles.sectionLead}>
+                  Therapists who understand your language, your culture, and
+                  what you are going through. You&rsquo;ll be able to choose who
+                  you talk to and when.
+                </p>
+                {/* Only one CTA in the therapist card */}
+              </div>
 
-            <div className={styles.therapistsPanel}>
-              {therapists.length > 0 ? (
-                <ul className={styles.therapistList}>
-                  {therapists.slice(0, 3).map(t => (
-                    <li key={t.id} className={styles.therapistRow}>
-                      <div className={styles.therapistInfo}>
-                        <p className={styles.therapistName}>{t.display_name}</p>
-                        <p className={styles.therapistLang}>
-                          {t.languages.join(' · ')}
-                        </p>
-                        {t.specialties.length > 0 && (
-                          <p className={styles.therapistMeta}>
-                            {t.specialties.join(' · ')}
+              <div className={styles.therapistsPanel}>
+                {therapists.length > 0 ? (
+                  <ul className={styles.therapistList}>
+                    {therapists.slice(0, 3).map(t => (
+                      <li key={t.id} className={styles.therapistRow}>
+                        <div className={styles.therapistInfo}>
+                          <p className={styles.therapistName}>{t.display_name}</p>
+                          <p className={styles.therapistLang}>
+                            {t.languages.join(' · ')}
                           </p>
-                        )}
-                      </div>
-                      <span className={styles.therapistPrice}>
-                        {formatPrice(t)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className={styles.therapistPlaceholder}>
-                  <h3>Therapists are joining.</h3>
-                  <p>
-                    The directory is still filling up. Browse it to see who is
-                    open for sessions right now.
-                  </p>
-                  <Link className={styles.textLink} to="/therapist">
-                    See the therapist directory
-                  </Link>
-                </div>
-              )}
+                          {t.specialties.length > 0 && (
+                            <p className={styles.therapistMeta}>
+                              {t.specialties.join(' · ')}
+                            </p>
+                          )}
+                        </div>
+                        <span className={styles.therapistPrice}>
+                          {formatPrice(t)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className={styles.therapistPlaceholder}>
+                    <span className={styles.therapistBadge}>COMING SOON</span>
+                    <h3>Building a trusted network.</h3>
+                    <p>
+                      Therapists are joining soon. Check back to see who is open
+                      for sessions.
+                    </p>
+                    <Link className={styles.therapistCta} to="/therapist">
+                      See the therapist directory
+                    </Link>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Stats: three honest, checkable facts ── */}
-      <div className={styles.stats}>
-        <div className={styles.inner}>
-          <dl className={styles.statsList}>
-            <div className={styles.statItem}>
-              <dt className={styles.statLabel}>Journal, circles and breathing</dt>
-              <dd className={styles.statNum}>Free</dd>
-            </div>
-            <div className={styles.statItem}>
-              <dt className={styles.statLabel}>Therapist sessions from</dt>
-              <dd className={styles.statNum}>KES 500</dd>
-            </div>
-            <div className={styles.statItem}>
-              <dt className={styles.statLabel}>Kenyan therapy languages</dt>
-              <dd className={styles.statNum}>3</dd>
-            </div>
-          </dl>
-        </div>
-      </div>
+      {/* ── Stats removed (messages already appear elsewhere) ── */}
 
-      {/* ── Why Soulwe exists: figures left-list, closing line right ── */}
-      <section className={styles.problem}>
-        <div className={styles.inner}>
-          <div className={styles.problemGrid}>
-            <div className={styles.problemText}>
-              <h2 className={styles.sectionHeading}>
-                Mental health care in East Africa has a gap.
-              </h2>
-              <p className={styles.problemClose}>
-                Soulwe is not a substitute for psychiatric care. It is support
-                for the long wait before you can get it.
-              </p>
-            </div>
-            <div className={styles.problemFigures}>
-              <div className={styles.figure}>
-                <span className={styles.figureNum}>90%</span>
-                <p className={styles.figureText}>
-                  of people who need mental health support in sub-Saharan Africa
-                  never receive it.
-                  {statsSourceUrl !== '' && (
-                    <sup className={styles.footnoteRef}>1</sup>
-                  )}
-                </p>
-              </div>
-              <div className={styles.figure}>
-                <span className={styles.figureNum}>&lt;100</span>
-                <p className={styles.figureText}>
-                  psychiatrists serve the whole of Kenya.
-                  {statsSourceUrl !== '' && (
-                    <sup className={styles.footnoteRef}>1</sup>
-                  )}
-                </p>
-              </div>
-              {statsSourceUrl !== '' && (
-                <p className={styles.footnote}>
-                  <sup>1</sup>{' '}
-                  <a
-                    className={styles.footnoteLink}
-                    href={statsSourceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Source for both figures
-                  </a>
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Final CTA: left-aligned, no glow ── */}
+      {/* ── Final CTA: centred, no glow ── */}
       <section className={styles.finalCta}>
         <div className={styles.inner}>
           <h2 className={styles.finalCtaHeading}>Start whenever you&rsquo;re ready.</h2>
-          <p className={styles.finalCtaSub}>
-            No sign-up required to look around. Walk in anonymously, stay as
-            long as you need.
-          </p>
           <Link className={styles.btnPrimary} to="/home">
             Enter Soulwe
           </Link>
