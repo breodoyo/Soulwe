@@ -205,11 +205,13 @@ export default function SiteLayout() {
       <section className={styles.crisis} id="crisis" aria-labelledby="crisis-heading">
         <div className={styles.crisisInner}>
           <h2 className={styles.crisisHeading} id="crisis-heading">
-            If you are in crisis
+            If you need help right now
           </h2>
           <p className={styles.crisisText}>
-            Soulwe is not an emergency service. If you or someone near you is in
-            immediate danger, contact emergency services where you are.
+            If you or someone near you is in immediate danger, please contact
+            your local emergency services or someone you trust. Soulwe is here
+            for everyday support, and you don&rsquo;t have to face the hard
+            moments alone.
           </p>
           {/* Helplines come from landingContent.ts and only render once real,
               verified entries exist there. */}

@@ -666,12 +666,11 @@
   background: #FFFDF7;
   border: 1px solid #F0DDB8;
   border-radius: 20px;
-  padding: 28px;
+  padding: 24px;
   min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-3);
   box-shadow: 0 1px 2px rgba(36, 24, 16, 0.06);
   transition: transform var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease);
   height: 100%;
@@ -692,8 +691,8 @@
 }
 
 .featureIconWrap {
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   background: #FFF8EC;
   border: 1px solid #F0DDB8;
@@ -701,6 +700,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  margin-bottom: 16px;
 }
 
 .featureIcon {
@@ -719,17 +719,18 @@
   font-size: 22px;
   font-weight: 400;
   color: var(--ink);
-  margin-bottom: var(--space-1);
+  margin-bottom: 8px;
 }
 
 .featureDesc {
   font-size: 16px;
   color: rgba(28, 25, 23, 0.8);
   line-height: 1.7;
+  margin-bottom: 16px;
 }
 
 .featureLink {
-  margin-top: auto;
+  margin-top: 16px;
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
@@ -738,6 +739,7 @@
   font-weight: 600;
   color: #1F4D36;
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .featureLink:hover {
@@ -825,13 +827,12 @@
   color: var(--cream);
 }
 
-/* ── Therapists: cream band, directory rows in cream, honest placeholder
-      panel on sand ── */
+/* ── Therapists: cream band, directory rows in cream, soft cream joining
+      panel ── */
 .therapists {
-  padding: var(--space-14) 0;
+  padding: 56px 0;
   background: var(--cream);
   border-top: 1px solid var(--border-soft);
-  border-bottom: 1px solid var(--border-soft);
   scroll-margin-top: 80px;
 }
 
@@ -842,16 +843,64 @@
   align-items: center;
 }
 
-@media (min-width: 900px) {
+@media (min-width: 768px) {
   .therapistsGrid {
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-12);
+    grid-template-columns: 1.2fr 1fr;
+    gap: 48px;
   }
+}
+
+.therapistsMedia {
+  width: 100%;
+  min-width: 0;
+  align-self: stretch;
+}
+
+.therapistsImg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 380px;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 16px;
+}
+
+.therapistsContent {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
 }
 
 .therapistsText { min-width: 0; }
 
+.therapistsText .sectionHeading {
+  margin-bottom: 12px;
+}
+
+.therapistsText .sectionLead {
+  margin-bottom: 0;
+  max-width: 46ch;
+}
+
 .therapistsPanel { min-width: 0; }
+
+@media (max-width: 767px) {
+  .therapists {
+    padding: 40px 0;
+  }
+
+  .therapistsMedia {
+    align-self: auto;
+  }
+
+  .therapistsImg {
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 4 / 3;
+  }
+}
 
 .therapistList {
   display: flex;
@@ -898,15 +947,31 @@
 }
 
 .therapistPlaceholder {
-  background: var(--sand);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  padding: var(--space-8) var(--space-6);
+  background: #FFFDF7;
+  border: 1px solid var(--sand);
+  border-radius: 16px;
+  padding: var(--space-8);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.therapistBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(31, 77, 54, 0.1);
+  color: var(--leaf-deep);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  margin-bottom: var(--space-3);
 }
 
 .therapistPlaceholder h3 {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: 24px;
   color: var(--ink);
   margin-bottom: var(--space-2);
 }
@@ -915,8 +980,30 @@
   font-size: 16px;
   color: var(--muted);
   line-height: 1.65;
-  margin-bottom: var(--space-4);
-  max-width: 40ch;
+  margin-bottom: var(--space-5);
+  max-width: 42ch;
+}
+
+.therapistCta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 var(--space-6);
+  background: var(--leaf-deep);
+  color: var(--cream);
+  font-size: 15px;
+  font-weight: 500;
+  border-radius: var(--radius-full);
+  text-decoration: none;
+  transition: background var(--duration-base) var(--ease);
+}
+
+.therapistCta:hover { background: var(--leaf); }
+
+.therapistCta:focus-visible {
+  outline: 2px solid var(--leaf-deep);
+  outline-offset: 2px;
 }
 
 /* ── Stats band: sun background, ink text (8.39:1) ── */
@@ -963,87 +1050,12 @@
   line-height: 1.4;
 }
 
-/* ── Why Soulwe exists ── */
-.problem {
-  padding: var(--space-14) 0;
-}
-
-.problemGrid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-8);
-  align-items: start;
-}
-
-@media (min-width: 900px) {
-  .problemGrid {
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-12);
-  }
-}
-
-.problemText { min-width: 0; }
-
-.problemClose {
-  font-size: 16px;
-  color: var(--ink-mid);
-  line-height: 1.75;
-  max-width: 42ch;
-  margin-top: var(--space-4);
-}
-
-.problemFigures { min-width: 0; }
-
-.figure {
-  padding: var(--space-5) 0;
-  border-bottom: 1px solid var(--border-soft);
-}
-
-.figure:first-child { border-top: 1px solid var(--border-soft); }
-
-.figureNum {
-  display: block;
-  font-family: var(--font-display);
-  font-size: 36px;
-  color: var(--ink);
-  line-height: 1.1;
-  margin-bottom: var(--space-2);
-}
-
-.figureText {
-  font-size: 16px;
-  color: var(--ink-mid);
-  line-height: 1.65;
-  max-width: 44ch;
-}
-
-.footnoteRef {
-  color: var(--sun-deep);
-  margin-left: 2px;
-}
-
-.footnote {
-  margin-top: var(--space-4);
-  font-size: 14px;
-  color: var(--clay);
-  line-height: 1.6;
-  max-width: 52ch;
-}
-
-.footnoteLink {
-  color: var(--clay);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.footnoteLink:hover { color: var(--clay-muted); }
-
-/* ── Final CTA: sun band with a large ink button (cream text on ink,
-      16.40:1); ink text on the band is 8.39:1 ── */
+/* ── Final CTA: centred sun band with a large ink button (cream text on
+      ink, 16.40:1); ink text on the band is 8.39:1 ── */
 .finalCta {
-  padding: var(--space-14) 0;
+  padding: 56px 0;
   background: var(--sun);
-  border-top: 1px solid var(--border-soft);
+  text-align: center;
 }
 
 .finalCtaHeading {
@@ -1052,16 +1064,7 @@
   color: var(--ink);
   line-height: 1.15;
   letter-spacing: -0.02em;
-  max-width: 20ch;
-  margin-bottom: var(--space-4);
-}
-
-.finalCtaSub {
-  font-size: 16px;
-  color: var(--ink);
-  line-height: 1.75;
-  max-width: 48ch;
-  margin-bottom: var(--space-6);
+  margin: 0 auto var(--space-6);
 }
 
 .finalCta .btnPrimary {
@@ -1073,7 +1076,5 @@
 @media (max-width: 639px) {
   .features,
   .circles,
-  .therapists,
-  .problem,
   .finalCta { padding-top: 56px; padding-bottom: 56px; }
 }
