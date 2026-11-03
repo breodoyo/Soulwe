@@ -254,17 +254,26 @@
   }
 }
 
-/* ── Crisis strip ── */
+/* ── Crisis note ── */
+/* 56px total to the orange band above: 24px comes from .main's bottom
+   padding, so the section adds the remaining 32px (24px on desktop). */
 .crisis {
-  background: var(--bg-soft);
-  border-top: 1px solid var(--border-soft);
-  padding: var(--space-6) 0;
+  padding: 32px var(--space-5) 56px;
 }
 
-.crisisInner {
-  max-width: var(--max-site);
+.crisisPanel {
+  max-width: 560px;
   margin: 0 auto;
-  padding: 0 var(--space-6);
+  text-align: center;
+}
+
+.crisisPanel::before {
+  content: '';
+  display: block;
+  width: 48px;
+  height: 3px;
+  margin: 0 auto var(--space-4);
+  background: #2E6B4B;
 }
 
 .crisisHeading {
@@ -276,22 +285,28 @@
 
 .crisisText {
   font-size: 16px;
-  color: var(--ink-mid);
-  line-height: 1.65;
-  max-width: 62ch;
-  margin-bottom: var(--space-3);
+  color: var(--ink);
+  line-height: 1.6;
+  margin-bottom: 0;
 }
 
 .crisisList {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  margin-top: var(--space-3);
 }
 
 .crisisList li {
   font-size: 14px;
-  color: var(--clay);
+  color: var(--ink);
   line-height: 1.6;
+}
+
+@media (min-width: 768px) {
+  .crisis {
+    padding: 24px var(--space-6) 56px;
+  }
 }
 
 /* ── Footer ── */
