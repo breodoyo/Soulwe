@@ -201,9 +201,9 @@ export default function SiteLayout() {
         <Outlet />
       </main>
 
-      {/* Crisis strip: plain, always visible, no helpline published from memory. */}
+      {/* Crisis panel: plain, always visible, no helpline published from memory. */}
       <section className={styles.crisis} id="crisis" aria-labelledby="crisis-heading">
-        <div className={styles.crisisInner}>
+        <div className={styles.crisisPanel}>
           <h2 className={styles.crisisHeading} id="crisis-heading">
             If you need help right now
           </h2>
