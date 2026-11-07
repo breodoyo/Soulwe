@@ -59,18 +59,9 @@ type RegisteredVerifier interface {
 	ParseAccessToken(token string) (string, error)
 }
 
-// IdentityRequired authenticates the request with EITHER a registered access
+// IdentityRequired authenticates a request with either a registered access
 // token or an anonymous session token and stores the resolved Owner in the
-// context.
-//
-// This keeps authentication action-based rather than page-based: a personal
-// feature (journal, mood check-in, breathing history) is usable by both a
-// registered user and an anonymous session, and the row is scoped to whichever
-// identity authenticated. A registered JWT resolves to a UserID and an
-// anonymous token to an AnonIdentityID, never both.
-//
-// A request with no usable credential aborts with the same generic 401 as the
-// other middlewares. Raw tokens are never placed in the context or logged.
+// context. Raw tokens are never stored or logged.
 func IdentityRequired(tokenManager RegisteredVerifier, anon AnonymousVerifier) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, ok := bearerToken(c)
@@ -135,5 +126,4 @@ func OwnerFromContext(c *gin.Context) (Owner, bool) {
 	return owner, true
 }
 
-// Compile-time proof that the real token manager satisfies RegisteredVerifier.
 var _ RegisteredVerifier = (*auth.Manager)(nil)

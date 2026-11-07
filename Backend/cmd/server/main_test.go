@@ -593,10 +593,8 @@ func TestPhase5JournalRoutes(t *testing.T) {
 	})
 }
 
-// TestPhase4WellnessRoutes verifies the Phase 4 wiring: the profile and
-// dashboard routes exist behind the registered-user AuthRequired middleware and
-// reject anonymous tokens, the mood routes accept either credential, and all of
-// them are absent when the stacks are not wired.
+// TestPhase4WellnessRoutes checks credential requirements and 404s for the
+// profile, dashboard, and mood routes.
 func TestPhase4WellnessRoutes(t *testing.T) {
 	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
 	if err != nil {
@@ -1274,11 +1272,8 @@ func TestPhase6BookingRoutes(t *testing.T) {
 	})
 }
 
-// TestPhase6BreathingRoutes verifies the Phase 6.4 wiring: the exercise catalog
-// is public and browsable without a credential, while recording and listing
-// sessions stay behind the registered-user AuthRequired middleware and reject
-// missing and anonymous tokens. All routes are absent when the breathing stack
-// is not wired (404, not a handler decision).
+// TestPhase6BreathingRoutes checks public catalog access and registered-only
+// session routes.
 func TestPhase6BreathingRoutes(t *testing.T) {
 	tokenManager, err := auth.NewManager("unit-test-secret-that-must-be-long-enough-for-signing")
 	if err != nil {

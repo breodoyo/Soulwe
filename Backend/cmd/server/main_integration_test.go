@@ -31,10 +31,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TestPhase4EndToEndIntegration runs the full Phase 4 stack (profile, mood
-// check-ins, dashboard) against a live database through the real router. It is
-// excluded from the default build via the "integration" tag and skipped when
-// DATABASE_URL is not set.
+// TestPhase4EndToEndIntegration exercises the wellness routes against a live
+// database when DATABASE_URL is set.
 func TestPhase4EndToEndIntegration(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {

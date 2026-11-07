@@ -27,12 +27,10 @@ func newNameDeriver(secret string) nameDeriver {
 	return nameDeriver{key: mac.Sum(nil)}
 }
 
-// derive returns the friendly label for identityID inside circleID.
+// derive returns the stable per-circle label for identityID.
 //
-// It is a pure function of (identity, circle): the same identity keeps one
-// name within a circle and gets a different name in every other circle, with
-// nothing stored and no path back to the identity without the key. The result
-// is two curated words and, most of the time, a number of at most two digits.
+// The same identity keeps one name within a circle and gets a different name
+// in every other circle, with nothing stored.
 func (d nameDeriver) derive(identityID, circleID string) string {
 	if identityID == "" {
 		return DefaultAuthorName

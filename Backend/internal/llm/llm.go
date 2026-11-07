@@ -33,8 +33,6 @@ const (
 	DefaultClaudeModel = "claude-3-5-haiku-latest"
 
 	// DefaultGeminiModel is the Gemini model used when LLM_MODEL is unset.
-	// Gemini 2.5 Flash is retired for new API keys, so default to a current
-	// Flash model that is still served.
 	DefaultGeminiModel = "gemini-3.5-flash"
 
 	// GeminiBaseURL prefixes the Gemini generateContent endpoint. The model name
@@ -281,7 +279,6 @@ func errorType(err error) string {
 	}
 }
 
-// Both providers must satisfy the seam the journal service depends on.
 var (
 	_ Reflector = (*Claude)(nil)
 	_ Reflector = (*Gemini)(nil)

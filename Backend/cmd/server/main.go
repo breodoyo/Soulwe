@@ -49,7 +49,7 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 		})
 	})
 
-	// Readiness: pings the database with a 2s budget.
+	// Readiness pings the database.
 	r.GET("/readyz", func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 		defer cancel()
@@ -267,7 +267,7 @@ func main() {
 		Handler:        router,
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
-		MaxHeaderBytes: 1 << 20, // 1 MB
+		MaxHeaderBytes: 1 << 20,
 	}
 
 	go func() {
@@ -283,7 +283,7 @@ func main() {
 	sig := <-quit
 	log.Printf("Received signal '%v'. Initiating graceful shutdown...", sig)
 
-	// Up to 5 seconds for in-flight requests to finish.
+	// Give in-flight requests time to finish.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
