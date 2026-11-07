@@ -253,9 +253,8 @@ func (r *PostgresRepository) sealReflection(owner middleware.Owner, reflection *
 	return nil, enc, iv, nil
 }
 
-// openReflection returns the plaintext reflection, decrypting the sealed
-// columns when present. A legacy plaintext value is returned unchanged so rows
-// written before encryption was added keep working without a crash.
+// openReflection returns the plaintext reflection, decrypting sealed columns
+// when present. Legacy plaintext values are returned unchanged.
 func (r *PostgresRepository) openReflection(owner middleware.Owner, legacy *string, enc, iv []byte) (*string, error) {
 	if len(enc) == 0 {
 		return legacy, nil

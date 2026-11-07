@@ -1,9 +1,5 @@
-/* Landing page. One container (--max-site, 1120px, 24px gutters) matches the
-   site header so nav, hero and every section share the same edges. */
-
+/* One container matches the site header so nav and sections share edges. */
 .page {
-  /* Body copy is 16px and captions 14px on this page, per accessibility pass;
-     the root tokens stay smaller for the app screens. */
   font-size: 16px;
   --text-xs: 14px;
   --text-sm: 14px;
@@ -21,7 +17,6 @@
   box-sizing: border-box;
 }
 
-/* ── Buttons: flat, no glow, no blur shadows ── */
 .btnPrimary {
   display: inline-flex;
   align-items: center;
@@ -38,7 +33,7 @@
 
 .btnPrimary:hover { background: var(--ink-mid); }
 
-/* On the dark circles band: amber fill with dark text keeps AA contrast. */
+/* Amber fill with dark text keeps AA contrast on the dark band. */
 .btnSun {
   display: inline-flex;
   align-items: center;
@@ -68,7 +63,6 @@
 
 .textLink:hover { color: var(--ink); text-decoration-thickness: 2px; }
 
-/* ── Shared section type ── */
 .sectionHeading {
   font-family: var(--font-display);
   font-size: clamp(26px, 3.5vw, 40px);
@@ -95,9 +89,6 @@
   margin-bottom: var(--space-8);
 }
 
-/* ── Hero: full-bleed hero.jpg with true colours. Left-to-right cream
-      gradient scrim behind text only, fading to transparent by ~55%. No
-      full-photo tint. ── */
 .hero {
   position: relative;
   min-height: 520px;
@@ -108,7 +99,7 @@
   overflow: hidden;
 }
 
-/* Photo runs edge to edge across full width, in true colour, no tint/fade. */
+/* Full-bleed true-colour photo; no tint or fade. */
 .heroImg {
   position: absolute;
   inset: 0;
@@ -132,7 +123,6 @@
   width: 100%;
 }
 
-/* Text sits on panel, ink colour. */
 .heroText {
   max-width: min(480px, 48vw);
   padding: var(--space-8) 0;
@@ -160,7 +150,6 @@
   box-shadow: 0 8px 24px rgba(36, 24, 16, 0.18);
 }
 
-/* Terracotta eyebrow: 5.07:1 on cream. */
 .heroCardEyebrow {
   font-size: 13px;
   font-weight: 600;
@@ -170,7 +159,6 @@
   margin-bottom: var(--space-3);
 }
 
-/* Italic serif verse: ink on cream, 16.4:1. */
 .heroCardVerse {
   font-family: var(--font-display);
   font-size: 18px;
@@ -180,7 +168,6 @@
   margin-bottom: var(--space-2);
 }
 
-/* Small muted ink reference: 6.33:1 on cream. */
 .heroCardRef {
   font-size: 13px;
   font-weight: 500;
@@ -197,15 +184,13 @@
   margin-bottom: var(--space-3);
 }
 
-/* Emphasis stays italic in ink: over the photo composite no third colour
-   (leaf-deep 2.97:1, terracotta 2.11:1) holds contrast on the darkest
-   pixels, while ink holds >= 4.8:1. */
+/* Only ink stays legible over the photo composite. */
 .heroAccent {
   font-style: italic;
   color: var(--ink);
 }
 
-/* ── Mood check-in: radiogroup, local state only, nothing sent or stored ── */
+/* Local-only mood check-in; nothing is sent or stored. */
 .moodCheck {
   margin-bottom: var(--space-3);
 }
@@ -267,7 +252,7 @@
   font-weight: 600;
 }
 
-/* On the sun field a local ink focus ring stays >= 3:1 everywhere. */
+/* Ink focus ring stays visible on the sun field. */
 .heroText :focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
@@ -283,10 +268,7 @@
   display: grid;
 }
 
-/* The hidden sizing copy and the visible content share one grid cell, so the
-   block is exactly as tall as the taller of the two. The sizer always holds
-   the longest verse plus the help line, so the reserved height is fixed and
-   choosing a mood (or hiding Scripture) never moves the copy below. */
+/* Hidden sizer and visible copy share a cell so toggles do not shift the page. */
 .verseSizer,
 .verseContent {
   grid-area: 1 / 1;
@@ -365,7 +347,6 @@
   gap: var(--space-4) var(--space-6);
 }
 
-/* On the sun field, keep the hero links at full ink for a clean hover. */
 .heroText .textLink:hover { color: var(--ink); }
 .heroActions .textLink {
   background: transparent;
@@ -388,7 +369,6 @@
   background: #15100c;
 }
 
-/* ── Trust band: sand strip, three items, thin dividers ── */
 .heroBand {
   background: var(--bg-soft);
   border-top: 1px solid var(--border-soft);
@@ -522,10 +502,7 @@
   }
 }
 
-/* ── Mobile: photo on top at ~40vh, then the text on a solid sun field. The
-      copy is not over the photo here, so the sun overlay is hidden and the
-      photo stays clear. Nothing exceeds the viewport width, so no horizontal
-      scroll. ── */
+/* Mobile stacks the photo above a solid sun field with no horizontal scroll. */
 @media (max-width: 767px) {
   .hero {
     flex-direction: column;
@@ -603,7 +580,6 @@
     row-gap: var(--space-2);
   }
 
-  /* The card is full width below buttons, not overlapping photo. */
   .heroCard {
     position: static;
     width: 100%;
@@ -634,7 +610,6 @@
   }
 }
 
-/* ── Features: cream background with sand band behind cards ── */
 .features {
   padding: var(--space-14) 0;
   background: var(--bg);
@@ -790,7 +765,6 @@
   }
 }
 
-/* ── Circles: leaf-deep band, cream copy, sun button with ink text ── */
 .circles {
   padding: var(--space-14) 0;
   background: var(--leaf-deep);
@@ -827,8 +801,6 @@
   color: var(--cream);
 }
 
-/* ── Therapists: cream band, directory rows in cream, soft cream joining
-      panel ── */
 .therapists {
   padding: 56px 0;
   background: var(--cream);
@@ -938,7 +910,7 @@
   margin-top: 2px;
 }
 
-/* Terracotta is 5.07:1 on cream here; --sun-deep would fail AA at this size. */
+/* Terracotta meets AA here; --sun-deep would not at this size. */
 .therapistPrice {
   font-size: 14px;
   font-weight: 500;
@@ -1006,7 +978,6 @@
   outline-offset: 2px;
 }
 
-/* ── Stats band: sun background, ink text (8.39:1) ── */
 .stats {
   background: var(--sun);
   padding: var(--space-8) 0;
@@ -1050,8 +1021,6 @@
   line-height: 1.4;
 }
 
-/* ── Final CTA: centred sun band with a large ink button (cream text on
-      ink, 16.40:1); ink text on the band is 8.39:1 ── */
 .finalCta {
   padding: 48px 0;
   background: var(--sun);

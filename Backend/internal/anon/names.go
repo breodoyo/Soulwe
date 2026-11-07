@@ -10,9 +10,8 @@ var curatedWords = []string{
 	"Willow", "Marula", "Okavango", "Zambezi", "Simba",
 }
 
-// randomAnonName returns a display name that is unique with overwhelming
-// probability: a curated word plus a crypto/rand hex suffix. A fixed word pool
-// alone exhausted the anon_name UNIQUE constraint once every word was taken.
+// randomAnonName returns a curated word plus a crypto/rand hex suffix, keeping
+// the name unique with overwhelming probability.
 func randomAnonName() string {
 	buf := make([]byte, 6)
 	if _, err := rand.Read(buf); err != nil {

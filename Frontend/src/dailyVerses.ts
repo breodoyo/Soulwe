@@ -1,6 +1,4 @@
-// Daily affirmation verses for the landing-page hero card. Local data only:
-// nothing is fetched and nothing is stored. The verse is picked from the
-// visitor's local date, so it is the same all day and changes the next day.
+// Local data only; the verse changes once per local calendar day.
 export interface DailyVerse {
   text: string
   reference: string
@@ -35,9 +33,7 @@ export const dailyVerses: DailyVerse[] = [
   },
 ]
 
-// Index of the verse for a given local date: the day of the year modulo the
-// number of verses. Calendar-day arithmetic (via UTC from the local Y/M/D)
-// keeps it stable across daylight-saving changes. Same all day, +1 each day.
+// Calendar-day arithmetic keeps the verse stable across daylight-saving changes.
 export function dailyVerseIndex(date: Date = new Date()): number {
   const dayOfYear = Math.floor(
     (Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) -

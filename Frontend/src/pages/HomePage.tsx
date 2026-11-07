@@ -52,7 +52,7 @@ function formatLoggedAt(iso: string): string {
 
 export default function HomePage() {
   const { status } = useAuth()
-  // Complete for a guest too: only the account dashboard needs an account.
+  // Complete for guests too; only the account dashboard needs an account.
   const hasAccount = status === 'authenticated'
 
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
@@ -67,7 +67,7 @@ export default function HomePage() {
   useEffect(() => {
     let cancelled = false
     setFeedError(null)
-    // The dashboard is registered-only; check-in history works for a guest too.
+    // Dashboard is registered-only; check-in history works for guests.
     const feed = hasAccount
       ? Promise.all([api.dashboard.get(), api.moods.list({ limit: 12 })]).then(([dash, moodsRes]) => ({
           dash,
@@ -136,7 +136,7 @@ export default function HomePage() {
   const lastCheckin = latestMood ? formatLoggedAt(latestMood.logged_at) : '—'
   const recent = checkins.slice(0, 5)
 
-  // A failed dashboard load replaces the page; a guest's is inline, since their history is a detail.
+  // A failed account dashboard replaces the page; a guest error stays inline.
   if (feedError && hasAccount && !dashboard) {
     return (
       <div className={styles.page}>
@@ -155,7 +155,6 @@ export default function HomePage() {
     <div className={styles.page}>
 
       <div className={styles.topGrid}>
-        {/* Greeting band */}
         <section className={styles.greetBand} aria-label="Welcome">
           <p className={styles.greetEyebrow}>
             {member && member.display_name
@@ -172,7 +171,6 @@ export default function HomePage() {
               : 'You are welcome here, with or without an account. Take your time — everything on this page is yours to explore.'}
           </p>
 
-          {/* Mood picker — always browsable; only saving a check-in needs an account */}
           <div className={styles.moodRow} role="group" aria-label="How are you feeling?">
             {moods.map(({ Icon, label }) => (
               <button
@@ -191,7 +189,6 @@ export default function HomePage() {
             ))}
           </div>
 
-          {/* Mood save status */}
           {(saving || savedMood !== null || saveError) && (
             <p
               className={saveError ? styles.moodError : styles.moodSaved}
@@ -202,7 +199,6 @@ export default function HomePage() {
           )}
         </section>
 
-        {/* Affirmation */}
         <section className={styles.affirmation} aria-label="Today's affirmation">
           <p className={styles.affirmationEyebrow}>Today's affirmation</p>
           <blockquote className={styles.affirmationText}>
@@ -212,7 +208,6 @@ export default function HomePage() {
         </section>
       </div>
 
-      {/* Quick access */}
       <section aria-label="Quick access">
         <p className={styles.sectionLabel}>Your space</p>
         <div className={styles.quickGrid}>
@@ -235,9 +230,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* A quiet, voluntary way in — not a gate. Browsing and checking in both
-          work for a guest; an account only adds a dashboard and cross-device
-          history. */}
+      {/* Never a gate: guests can browse and check in. */}
       {!hasAccount && (
         <p className={styles.guestNote}>
           You are using Soulwe as a guest — your journal, check-ins and breathing history
@@ -254,8 +247,7 @@ export default function HomePage() {
         </p>
       )}
 
-      {/* Activity summary — the caller's own history. A guest has one too, under
-          their anonymous session, so this is not account-gated. */}
+      {/* Activity is the caller's own history, including a guest session. */}
       {feedError && !hasAccount && (
         <section className={styles.errorPanel} role="alert">
           <p className={styles.errorText}>
@@ -287,7 +279,6 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* Recent check-ins */}
           <section aria-label="Recent check-ins">
             <p className={styles.sectionLabel}>Recent check-ins</p>
             {recent.length === 0 ? (

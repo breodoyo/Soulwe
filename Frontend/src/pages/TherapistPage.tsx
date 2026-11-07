@@ -5,10 +5,7 @@ import { SignInPrompt } from '@/auth/RouteGuards'
 import { isApiError, type Booking, type Therapist } from '@/types'
 import styles from './TherapistPage.module.css'
 
-// Filters available in the UI. Language pills map to the backend ?language
-// query param (server-side substring match); "Online only" has no backend
-// equivalent, so it filters the already-fetched list client-side. There is no
-// "free sessions" filter — the backend deliberately never exposes that field.
+// Language maps to ?language; "Online only" is client-side, and no free-session field is exposed.
 type Filter = 'All' | 'Swahili' | 'Dholuo' | 'Kikuyu' | 'Online only'
 const FILTERS: Filter[] = ['All', 'Swahili', 'Dholuo', 'Kikuyu', 'Online only']
 
@@ -24,7 +21,6 @@ function initialsOf(name: string): string {
     .toUpperCase()
 }
 
-// Deterministic warm colour per therapist, so a card always looks the same.
 function avatarColor(name: string): string {
   let hash = 0
   for (let i = 0; i < name.length; i++) {
@@ -45,8 +41,6 @@ function formatDateTime(iso: string): string {
   })
 }
 
-// The <input type="datetime-local"> minimum: the current local time, truncated
-// to the minute.
 function nowLocalInput(): string {
   const d = new Date()
   d.setSeconds(0, 0)
@@ -75,17 +69,13 @@ function bookingErrorMessage(err: unknown): string {
 
 export default function TherapistPage() {
   const { status } = useAuth()
-  // Browsing the directory is public; only therapist communication (booking)
-  // needs a registered account, so that is what this flag gates.
+  // Browsing is public; only booking needs an account.
   const canBook = status === 'authenticated'
 
   const [filter, setFilter] = useState<Filter>('All')
   const [therapists, setTherapists] = useState<Therapist[] | null>(null)
   const [therapistsError, setTherapistsError] = useState<string | null>(null)
-  // Kept separate from therapistsError on purpose: a failed "load more" must
-  // not blank out the directory the user has already loaded, and the render
-  // gates below hide the whole list whenever therapistsError is set. This
-  // mirrors JournalPage's loadMoreError.
+  // Separate so a failed load-more keeps the loaded directory visible.
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -96,8 +86,7 @@ export default function TherapistPage() {
   const [bookingsTick, setBookingsTick] = useState(0)
 
   const [openBookingId, setOpenBookingId] = useState<string | null>(null)
-  // Set when a guest tries to book: the booking panel is replaced by an
-  // in-place sign-in prompt rather than a silent failure or a 401.
+  // Guest booking attempts show an inline sign-in prompt, not a 401.
   const [signInForId, setSignInForId] = useState<string | null>(null)
   const [slot, setSlot] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -135,8 +124,7 @@ export default function TherapistPage() {
   }, [languageParam, loadTick])
 
   useEffect(() => {
-    // Bookings are the user's own data — never requested without a session,
-    // so a guest is not met with a 401 on every visit to this page.
+    // Never request bookings without a session, avoiding guest 401s.
     if (!canBook) {
       setBookings([])
       setBookingsError(null)
@@ -162,8 +150,7 @@ export default function TherapistPage() {
     }
   }, [bookingsTick, canBook])
 
-  // "Online only" is applied client-side: the backend returns is_online_only
-  // but provides no filter for it.
+  // Online only is client-side; the backend has no filter.
   const visible =
     therapists === null
       ? null
@@ -258,7 +245,6 @@ export default function TherapistPage() {
         <p className={styles.sub}>African therapists who understand your world — <em>washauri wetu</em></p>
       </div>
 
-      {/* Filters */}
       <div className={styles.filterRow} role="group" aria-label="Filter therapists">
         {FILTERS.map(f => (
           <button
@@ -272,7 +258,6 @@ export default function TherapistPage() {
         ))}
       </div>
 
-      {/* Cards */}
       <div className={styles.cardList}>
         {visible === null && !therapistsError && (
           <p className={styles.status} role="status">Loading therapists…</p>
@@ -340,19 +325,13 @@ export default function TherapistPage() {
                 <button
                   className={[styles.bookBtn, successById[t.id] ? styles.bookBtnBooked : ''].join(' ')}
                   onClick={() => {
-                    // An inactive therapist cannot take bookings, so the button
-                    // stays focusable but does nothing.
                     if (!t.is_active) return
                     if (!canBook) {
                       setSignInForId(signInForId === t.id ? null : t.id)
                       return
                     }
                     setSignInForId(null)
-                    // Opening a different card must not inherit the date typed
-                    // into the previous one. Only one panel is mounted at a
-                    // time, so the old value would survive the unmount and
-                    // pre-fill the new therapist's panel — confirming it would
-                    // book the wrong therapist at the wrong time.
+                    // Reset the date when switching cards; stale state would pre-fill the wrong therapist.
                     setSlot('')
                     setBookingError(null)
                     setOpenBookingId(openBookingId === t.id ? null : t.id)
@@ -439,9 +418,7 @@ export default function TherapistPage() {
           </button>
         )}
 
-        {/* A failed page load must not hide the directory that is already on
-            screen, so this sits with the "Load more" button rather than in the
-            therapistsError branch that blanks the list. */}
+        {/* Keep load-more errors with the button so the loaded directory stays visible. */}
         {loadMoreError && (
           <div className={styles.errorNote} role="alert">
             <p>{loadMoreError}</p>
@@ -458,8 +435,7 @@ export default function TherapistPage() {
         )}
       </div>
 
-      {/* My bookings — the user's own data. Absent for a guest, since the
-          directory above is the point of this page and is fully browsable. */}
+      {/* Bookings only for members; guests still get the full directory. */}
       {canBook && (
         <div className={styles.bookingsSection}>
           <div className={styles.sectionHeader}>

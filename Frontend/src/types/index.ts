@@ -1,6 +1,3 @@
-// Mirror the backend response shapes in Docs/API.md; keep them in sync when contracts change.
-
-// User mirrors Backend/internal/user/model.go (password_hash is never serialized).
 export interface User {
   id: string
   email: string
@@ -19,7 +16,6 @@ export interface LoginResponse {
   user: User
 }
 
-// POST /api/v1/auth/register — no tokens; the caller signs in afterwards.
 export interface RegisterResponse {
   user: User
 }
@@ -32,10 +28,8 @@ export interface ProfileResponse {
   user: User
 }
 
-// The exact mood vocabulary the backend accepts and stores.
 export type Mood = 'Heavy' | 'Okay' | 'Better' | 'At peace' | 'Grateful'
 
-// Language-preference values accepted by PATCH /users/me.
 export type LanguagePref = 'en' | 'sw' | 'luo' | 'kik'
 
 export interface MoodLog {
@@ -48,18 +42,16 @@ export interface CreateMoodPayload {
   mood: Mood
 }
 
-// Newest first.
 export interface MoodsResponse {
   moods: MoodLog[]
 }
 
-// Both fields optional; an empty/whitespace display_name clears the stored name.
+// Empty display_name clears the stored name; omitted fields are untouched.
 export interface UpdateProfilePayload {
   display_name?: string
   language_pref?: LanguagePref
 }
 
-// latest_mood is null and recent_moods is [] when the user has no check-ins.
 export interface DashboardResponse {
   user: User
   latest_mood: MoodLog | null
@@ -67,7 +59,7 @@ export interface DashboardResponse {
   mood_checkins_count: number
 }
 
-// `content` is intentionally absent from list and create responses; the backend only decrypts it on the single-entry endpoints, and there is no `updated_at`.
+// Content is decrypted only on single-entry endpoints; there is no updated_at.
 export interface JournalEntry {
   id: string
   content?: string
@@ -78,14 +70,13 @@ export interface JournalEntry {
   created_at: string
 }
 
-// Content required; mood_tags and prompt_used optional.
 export interface CreateJournalPayload {
   content: string
   mood_tags?: string[]
   prompt_used?: string
 }
 
-// All fields optional, at least one required.
+// All fields optional, but at least one is required.
 export interface UpdateJournalPayload {
   content?: string
   mood_tags?: string[]
@@ -96,13 +87,12 @@ export interface JournalEntryResponse {
   entry: JournalEntry
 }
 
-// Newest first; next_cursor is the created_at of the last entry in a full page, otherwise null.
 export interface JournalListResponse {
   entries: JournalEntry[]
   next_cursor: string | null
 }
 
-// The raw token is returned once; only its hash is stored. `anonymous_id` is internal and never rendered.
+// The raw token is returned once; only its hash is stored; anonymous_id is internal.
 export interface AnonymousSessionResponse {
   anonymous_token: string
   anonymous_id: string
@@ -112,7 +102,7 @@ export interface AnonymousMeResponse {
   anonymous_id: string
 }
 
-// `icon` is a stable key (grief|work|family|relationships|growth), not a glyph; it was emoji until migration 019_circle_icon_keys.
+// Stable key (grief|work|family|relationships|growth), not a glyph.
 export interface Circle {
   id: string
   slug: string
@@ -123,7 +113,7 @@ export interface Circle {
   is_member: boolean
 }
 
-// author_name is a per-circle label the server derives (nothing in it is an identity); is_mine marks the reader's own messages.
+// author_name is a derived per-circle label, not an identity.
 export interface CircleMessage {
   id: string
   author_name: string
@@ -141,7 +131,6 @@ export interface CircleResponse {
   circle: Circle
 }
 
-// Newest first; next_cursor is the created_at cursor for the previous page when one exists, otherwise null.
 export interface CircleMessagesResponse {
   messages: CircleMessage[]
   next_cursor: string | null
@@ -155,7 +144,7 @@ export interface CircleMessageResponse {
   message: CircleMessage
 }
 
-// bio and session_price are nullable; currency is the fixed "KES" constant; internal fields are never serialized by the backend.
+// Internal fields are never serialized by the backend.
 export interface Therapist {
   id: string
   display_name: string
@@ -168,7 +157,6 @@ export interface Therapist {
   is_online_only: boolean
 }
 
-// Newest first; next_cursor is the created_at of the last therapist in a full page, otherwise null.
 export interface TherapistsResponse {
   therapists: Therapist[]
   next_cursor: string | null
@@ -178,7 +166,7 @@ export interface TherapistResponse {
   therapist: Therapist
 }
 
-// Booking statuses, matching the backend CHECK constraint.
+// Must match the backend CHECK constraint.
 export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed'
 
 // The owner is never serialized; the therapist is id plus display_name.
@@ -192,7 +180,7 @@ export interface Booking {
   updated_at: string
 }
 
-// ISO 8601 timestamp, must be in the future; sessions are a fixed 60-minute window.
+// Must be in the future; sessions are a fixed 60-minute window.
 export interface CreateBookingPayload {
   scheduled_at: string
 }
@@ -201,12 +189,10 @@ export interface BookingResponse {
   booking: Booking
 }
 
-// The authenticated user's own bookings, newest first.
 export interface BookingsResponse {
   bookings: Booking[]
 }
 
-// Seed catalog ('478' and 'box'); durations are in seconds; created_at is never serialized.
 export interface BreathingExercise {
   id: string
   slug: string
@@ -218,7 +204,6 @@ export interface BreathingExercise {
   exhale_s: number
 }
 
-// In the catalog's defined order.
 export interface BreathingExercisesResponse {
   exercises: BreathingExercise[]
 }
@@ -227,7 +212,7 @@ export interface BreathingExerciseResponse {
   exercise: BreathingExercise
 }
 
-// exercise_id is null only for legacy device sessions; duration is client-supplied seconds.
+// exercise_id is null only for legacy device sessions.
 export interface BreathingSession {
   id: string
   exercise_id: string | null
@@ -239,7 +224,6 @@ export interface BreathingSession {
   created_at: string
 }
 
-// breaths and duration_s must be positive integers; completed is optional.
 export interface CreateBreathingSessionPayload {
   exercise_id: string
   breaths: number
@@ -251,7 +235,6 @@ export interface BreathingSessionResponse {
   session: BreathingSession
 }
 
-// The user's history, newest first (default limit 20, max 50).
 export interface BreathingSessionsResponse {
   sessions: BreathingSession[]
 }
@@ -264,10 +247,10 @@ export interface ApiErrorBody {
   }
 }
 
-// Stamped so a 401 handler knows which session ended; storage cannot answer it.
+// Storage cannot say which session ended; this stamps the failed request.
 export type CredentialSent = 'registered' | 'anonymous' | 'none'
 
-// Thrown by the API client for every failed request; `message` is always safe to display.
+// message is always safe to display.
 export class ApiError extends Error {
   readonly status: number
   readonly code: string

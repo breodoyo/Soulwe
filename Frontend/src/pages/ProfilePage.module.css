@@ -19,7 +19,6 @@
   color: var(--muted);
 }
 
-/* ── Card ── */
 .card {
   background: var(--bg-mid);
   border: 1px solid var(--border-soft);
@@ -30,7 +29,6 @@
   gap: var(--space-5);
 }
 
-/* ── Read-only info ── */
 .infoList {
   display: flex;
   flex-direction: column;
@@ -71,7 +69,6 @@
   font-weight: 500;
 }
 
-/* ── Form ── */
 .form {
   display: flex;
   flex-direction: column;
@@ -180,7 +177,6 @@
   color: var(--muted);
 }
 
-/* ── Feed error ── */
 .errorPanel {
   background: var(--bg-mid);
   border: 1px solid var(--border-soft);
@@ -221,7 +217,6 @@
   background: var(--sun-deep);
 }
 
-/* ── Desktop ── */
 @media (min-width: 768px) {
   .page {
     padding: var(--space-8) var(--space-8);

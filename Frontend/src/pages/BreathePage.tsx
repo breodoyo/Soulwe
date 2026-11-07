@@ -16,9 +16,7 @@ interface BreathingConfig {
   phases: Phase[]
 }
 
-// Frontend-only voice copy; the backend exposes durations only. Each line is a
-// complete sentence short enough to be spoken within the shortest phase, so the
-// next phase's utterance never cuts it off mid-sentence.
+// Frontend-only voice copy; each sentence fits the shortest phase.
 interface ScriptSet { inhale: string; hold: string; exhale: string; rest?: string }
 
 const SCRIPTS: Record<string, ScriptSet> = {
@@ -35,7 +33,7 @@ const SCRIPTS: Record<string, ScriptSet> = {
   },
 }
 
-// The catalog stores three durations; 'box' adds a second hold, mirroring its seed data.
+// Catalog stores three durations; box adds a second hold.
 function buildConfig(ex: BreathingExercise): BreathingConfig {
   const s = SCRIPTS[ex.slug] ?? SCRIPTS['478']
   const phases: Phase[] = [
@@ -62,16 +60,14 @@ function fmtClock(totalS: number) {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-// Speaks the instruction using the Web Speech API
 function speak(text: string) {
   if (!window.speechSynthesis) return
-  window.speechSynthesis.cancel() // stop any current speech
+  window.speechSynthesis.cancel()
   const utterance = new SpeechSynthesisUtterance(text)
-  utterance.rate = 0.82      // slightly slower than normal — calm, unhurried
-  utterance.pitch = 0.95     // slightly lower — warm, grounded
+  utterance.rate = 0.82
+  utterance.pitch = 0.95
   utterance.volume = 1
 
-  // Pick the best available voice — prefer a female English voice
   const voices = window.speechSynthesis.getVoices()
   const preferred = voices.find(v =>
     v.lang.startsWith('en') && v.name.toLowerCase().includes('female')
@@ -125,17 +121,17 @@ export default function BreathePage() {
 
   const reducedMotion = usePrefersReducedMotion()
 
-  // Latest-value refs so the long-lived timer effect never reads stale data.
+  // Latest-value refs so the timer never reads stale data.
   const configRef = useRef<BreathingConfig | null>(null)
   configRef.current = exercises?.find(e => e.id === selectedId) ?? null
   const voiceOnRef = useRef(voiceOn)
   voiceOnRef.current = voiceOn
 
-  // What the timer reads, mirroring `secs`; deriving the phase from `prev` in a setState updater would count breaths and speech twice.
+  // Mirror `secs`; deriving the phase in a setState updater would double-count breaths and speech.
   const secsRef = useRef(0)
-  // Session clock (total length in seconds) so pause/resume keeps the budget.
+  // Session clock keeps the total budget across pause/resume.
   const remainingRef = useRef(0)
-  // Which phase seeded the current countdown; stops pause/resume restarting it.
+  // Tracks the phase that seeded the countdown so resume does not reseed.
   const seededRef = useRef('')
 
   const config = configRef.current
@@ -217,7 +213,7 @@ export default function BreathePage() {
     setSelectedId(id)
   }
 
-  // Recorded only on an explicit Stop; runs with zero breaths are not, and never skipped for want of an account.
+  // Only explicit Stop records; zero-breath runs are skipped.
   const recordSession = async () => {
     const exerciseId = configRef.current?.id
     if (!exerciseId || breathCount < 1) return
@@ -252,8 +248,7 @@ export default function BreathePage() {
     void recordSession()
   }
 
-  // Timer: a session clock (total length) plus a per-phase clock. Pausing clears
-  // the interval; resuming restarts it without reseeding the current phase.
+  // Session and phase clocks pause/resume together.
   useEffect(() => {
     if (!running || paused || !configRef.current) return
     const phases = configRef.current.phases
@@ -289,13 +284,13 @@ export default function BreathePage() {
         setSecs(remaining)
         return
       }
-      // Everything that must happen exactly once lives here, not in a setState updater.
+      // One-shot effects live here, not inside a setState updater.
       if (timerRef.current) clearInterval(timerRef.current)
       const nextIdx   = phaseIdx + 1
       const nextPhase = phases[nextIdx % phases.length]
       if (nextPhase.label === 'Inhale') setBreathCount(c => c + 1)
       if (voiceOnRef.current) speak(nextPhase.instruction)
-      // Reseeded by the effect, but set here too so the number never flashes to 0.
+      // Set here too so the number never flashes to zero.
       secsRef.current = nextPhase.duration
       setSecs(nextPhase.duration)
       setPhaseIdx(nextIdx)
@@ -303,13 +298,11 @@ export default function BreathePage() {
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [running, paused, phaseIdx, selectedId])
 
-  // Leaving the page must stop timers and speech at once.
   useEffect(() => () => {
     if (timerRef.current) clearInterval(timerRef.current)
     window.speechSynthesis?.cancel()
   }, [])
 
-  // Disc scales with the breath: small on exhale / hold-empty, larger on inhale / hold-full.
   const phases = config?.phases ?? []
   const prevLabel = phases.length
     ? phases[(phaseIdx - 1 + phases.length) % phases.length].label
@@ -342,7 +335,6 @@ export default function BreathePage() {
               </p>
             </div>
 
-            {/* Load states */}
             {!config && !exercisesError && exercises === null && (
               <p className={styles.statusNote} role="status">Loading breathing exercises…</p>
             )}
@@ -367,7 +359,6 @@ export default function BreathePage() {
 
             {config && phase && (
               <>
-                {/* Orb: flat sun disc + one thin progress ring */}
                 <div className={styles.orbWrap}>
                   <svg className={styles.ringSvg} viewBox="0 0 200 200" aria-hidden="true">
                     <circle className={styles.ringTrack} cx="100" cy="100" r="92" />
@@ -398,7 +389,7 @@ export default function BreathePage() {
                   </div>
                 </div>
 
-                {/* Phase label + countdown (announced phase name only) */}
+                {/* Only the phase name is announced, not the countdown. */}
                 {completed ? (
                   <div className={styles.completion}>
                     <p className={styles.completionTitle} role="status">
@@ -428,7 +419,6 @@ export default function BreathePage() {
                   </div>
                 )}
 
-                {/* Controls */}
                 <div className={styles.controls}>
                   <button
                     className={[styles.voiceBtn, voiceOn ? styles.voiceBtnOn : ''].join(' ')}
@@ -472,7 +462,6 @@ export default function BreathePage() {
                   )}
                 </div>
 
-                {/* Length selector (radio semantics) */}
                 <div className={styles.lengthRow}>
                   <span id="breathe-length-label" className={styles.lengthLabel}>Length</span>
                   <div
@@ -507,12 +496,10 @@ export default function BreathePage() {
                   )}
                 </div>
 
-                {/* New copy: the one safety line */}
                 <p className={styles.safety}>
                   If you feel dizzy or uncomfortable, stop and breathe normally.
                 </p>
 
-                {/* Save status — honest outcome of the backend call */}
                 {saving && (
                   <div className={styles.savingLine} role="status">Saving your session…</div>
                 )}
@@ -531,7 +518,6 @@ export default function BreathePage() {
               </>
             )}
 
-            {/* Technique selector (radio semantics) */}
             {exercises !== null && exercises.length > 0 && (
               <div
                 className={styles.techniqueList}

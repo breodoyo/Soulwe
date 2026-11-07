@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom'
 import styles from './LegalPages.module.css'
 
-// Stub. Honest skeleton only: no encryption or data-handling claim is made
-// here that the backend has not confirmed.
+// Stub: no data-handling claim the backend has not confirmed.
 export default function PrivacyPage() {
   return (
     <div className={styles.page}>

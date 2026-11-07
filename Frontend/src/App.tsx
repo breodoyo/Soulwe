@@ -15,7 +15,7 @@ import PrivacyPage from '@/pages/PrivacyPage'
 import TermsPage from '@/pages/TermsPage'
 import ContactPage from '@/pages/ContactPage'
 
-// Set per route: an SPA never reloads, so a screen reader announcing a new page has nothing to read out otherwise.
+// SPA route changes need explicit titles for screen readers.
 const pageTitles: Record<string, string> = {
   '/':          'Soulwe — A home for your soul',
   '/login':     'Log in — Soulwe',

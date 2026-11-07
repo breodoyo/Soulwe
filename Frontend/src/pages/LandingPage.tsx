@@ -46,8 +46,7 @@ const features = [
   },
 ]
 
-// One accent colour per feature card; the classes live in the module. Icons are
-// decorative (aria-hidden), so the pairings are stylistic, not text contrast.
+// Icons are decorative, so accent pairings need not meet text contrast.
 const featureAccentClass: Record<string, string> = {
   sun: styles.featureIconSun,
   terracotta: styles.featureIconTerracotta,
@@ -55,8 +54,7 @@ const featureAccentClass: Record<string, string> = {
   ink: styles.featureIconInk,
 }
 
-// The eight circles are the ones seeded by migrations 010 and 020, not made up
-// for this page. TODO(real data): fetch this list from GET /circles once a
+// TODO(real data): fetch this list from GET /circles once a
 // public, token-less circles endpoint exists, so the page can never drift from
 // the database.
 const circleTopics = [
@@ -75,14 +73,7 @@ function formatPrice(t: Therapist): string {
   return `${t.currency} ${t.session_price}`
 }
 
-// Verse layout is handled by the panel; no extra sizer needed.
-
-// Preference for the hero check-in: faith is optional, so Scripture can be
-// hidden. Verses are always ON by default. The key is versioned (now v3): a
-// value stored by an earlier version (v1, v2) can never keep them hidden,
-// because we only ever read the current key. Nothing is written to storage
-// until the user actually clicks the toggle. Every access is wrapped for when
-// storage is unavailable (private mode, blocked cookies).
+// Versioned key: faith is optional, and storage may be unavailable in private mode.
 const SCRIPTURE_KEY = 'soulwe.scripture.v3'
 
 export default function LandingPage() {
@@ -101,9 +92,7 @@ export default function LandingPage() {
       ? moodVerses.find(v => v.mood === heroMood)
       : undefined
 
-  // Today's affirmation card: one verse for the whole day, picked from the
-  // local date. If it happens to match the verse shown for the selected mood,
-  // step to the next one so the same verse never appears twice in the hero.
+  // Avoid showing the mood verse twice in the hero.
   const dailyIndex = dailyVerseIndex()
   let cardVerse = dailyVerses[dailyIndex]
   if (activeVerse && activeVerse.reference === cardVerse.reference) {
@@ -122,7 +111,7 @@ export default function LandingPage() {
     })
   }
 
-  // Radiogroup keyboard support: arrows move and select, roving tabindex.
+  // Radiogroup keyboard support with roving tabindex.
   const onMoodKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const count = moodVerses.length
     let next: number | null = null
@@ -141,8 +130,7 @@ export default function LandingPage() {
   useEffect(() => {
     if (!SHOW_THERAPIST_DIRECTORY) return
     let cancelled = false
-    // Public endpoint, no token. Any failure leaves the placeholder state up,
-    // so a down API never invents a therapist on the landing page.
+    // A failed public request leaves the placeholder rather than inventing a therapist.
     api.therapists
       .list()
       .then(res => {
@@ -159,10 +147,7 @@ export default function LandingPage() {
   return (
     <div className={`${styles.page} sunrise`}>
 
-      {/* ── Hero: full-bleed hero.jpg. ONE flat sun overlay at 75% covers the
-             whole photo, edge to edge, at the same opacity everywhere (no
-             gradient, scrim, blur or glow). Ink copy over the composite holds
-             at least 4.8:1, even over the darkest foreground pixels. ── */}
+      {/* One flat sun overlay; ink copy must stay legible over the photo. */}
       <section className={styles.hero}>
         <img
           className={styles.heroImg}
@@ -173,7 +158,6 @@ export default function LandingPage() {
           fetchPriority="high"
           decoding="async"
         />
-        {/* Flat sun overlay edge to edge: decorative and behind the copy. */}
         <div className={styles.heroOverlay} aria-hidden="true" />
         <div className={styles.heroLayer}>
           <div className={styles.inner}>
@@ -297,9 +281,6 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Today's affirmation: a cream card floating over the photo, lower
-            right, inside the container's right edge. Always rendered regardless
-            of Scripture toggle. */}
         <aside className={styles.heroCard} aria-label="Today's affirmation">
           <p className={styles.heroCardEyebrow}>Today&rsquo;s affirmation</p>
           <p className={styles.heroCardVerse}>
@@ -321,7 +302,6 @@ export default function LandingPage() {
         </div>
       </div>
 
-      {/* ── Features: cards with links ── */}
       <section className={styles.features} id="features">
         <div className={styles.inner}>
           <h2 className={styles.sectionHeading} style={{ textAlign: 'center' }}>What Soulwe gives you</h2>
@@ -370,7 +350,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Circles: dark band, centered text, plain topic list ── */}
       <section className={styles.circles} id="circles">
         <div className={styles.inner}>
           <h2 className={styles.sectionHeadingLight}>
@@ -392,7 +371,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Therapists: text left, real directory or honest placeholder right ── */}
       <section className={styles.therapists} id="therapists">
         <div className={styles.inner}>
           <div className={styles.therapistsGrid}>
@@ -416,7 +394,6 @@ export default function LandingPage() {
                   what you are going through. You&rsquo;ll be able to choose who
                   you talk to and when.
                 </p>
-                {/* Only one CTA in the therapist card */}
               </div>
 
               <div className={styles.therapistsPanel}>
@@ -460,9 +437,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Stats removed (messages already appear elsewhere) ── */}
-
-      {/* ── Final CTA: centred, no glow ── */}
       <section className={styles.finalCta}>
         <div className={`${styles.inner} ${styles.finalCtaRow}`}>
           <h2 className={styles.finalCtaHeading}>Start whenever you&rsquo;re ready.</h2>

@@ -28,9 +28,7 @@
   outline-offset: 2px;
 }
 
-/* ── Header ── */
-/* Solid cream with a hairline border, so it reads the same over light and
-   dark sections. No transparency, blur or shadow. */
+/* Solid cream so it reads the same over light and dark sections. */
 .header {
   position: sticky;
   top: 0;
@@ -161,7 +159,6 @@
   border-color: var(--border);
 }
 
-/* ── Mobile menu ── */
 .menuBtn {
   display: flex;
   align-items: center;
@@ -229,16 +226,13 @@
   }
 }
 
-/* ── Main ── */
-/* Full width: each page constrains its own content so a page can opt into
-   full-bleed children (hero images, the breathe background). */
+/* Full width so pages can opt into full-bleed children. */
 .main {
   flex: 1;
   width: 100%;
   padding-bottom: var(--space-6);
 }
 
-/* Programmatic focus draws no box. */
 .main:focus {
   outline: none;
 }
@@ -249,7 +243,6 @@
   }
 }
 
-/* ── Crisis note ── */
 .crisis {
   padding: 56px 0;
   background: #FFF8EC;
@@ -305,7 +298,6 @@
   }
 }
 
-/* ── Footer ── */
 .footer {
   padding: 56px 0 var(--space-8);
   background: #241810;

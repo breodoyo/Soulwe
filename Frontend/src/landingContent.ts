@@ -1,6 +1,4 @@
-// Verified data for the public pages. Nothing here is invented: an empty
-// array or empty string means "not published yet", and the UI hides the row
-// entirely rather than showing a placeholder.
+// Empty values mean "not published"; the UI hides them rather than inventing placeholders.
 
 // TODO(verified Kenyan helpline name + number): add one string per
 // organisation, only after the details have been checked with that

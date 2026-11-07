@@ -319,5 +319,4 @@ func wordCount(content string) int {
 	return len(strings.Fields(content))
 }
 
-// ensure the concrete service satisfies the interface.
 var _ Service = (*service)(nil)

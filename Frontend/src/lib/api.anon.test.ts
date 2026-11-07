@@ -58,7 +58,6 @@ describe('ensureAnonSession single-flight and recovery', () => {
     const p2 = ensureAnonSession()
     await Promise.all([p1, p2])
 
-    // Count POSTs to /auth/anonymous
     const postCalls = fetchSpy.mock.calls.filter(([req, init]) => isPostToAnonymousSession(req, init))
     expect(postCalls.length).toBe(1)
     expect(localStorage.getItem(ANON_TOKEN_KEY)).toBe('anon-token-1')
@@ -85,7 +84,6 @@ describe('ensureAnonSession single-flight and recovery', () => {
     const { ensureAnonSession, getAnonToken } = await loadApi()
     localStorage.setItem(ANON_TOKEN_KEY, 'existing-token')
     await ensureAnonSession()
-    // Should have called me, not POSTed
     const postCalls = fetchSpy.mock.calls.filter(([req, init]) => isPostToAnonymousSession(req, init))
     expect(postCalls.length).toBe(0)
     expect(getAnonToken()).toBe('existing-token')
@@ -112,11 +110,9 @@ describe('ensureAnonSession single-flight and recovery', () => {
     const { ensureAnonSession } = await loadApi()
     localStorage.setItem(ANON_TOKEN_KEY, 'stale-token')
     await ensureAnonSession()
-    // After 401 on me, it should have cleared and POSTed once
     const postCalls = fetchSpy.mock.calls.filter(([req, init]) => isPostToAnonymousSession(req, init))
     expect(postCalls.length).toBe(1)
     expect(localStorage.getItem(ANON_TOKEN_KEY)).toBe('replacement')
-    // Should not loop
     expect(postCalls.length).toBeLessThanOrEqual(1)
   })
 })

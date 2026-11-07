@@ -67,8 +67,6 @@ func ownerArgs(owner middleware.Owner) (any, any, bool) {
 }
 
 // scanLog decodes one mood_logs row.
-//
-// Owner columns are decoded as *string because pgx cannot scan NULL into *string.
 func scanLog(s func(dest ...any) error, log *MoodLog) error {
 	var userID, anonID *string
 	if err := s(&log.ID, &userID, &anonID, &log.Mood, &log.LoggedAt); err != nil {

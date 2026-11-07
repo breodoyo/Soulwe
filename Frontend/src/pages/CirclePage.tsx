@@ -13,7 +13,7 @@ import styles from './CirclePage.module.css'
 const MESSAGE_PAGE_SIZE = 25
 const MAX_MESSAGE_LENGTH = 1000
 
-// Stable keys (migration 019_circle_icon_keys), not glyphs; unknown or null falls back to a generic icon.
+// Migration 019 icon keys; unknown or null falls back to a generic icon.
 const CIRCLE_ICONS: Record<string, typeof MessageCircle> = {
   grief: Feather,
   work: Briefcase,
@@ -48,7 +48,7 @@ function formatMessageTime(iso: string): string {
   return date.toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })
 }
 
-// Full local time for the tooltip and screen readers; the visible label stays relative.
+// Full time for the tooltip and screen readers; visible labels stay relative.
 function formatMessageTimeFull(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''
@@ -56,27 +56,22 @@ function formatMessageTimeFull(iso: string): string {
 }
 
 export default function CirclePage() {
-  // Circles take either credential, so the composer's label depends on which identity is in play.
   const { status: authStatus } = useAuth()
   const signedIn = authStatus === 'authenticated'
 
-  // Anonymous session state
   const [sessionState, setSessionState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [sessionError, setSessionError] = useState<string | null>(null)
   const [sessionTick, setSessionTick] = useState(0)
 
-  // Circle discovery
   const [circles, setCircles] = useState<Circle[] | null>(null)
   const [circlesError, setCirclesError] = useState<string | null>(null)
   const [circlesTick, setCirclesTick] = useState(0)
 
-  // Circle detail / membership
   const [activeCircleId, setActiveCircleId] = useState<string | null>(null)
   const [detail, setDetail] = useState<Circle | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState<string | null>(null)
 
-// Message history (chronological: oldest -> newest)
   const [messages, setMessages] = useState<CircleMessage[]>([])
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [messagesError, setMessagesError] = useState<string | null>(null)
@@ -84,12 +79,10 @@ export default function CirclePage() {
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [olderError, setOlderError] = useState<string | null>(null)
 
-  // Sending
   const [reply, setReply] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
 
-  // Join / leave
   const [joining, setJoining] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [leaveConfirm, setLeaveConfirm] = useState(false)
@@ -98,8 +91,7 @@ export default function CirclePage() {
 
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // The leave confirmation is a modal <dialog>: the browser traps focus while
-  // it is open, and focus goes back to the button that opened it on close.
+  // Native <dialog> traps focus; restore the opener on close.
   const leaveDialogRef = useRef<HTMLDialogElement>(null)
   const leaveReturnFocusRef = useRef<HTMLElement | null>(null)
 
@@ -119,15 +111,13 @@ export default function CirclePage() {
 
   const [sessionNotice, setSessionNotice] = useState<string | null>(null)
 
-  // Handles a lost session: `err.credential` decides which, since api.ts has
-  // already cleared the rejected token from storage.
+  // `err.credential` identifies which token api.ts already cleared.
   const handleSessionLost = (err: unknown, setError: (message: string) => void) => {
     if (isApiError(err) && err.credential === 'registered') {
-      // The account session ended; any anonymous session is still good.
       setError('Your session has ended. Sign in again to keep browsing circles.')
       return
     }
-    // Also catches 'none', so a guest who lost their session always recovers.
+    // Also catches 'none', so a guest always recovers.
     clearAnonToken()
     setSessionNotice('Your anonymous session was renewed. Please open the circle again.')
     setSessionTick(t => t + 1)
@@ -139,7 +129,7 @@ export default function CirclePage() {
     setSessionError(null)
     void (async () => {
       try {
-        // Only a guest boots an anonymous session; minting one for a member would strand an identity.
+        // Only guests boot an anonymous session; minting one for a member would strand an identity.
         if (!getAccessToken()) {
           await ensureAnonSession()
         }
@@ -199,13 +189,12 @@ export default function CirclePage() {
       setOlderError(null)
     }
     try {
-      // `before` resumes from the oldest message currently loaded.
       const cursor = mode === 'older' ? messages[0]?.created_at : undefined
       const res = await api.circles.messages(circleId, {
         limit: MESSAGE_PAGE_SIZE,
         before: cursor,
       })
-      // The API returns newest first; each page is flipped so the newest lands at the bottom.
+      // API pages arrive newest first; flip so newest lands at the bottom.
       const block = [...res.messages].reverse()
       if (mode === 'initial') {
         setMessages(block)
@@ -215,7 +204,6 @@ export default function CirclePage() {
       setNextCursor(res.next_cursor)
     } catch (err) {
       if (isApiError(err) && err.status === 401) {
-        // Send the failure to whichever pane was loading.
         if (mode === 'initial') handleSessionLost(err, setMessagesError)
         else handleSessionLost(err, setOlderError)
         return
@@ -316,7 +304,6 @@ export default function CirclePage() {
     }
   }
 
-  // Called only from the confirmation dialog; the sidebar button opens it.
   const handleLeave = async () => {
     if (leaving || !activeCircleId) return
     const circleId = activeCircleId
@@ -370,8 +357,7 @@ export default function CirclePage() {
   useEffect(() => {
     if (activeCircleId && messages.length > 0) {
       const list = bottomRef.current?.parentElement
-      // The conversation card owns the scroll on desktop, so drive its own
-      // viewport instead of dragging the page past the circle header.
+      // Scroll the card viewport, not the page, past the header.
       if (list && list.scrollHeight > list.clientHeight + 1) {
         list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' })
       } else {
@@ -415,7 +401,6 @@ export default function CirclePage() {
   return (
     <div className={styles.page}>
 
-      {/* Circle list */}
       {!activeCircleId && (
         <>
           <div className={styles.heroWrap}>
@@ -505,7 +490,6 @@ export default function CirclePage() {
           </div>        </>
       )}
 
-      {/* Thread view */}
       {activeCircleId && (
         <div className={styles.thread}>
           <div className={styles.threadMain}>
@@ -723,8 +707,7 @@ export default function CirclePage() {
               <button
                 className={styles.leaveBtn}
                 onClick={e => {
-                  // Captured here (not in the effect) so the opener is the
-                  // button itself even when focus never moved to it.
+                  // Capture the opener because focus may never move to the button.
                   leaveReturnFocusRef.current = e.currentTarget
                   setLeaveConfirm(true)
                 }}

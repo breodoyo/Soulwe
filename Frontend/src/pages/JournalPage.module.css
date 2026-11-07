@@ -1,24 +1,8 @@
-/* Journal page — sunrise theme.
-   The palette itself lives in src/styles/sunrise.css, scoped to the `.sunrise`
-   class which JournalPage adds to its root element. This module only maps the
-   existing class names onto that palette and arranges the desktop layout.
-   Contrast (measured, WCAG 2.1):
-     ink #241810        on cream #FFF8EC  16.40  body
-     ink #241810        on white #FFFFFF  17.31  writing card
-     ink #241810        on sand  #FCE7C2  14.30  detail / blessing cards
-     ink #241810        on sun   #F6A31B   8.39  primary / active controls
-     cream #FFF8EC      on leaf-deep #1F4D36 9.15  selected chips
-     terracotta #B5482A on cream           5.07  accents / day number
-     muted #6E5844      on white           6.68  placeholder / counters
-     muted #6E5844      on cream           6.33  secondary text
-     ink-mid #5B4633    on sand            7.32  labels on cards
-     sun-deep #9A5600   on sand            4.68  eyebrow on blessing card
-     #B91C1C            on cream           6.13  error text
-*/
+/* Sunrise-scoped colours; this module maps class names onto that palette. */
 .page {
   background: var(--cream);
   min-height: calc(100vh - var(--nav-height));
-  /* Date and word-count text must read at >=13px; the shared --text-xs is 11px. */
+  /* Date and word-count text need a larger minimum. */
   --text-xs: 13px;
 }
 
@@ -43,7 +27,6 @@
   }
 }
 
-/* ── Header row (title left, mode toggle right on desktop) ── */
 .head {
   display: flex;
   flex-direction: column;
@@ -66,7 +49,6 @@
 
 .sub em { font-style: italic; color: var(--clay); }
 
-/* ── Two-column layout ── */
 .layout {
   display: flex;
   flex-direction: column;
@@ -115,7 +97,6 @@
   }
 }
 
-/* ── Prompt chips ── */
 .promptStrip {
   display: flex;
   gap: var(--space-2);
@@ -155,7 +136,6 @@
   border-color: var(--leaf-deep);
 }
 
-/* ── Write box ── */
 .writeBox {
   background: #fff;
   border: 1px solid var(--sand);
@@ -181,8 +161,7 @@
 
 .textarea::placeholder { color: var(--muted); }
 
-/* Clear focus ring on the writing surfaces (terracotta #B5482A is 5.35:1 on
-   white and 5.07:1 on cream — comfortably above the 3:1 focus minimum). */
+/* Terracotta focus ring stays visible on writing surfaces. */
 .textarea:focus-visible,
 .prayerTextarea:focus-visible,
 .editTextarea:focus-visible {
@@ -215,7 +194,6 @@
   }
 }
 
-/* ── Section label ── */
 .sectionLabel {
   font-size: var(--text-xs);
   color: var(--muted);
@@ -225,7 +203,6 @@
   margin-bottom: var(--space-3);
 }
 
-/* ── Mood tags ── */
 .tagRow {
   display: flex;
   flex-wrap: wrap;
@@ -256,7 +233,6 @@
   border-color: var(--leaf-deep);
 }
 
-/* ── Save button ── */
 .saveBtn {
   width: 100%;
   min-height: 44px;
@@ -298,7 +274,6 @@
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── AI Reflection ── */
 .reflection {
   background: #fff;
   border: 1px solid var(--sand);
@@ -347,7 +322,6 @@
   color: var(--ink);
 }
 
-/* ── Past entries ── */
 .entryList {
   display: flex;
   flex-direction: column;
@@ -433,7 +407,6 @@
   border-radius: var(--radius-full);
 }
 
-/* ── List meta extras ── */
 .entryWords {
   font-size: var(--text-xs);
   color: var(--muted);
@@ -452,7 +425,6 @@
   white-space: nowrap;
 }
 
-/* ── Load more / helper buttons ── */
 .smallBtn {
   font-size: var(--text-xs);
   min-height: 32px;
@@ -497,7 +469,6 @@
 
 .loadMoreBtn:disabled { opacity: 0.55; cursor: not-allowed; }
 
-/* ── List / detail status ── */
 .listStatus,
 .detailStatus {
   font-size: var(--text-sm);
@@ -513,7 +484,6 @@
   padding: var(--space-4) 0;
 }
 
-/* ── Notices ── */
 .noticeError,
 .noticeSuccess,
 .noticeInfo {
@@ -552,7 +522,6 @@
   color: var(--muted);
 }
 
-/* ── Entry detail ── */
 .detailCard {
   background: var(--sand);
   border: 1px solid var(--border);
@@ -594,7 +563,6 @@
   line-height: 1.8;
 }
 
-/* ── Reflection section ── */
 .reflectionSection {
   display: flex;
   flex-direction: column;
@@ -628,7 +596,6 @@
   margin-bottom: var(--space-3);
 }
 
-/* ── Edit form ── */
 .editForm {
   display: flex;
   flex-direction: column;
@@ -660,7 +627,6 @@
   gap: var(--space-2);
 }
 
-/* ── Buttons ── */
 .primaryBtn {
   display: inline-flex;
   align-items: center;
@@ -736,7 +702,6 @@
   border-top: 1px solid var(--border);
 }
 
-/* ── Mode toggle ── */
 .modeToggle {
   display: flex;
   background: var(--cream);
@@ -777,7 +742,6 @@
   box-shadow: var(--shadow-sm);
 }
 
-/* ── Prayer mode ── */
 .prayerMode {
   display: flex;
   flex-direction: column;
@@ -811,8 +775,6 @@
   color: var(--ink);
 }
 
-/* .prayerLabel stacks its children in a column, so the icon needs its own row
-   to sit beside the section name rather than above it. */
 .prayerLabelRow {
   display: flex;
   align-items: center;
@@ -852,7 +814,6 @@
 
 .prayerTextarea::placeholder { color: var(--muted); }
 
-/* ── Blessing card ── */
 .blessingCard {
   background: var(--sand);
   border: 1px solid var(--sun-muted);
@@ -885,7 +846,6 @@
   font-weight: 500;
 }
 
-/* ── Entry mode tag ── */
 .entryMeta {
   margin-bottom: var(--space-1);
 }
