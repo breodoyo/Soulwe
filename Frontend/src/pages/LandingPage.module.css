@@ -1055,7 +1055,13 @@
 .finalCta {
   padding: 48px 0;
   background: var(--sun);
-  text-align: center;
+}
+
+.finalCtaRow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-6);
 }
 
 .finalCtaHeading {
@@ -1064,13 +1070,21 @@
   color: var(--ink);
   line-height: 1.15;
   letter-spacing: -0.02em;
-  margin: 0 auto var(--space-6);
+  margin: 0;
 }
 
 .finalCta .btnPrimary {
   min-height: 56px;
   padding: 0 var(--space-10);
   font-size: 18px;
+}
+
+@media (min-width: 768px) {
+  .finalCtaRow {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
 }
 
 @media (max-width: 639px) {
