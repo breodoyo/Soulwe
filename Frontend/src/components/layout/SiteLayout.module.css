@@ -238,14 +238,9 @@
   padding-bottom: var(--space-6);
 }
 
-/* Programmatic focus draws no box, but keyboard users still get the ring. */
+/* Programmatic focus draws no box. */
 .main:focus {
   outline: none;
-}
-
-.main:focus-visible {
-  outline: 2px solid var(--sun-deep);
-  outline-offset: -2px;
 }
 
 @media (min-width: 768px) {
@@ -255,39 +250,38 @@
 }
 
 /* ── Crisis note ── */
-/* 56px total to the orange band above: 24px comes from .main's bottom
-   padding, so the section adds the remaining 32px (24px on desktop). */
 .crisis {
-  padding: 32px var(--space-5) 56px;
+  padding: 56px 0;
+  background: #FFF8EC;
 }
 
-.crisisPanel {
-  max-width: 560px;
+.crisisInner {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-6);
+  max-width: var(--max-site);
   margin: 0 auto;
-  text-align: center;
-}
-
-.crisisPanel::before {
-  content: '';
-  display: block;
-  width: 48px;
-  height: 3px;
-  margin: 0 auto var(--space-4);
-  background: #2E6B4B;
+  padding: 0 var(--space-6);
 }
 
 .crisisHeading {
   font-family: var(--font-display);
   font-size: 18px;
   color: var(--ink);
-  margin-bottom: var(--space-2);
+  margin: 0;
+  text-align: left;
+}
+
+.crisisBody {
+  border-left: 3px solid #2E6B4B;
+  padding-left: var(--space-5);
 }
 
 .crisisText {
   font-size: 16px;
   color: var(--ink);
   line-height: 1.6;
-  margin-bottom: 0;
+  margin: 0;
 }
 
 .crisisList {
@@ -295,6 +289,7 @@
   flex-direction: column;
   gap: var(--space-1);
   margin-top: var(--space-3);
+  padding-left: 1.15em;
 }
 
 .crisisList li {
@@ -304,32 +299,40 @@
 }
 
 @media (min-width: 768px) {
-  .crisis {
-    padding: 24px var(--space-6) 56px;
+  .crisisInner {
+    grid-template-columns: 1fr 1.4fr;
+    gap: var(--space-12);
   }
 }
 
 /* ── Footer ── */
 .footer {
-  padding: var(--space-10) 0 var(--space-8);
-  background: var(--ink);
-  text-align: center;
+  padding: 56px 0 var(--space-8);
+  background: #241810;
+  color: #FFF8EC;
 }
 
 .footerInner {
   max-width: var(--max-site);
   margin: 0 auto;
   padding: 0 var(--space-6);
+}
+
+.footerTop {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-8);
+}
+
+.footerBrandBlock {
+  max-width: 340px;
 }
 
 .footerBrand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  color: #FFF8EC;
   transition: opacity var(--duration-fast) var(--ease);
 }
 
@@ -338,56 +341,108 @@
 .footerName {
   font-family: var(--font-display);
   font-size: var(--text-lg);
-  color: var(--cream);
+  color: #FFF8EC;
   letter-spacing: -0.02em;
 }
 
 .footerTagline {
+  margin-top: var(--space-3);
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 248, 236, 0.7);
+  line-height: 1.6;
+  text-wrap: balance;
 }
 
-.footerNav {
+.footerColumns {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--space-2) var(--space-5);
-  margin: var(--space-2) 0;
+  flex-direction: column;
+  gap: var(--space-6);
 }
 
-/* 44px tap targets; AA contrast for small text on the dark footer. */
-.footerNav .navLink {
+.footerColumn {
+  min-width: 0;
+}
+
+.footerLabel {
+  margin-bottom: var(--space-1);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 248, 236, 0.62);
+}
+
+.footerList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 44px tap targets; cream links with a hover underline. */
+.footerLink {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.82);
-  border-bottom-color: transparent;
+  font-size: 15px;
+  color: #FFF8EC;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--duration-fast) var(--ease);
 }
 
-.footerNav .navLink:hover {
-  color: var(--cream);
+.footerLink:hover,
+.footerLink:focus-visible {
+  text-decoration-color: currentColor;
 }
 
-.footerNav .navLinkActive {
-  color: var(--cream);
-  border-bottom-color: var(--sun);
+.footerDivider {
+  height: 1px;
+  margin: var(--space-8) 0 var(--space-5);
+  background: rgba(255, 248, 236, 0.15);
 }
 
 .footerMeta {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--space-1) var(--space-4);
-  align-items: baseline;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
 }
 
 .footerCopy {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.78);
+  font-size: 13px;
+  color: rgba(255, 248, 236, 0.62);
 }
 
 .sessionLine {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.78);
+  font-size: 13px;
+  color: rgba(255, 248, 236, 0.62);
+}
+
+@media (min-width: 768px) {
+  .footerTop {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-12);
+  }
+
+  .footerColumns {
+    flex-direction: row;
+    gap: var(--space-12);
+  }
+
+  .footerLink {
+    min-height: 30px;
+  }
+
+  .footerMeta {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-4);
+  }
 }

@@ -20,15 +20,22 @@ const navLinks: NavItem[] = [
   { to: '/breathe',   label: 'Breathe'   },
 ]
 
-// The footer is a site-map, not an app menu: legal and contact pages only.
-const footerLinks: NavItem[] = [
+// The crisis note sits above the footer on every page; same-page anchor.
+const crisisLink: NavItem = { to: '#crisis', label: 'Crisis help' }
+
+const footerExploreLinks: NavItem[] = [
+  { to: '/journal',   label: 'Journal'    },
+  { to: '/circle',    label: 'Circles'    },
+  { to: '/breathe',   label: 'Breathe'    },
+  { to: '/therapist', label: 'Therapists' },
+]
+
+const footerSiteLinks: NavItem[] = [
   { to: '/privacy', label: 'Privacy' },
   { to: '/terms',   label: 'Terms'   },
   { to: '/contact', label: 'Contact' },
+  crisisLink,
 ]
-
-// The crisis strip sits above the footer on every page; same-page anchor.
-const crisisLink: NavItem = { to: '#crisis', label: 'Crisis help' }
 
 function BrandMark() {
   return (
@@ -201,45 +208,75 @@ export default function SiteLayout() {
         <Outlet />
       </main>
 
-      {/* Crisis panel: plain, always visible, no helpline published from memory. */}
+      {/* Crisis note: plain, always visible, no helpline published from memory. */}
       <section className={styles.crisis} id="crisis" aria-labelledby="crisis-heading">
-        <div className={styles.crisisPanel}>
+        <div className={styles.crisisInner}>
           <h2 className={styles.crisisHeading} id="crisis-heading">
             If you need help right now
           </h2>
-          <p className={styles.crisisText}>
-            If you or someone near you is in immediate danger, please contact
-            your local emergency services or someone you trust. Soulwe is here
-            for everyday support, and you don&rsquo;t have to face the hard
-            moments alone.
-          </p>
-          {/* Helplines come from landingContent.ts and only render once real,
-              verified entries exist there. */}
-          {crisisHelplines.length > 0 && (
-            <ul className={styles.crisisList}>
-              {crisisHelplines.map(line => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-          )}
+          <div className={styles.crisisBody}>
+            <p className={styles.crisisText}>
+              If you or someone near you is in immediate danger, please contact
+              your local emergency services or someone you trust. Soulwe is here
+              for everyday support, and you don&rsquo;t have to face the hard
+              moments alone.
+            </p>
+            {/* Helplines come from landingContent.ts and only render once real,
+                verified entries exist there. */}
+            {crisisHelplines.length > 0 && (
+              <ul className={styles.crisisList}>
+                {crisisHelplines.map(line => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </section>
 
       <footer className={styles.footer} role="contentinfo">
         <div className={styles.footerInner}>
-          <Link to="/" className={styles.footerBrand}>
-            <BrandMark />
-            <span className={styles.footerName}>Soulwe</span>
-          </Link>
-          <p className={styles.footerTagline}>
-            A home for your soul. Built in East Africa, for East Africa.
-          </p>
-          <nav className={styles.footerNav} aria-label="Footer">
-            {footerLinks.map(item => (
-              <NavItemLink key={item.to} item={item} />
-            ))}
-            <NavItemLink item={crisisLink} />
-          </nav>
+          <div className={styles.footerTop}>
+            <div className={styles.footerBrandBlock}>
+              <Link to="/" className={styles.footerBrand} aria-label="Soulwe home page">
+                <BrandMark />
+                <span className={styles.footerName}>Soulwe</span>
+              </Link>
+              <p className={styles.footerTagline}>
+                A home for your soul. Built in East Africa, for East Africa.
+              </p>
+            </div>
+
+            <nav className={styles.footerColumns} aria-label="Footer">
+              <div className={styles.footerColumn}>
+                <p className={styles.footerLabel}>Explore</p>
+                <ul className={styles.footerList}>
+                  {footerExploreLinks.map(item => (
+                    <li key={item.to}>
+                      <Link className={styles.footerLink} to={item.to}>
+                        {item.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className={styles.footerColumn}>
+                <p className={styles.footerLabel}>Soulwe</p>
+                <ul className={styles.footerList}>
+                  {footerSiteLinks.map(item => (
+                    <li key={item.to}>
+                      <Link className={styles.footerLink} to={item.to}>
+                        {item.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </nav>
+          </div>
+
+          <div className={styles.footerDivider} aria-hidden="true" />
+
           <div className={styles.footerMeta}>
             <p className={styles.footerCopy}>© 2026 Soulwe.</p>
             {isAuthed ? (

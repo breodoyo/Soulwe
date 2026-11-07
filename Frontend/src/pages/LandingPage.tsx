@@ -464,7 +464,7 @@ export default function LandingPage() {
 
       {/* ── Final CTA: centred, no glow ── */}
       <section className={styles.finalCta}>
-        <div className={styles.inner}>
+        <div className={`${styles.inner} ${styles.finalCtaRow}`}>
           <h2 className={styles.finalCtaHeading}>Start whenever you&rsquo;re ready.</h2>
           <Link className={styles.btnPrimary} to="/home">
             Enter Soulwe
