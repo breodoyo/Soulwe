@@ -1,5 +1,3 @@
-// 'unauthenticated' is still fully usable: personal features run against an anonymous session this provider bootstraps, and registration returns no token.
-
 import {
   createContext,
   useCallback,
@@ -56,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void restoreSession()
   }, [restoreSession])
 
-  // Any 401 on an authenticated request (expired/invalid token) drops to unauthenticated.
+  // Expired or invalid tokens drop the app back to unauthenticated.
   useEffect(() => {
     setUnauthorizedHandler(() => {
       setUser(null)
@@ -65,11 +63,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => setUnauthorizedHandler(null)
   }, [])
 
-  // Signing out must not strand the anonymous session the personal features use.
+  // Personal features still need an anonymous session after sign-out.
   useEffect(() => {
     if (status !== 'unauthenticated') return
     void ensureAnonSession().catch(() => {
-      // Best-effort: the real error surfaces at the personal request, and this is single-flight.
+      // Best-effort; the real error surfaces on the personal request.
     })
   }, [status])
 

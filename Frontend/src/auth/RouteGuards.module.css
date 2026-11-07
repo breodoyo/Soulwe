@@ -108,7 +108,7 @@
   color: var(--subtle);
 }
 
-/* Compact: the sign-in is about one action, so it reads as a small aside. */
+/* One action only, so compact sign-in reads as an aside. */
 .promptCompact {
   padding: var(--space-4);
   gap: var(--space-2);
@@ -128,5 +128,4 @@
   font-size: var(--text-xs);
 }
 
-/* "Keep browsing" is implied by the compact framing. */
 .promptCompact .promptNote { display: none; }

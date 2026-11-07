@@ -62,12 +62,10 @@ export default function JournalPage() {
 
   const [mode, setMode] = useState<JournalMode>('journal')
 
-  // Journal mode state
   const [activePrompt, setActivePrompt] = useState(0)
   const [content, setContent] = useState('')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
 
-  // Prayer mode state
   const [gratitude, setGratitude] = useState('')
   const [petition, setPetition] = useState('')
   const [listening, setListening] = useState('')
@@ -75,14 +73,12 @@ export default function JournalPage() {
     () => blessingVerses[Math.floor(Math.random() * blessingVerses.length)]
   )
 
-  // Create flow
   const [saving, setSaving] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [createStatus, setCreateStatus] = useState<string | null>(null)
   const [reflection, setReflection] = useState<string | null>(null)
   const [reflectionUnavailable, setReflectionUnavailable] = useState(false)
 
-  // Entry list
   const [entries, setEntries] = useState<JournalEntry[]>([])
   const [listLoading, setListLoading] = useState(true)
   const [listError, setListError] = useState<string | null>(null)
@@ -92,7 +88,6 @@ export default function JournalPage() {
   const [tick, setTick] = useState(0)
   const [pageNotice, setPageNotice] = useState<string | null>(null)
 
-  // Detail / edit / delete / reflect
   const [detailId, setDetailId] = useState<string | null>(null)
   const [detailEntry, setDetailEntry] = useState<JournalEntry | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -117,12 +112,12 @@ export default function JournalPage() {
   })
 
   useEffect(() => {
-    // Entries are personal, so the list refetches whenever the credential changes.
+    // Entries are personal; refetch when the credential changes.
     if (status === 'loading') return
     let cancelled = false
     setListLoading(true)
     setListError(null)
-    // Drop the old identity's entries rather than leaving them up during the refetch.
+    // Drop the old identity's entries during the refetch.
     setEntries([])
     setNextCursor(null)
     api.journal
@@ -372,7 +367,6 @@ export default function JournalPage() {
             <p className={styles.sub}>Private only yours — <em>ya siri</em></p>
           </div>
 
-          {/* Mode toggle */}
           <div className={styles.modeToggle} role="group" aria-label="Journal mode">
             <button
               className={[styles.modeBtn, mode === 'journal' ? styles.modeBtnActive : ''].join(' ')}
@@ -394,9 +388,7 @@ export default function JournalPage() {
         </header>
 
         <div className={styles.layout}>
-          {/* ── Left column: write + save + feedback ── */}
           <div className={styles.formCol}>
-            {/* ── JOURNAL MODE ── */}
             {mode === 'journal' && (
               <>
                 <div className={styles.promptStrip} role="group" aria-label="Journal prompts">
@@ -449,7 +441,6 @@ export default function JournalPage() {
               </>
             )}
 
-            {/* ── PRAYER MODE ── */}
             {mode === 'prayer' && (
               <div className={styles.prayerMode}>
                 <p className={styles.prayerIntro}>
@@ -522,9 +513,7 @@ export default function JournalPage() {
               </div>
             )}
 
-            {/* Save button — both modes. No aria-label: the visible text already names the
-                action, and a static label overrode it with the wrong verb in prayer
-                mode ("reflection" vs "prayer"), breaking WCAG 2.5.3 label-in-name. */}
+            {/* No aria-label: visible text names the action; a static label broke label-in-name in prayer mode. */}
             <button
               className={[styles.saveBtn, saving ? styles.saveBtnLoading : ''].join(' ')}
               onClick={handleSave}
@@ -538,7 +527,6 @@ export default function JournalPage() {
               }
             </button>
 
-            {/* Create feedback + reflection */}
             {createError && (
               <p className={styles.noticeError} role="alert">
                 <CircleAlert aria-hidden="true" className={styles.noticeIcon} />
@@ -567,7 +555,6 @@ export default function JournalPage() {
             )}
           </div>
 
-          {/* ── Right column: past entries ── */}
           <aside className={styles.entriesPanel} aria-label="Past entries">
             <p className={styles.sectionLabel}>Past entries</p>
 
@@ -578,7 +565,6 @@ export default function JournalPage() {
               </p>
             )}
 
-            {/* Detail panel */}
             {detailId && (
               <section className={styles.detailCard} aria-label="Journal entry details">
                 <div className={styles.detailTop}>

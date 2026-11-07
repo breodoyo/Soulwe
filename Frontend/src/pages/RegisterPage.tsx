@@ -12,7 +12,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
-  // Each check targets one input, so a rejected signup leaves every field valid.
+  // Each check targets one input so the others stay valid.
   const [invalidField, setInvalidField] = useState<'email' | 'password' | 'confirm' | null>(null)
   const [submitting, setSubmitting] = useState(false)
 

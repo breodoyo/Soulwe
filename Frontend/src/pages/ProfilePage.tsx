@@ -24,7 +24,6 @@ function formatMemberSince(iso: string): string {
 
 export default function ProfilePage() {
   const { status } = useAuth()
-  // Account data by definition; for a guest this is just an empty state.
   const hasAccount = status === 'authenticated'
 
   const [profile, setProfile] = useState<User | null>(null)
@@ -114,7 +113,6 @@ export default function ProfilePage() {
           </button>
         </section>
       ) : !hasAccount ? (
-        // Plainly an empty state: the page still opens and a guest's other data still works.
         <section className={styles.card}>
           <p className={styles.sub}>Browsing anonymously</p>
           <p className={styles.hint}>
@@ -133,7 +131,6 @@ export default function ProfilePage() {
         </section>
       ) : profile ? (
         <div className={styles.card}>
-          {/* Read-only account info */}
           <dl className={styles.infoList}>
             <div className={styles.infoRow}>
               <dt>Email</dt>

@@ -31,7 +31,7 @@ export default function LoginPage() {
 
     if (!email.trim() || !password) {
       setError('Please enter your email and password.')
-      // Missing fields is a per-field validity problem; a rejected credential is not.
+      // Only missing fields mark both inputs invalid.
       setFieldsInvalid(true)
       return
     }

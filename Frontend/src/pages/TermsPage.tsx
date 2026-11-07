@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import styles from './LegalPages.module.css'
 
-// Stub. No terms are asserted here until real ones are written.
+// Stub: no terms are asserted until real ones are written.
 export default function TermsPage() {
   return (
     <div className={styles.page}>

@@ -1,6 +1,4 @@
-// Hero mood verses for the landing page check-in. Local data only: nothing
-// is sent to a server and nothing is stored. The translation lives here so
-// it can be swapped in one place.
+// Local data only; nothing is sent or stored.
 export interface MoodVerse {
   mood: string
   text: string

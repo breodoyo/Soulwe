@@ -10,7 +10,6 @@ interface NavItem {
   end?: boolean
 }
 
-// Website navbar: section anchors scroll the landing page, pages navigate.
 const navLinks: NavItem[] = [
   { to: '/',          label: 'Home',      end: true },
   { to: '/#features', label: 'Features'  },
@@ -20,7 +19,6 @@ const navLinks: NavItem[] = [
   { to: '/breathe',   label: 'Breathe'   },
 ]
 
-// The crisis note sits above the footer on every page; same-page anchor.
 const crisisLink: NavItem = { to: '#crisis', label: 'Crisis help' }
 
 const footerExploreLinks: NavItem[] = [
@@ -76,13 +74,11 @@ export default function SiteLayout() {
   const firstRender = useRef(true)
   const isAuthed = status === 'authenticated'
 
-  // Any navigation dismisses the mobile menu.
   useEffect(() => {
     setMenuOpen(false)
   }, [pathname, hash])
 
-  // Cross-page anchors (Features → /#features) must scroll after the landing
-  // page mounts; the browser only handles same-document fragment clicks.
+  // Cross-page anchors need scrolling after the target page mounts.
   useEffect(() => {
     if (!hash) return
     const id = decodeURIComponent(hash.slice(1))
@@ -90,8 +86,7 @@ export default function SiteLayout() {
     if (el) el.scrollIntoView()
   }, [pathname, hash])
 
-  // Route changes leave focus on the activated link, so focus moves to the main
-  // landmark — skipped on mount and on anchor jumps, which scroll instead.
+  // Move focus to the main landmark after route changes, except on anchor jumps.
   useEffect(() => {
     if (firstRender.current) {
       firstRender.current = false
@@ -203,12 +198,12 @@ export default function SiteLayout() {
         )}
       </header>
 
-      {/* tabIndex -1 lets route changes focus it without making it a Tab stop. */}
+      {/* tabIndex -1 allows programmatic focus without adding a Tab stop. */}
       <main className={styles.main} id="main-content" tabIndex={-1}>
         <Outlet />
       </main>
 
-      {/* Crisis note: plain, always visible, no helpline published from memory. */}
+      {/* Plain, always visible; never publish a helpline from memory. */}
       <section className={styles.crisis} id="crisis" aria-labelledby="crisis-heading">
         <div className={styles.crisisInner}>
           <h2 className={styles.crisisHeading} id="crisis-heading">
@@ -221,8 +216,7 @@ export default function SiteLayout() {
               for everyday support, and you don&rsquo;t have to face the hard
               moments alone.
             </p>
-            {/* Helplines come from landingContent.ts and only render once real,
-                verified entries exist there. */}
+            {/* Only real, verified helplines from landingContent.ts render. */}
             {crisisHelplines.length > 0 && (
               <ul className={styles.crisisList}>
                 {crisisHelplines.map(line => (

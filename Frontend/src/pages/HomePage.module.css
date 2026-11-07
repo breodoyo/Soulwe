@@ -8,14 +8,12 @@
   gap: var(--space-6);
 }
 
-/* Hero + affirmation share the top band on desktop. */
 .topGrid {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
 }
 
-/* ── Greet band ── */
 .greetBand {
   background: linear-gradient(145deg, #2C1F1A 0%, #3D2B24 100%);
   border: 1px solid var(--border);
@@ -25,7 +23,6 @@
   overflow: hidden;
 }
 
-/* Decorative circle */
 .greetBand::after {
   content: '';
   position: absolute;
@@ -67,7 +64,7 @@
   margin-bottom: var(--space-5);
 }
 
-/* Optional, never a gate: a quiet inline link into a voluntary sign-in. */
+/* Optional, never a gate. */
 .greetLink {
   color: var(--clay-muted);
   text-decoration: underline;
@@ -78,8 +75,7 @@
   color: var(--clay);
 }
 
-/* One quiet line acknowledging the anonymous session. Not a prompt to
-   register, and it does not interrupt anything. */
+/* Acknowledge the anonymous session without prompting registration. */
 .guestNote {
   font-size: 1rem;
   color: var(--ink-mid);
@@ -87,7 +83,6 @@
   max-width: 62ch;
 }
 
-/* ── Mood picker ── */
 .moodRow {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
@@ -160,7 +155,6 @@
   margin-top: var(--space-3);
 }
 
-/* ── Affirmation ── */
 .affirmation {
   background: var(--bg-soft);
   border: 1px solid var(--border);
@@ -196,7 +190,6 @@
   font-weight: 500;
 }
 
-/* ── Section label ── */
 .sectionLabel {
   font-size: var(--text-sm);
   color: var(--clay-muted);
@@ -206,7 +199,6 @@
   margin-bottom: var(--space-3);
 }
 
-/* ── Quick grid ── */
 .quickGrid {
   display: grid;
   grid-template-columns: 1fr;
@@ -305,7 +297,6 @@
   transform: translate(2px, -2px);
 }
 
-/* ── Stats ── */
 .statsRow {
   display: flex;
   align-items: center;
@@ -342,7 +333,6 @@
   background: var(--border);
 }
 
-/* ── Recent check-ins ── */
 .emptyNote {
   font-size: 1rem;
   color: var(--ink-mid);
@@ -380,7 +370,6 @@
   color: var(--ink-mid);
 }
 
-/* ── Feed error ── */
 .errorPanel {
   background: var(--bg-mid);
   border: 1px solid var(--border-soft);
@@ -424,7 +413,6 @@
   background: var(--clay);
 }
 
-/* ── Tablet ── */
 @media (min-width: 640px) {
   .page {
     padding-top: var(--space-8);
@@ -470,7 +458,6 @@
   }
 }
 
-/* ── Desktop ── */
 @media (min-width: 1024px) {
   .page {
     padding-top: var(--space-10);

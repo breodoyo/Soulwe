@@ -9,8 +9,7 @@
 html {
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
-  /* The landing page is read by scrolling hero → features → circles →
-     therapists, so anchor jumps should glide rather than snap. */
+  /* Landing sections are read by scrolling, so anchor jumps glide. */
   scroll-behavior: smooth;
 }
 
@@ -37,8 +36,7 @@ body {
 }
 
 :focus-visible {
-  /* --sun is only 2.08:1 against the light page background, which fails the
-     WCAG 2.2 3:1 minimum for focus indicators. --sun-deep is 3.14:1. */
+  /* --sun is too light for a focus ring; --sun-deep meets the minimum. */
   outline: 2px solid var(--sun-deep);
   outline-offset: 2px;
   border-radius: 2px;

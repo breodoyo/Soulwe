@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import styles from './LegalPages.module.css'
 
-// Stub. No contact channel is invented; the real one is filled in before launch.
+// Stub: no contact channel is invented before launch.
 export default function ContactPage() {
   return (
     <div className={styles.page}>

@@ -1,5 +1,4 @@
-// Soulwe is publicly browsable: no route redirects a guest, and authentication is requested per feature via SignInPrompt.
-
+// Publicly browsable: authentication is requested per feature, never by redirect.
 import type { ReactNode } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
@@ -18,7 +17,7 @@ function AuthLoader() {
   )
 }
 
-// The "this one action needs an account" notice; it never renders on page load and never wraps page content.
+// One-action account notice; never wraps page content.
 export function SignInPrompt({
   title,
   message,
@@ -59,7 +58,6 @@ export function SignInPrompt({
   )
 }
 
-// Sends signed-in visitors away from pages meant only for guests.
 export function GuestOnly({ children }: { children: ReactNode }) {
   const { status } = useAuth()
 
