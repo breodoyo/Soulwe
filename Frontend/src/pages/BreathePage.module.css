@@ -1,4 +1,3 @@
-/* Sunrise-scoped colours; nothing leaks into other screens. */
 .page {
   background: var(--cream);
   min-height: calc(100dvh - var(--nav-height));
@@ -12,24 +11,27 @@
 }
 
 .layout {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-12);
+  align-items: start;
+  padding: var(--space-5) 0;
 }
 
-.photoBand {
-  height: 30vh;
-  min-height: 200px;
-  margin: 0 calc(-1 * var(--space-6));
-  background: url('/breath.jpg') center 35% / cover no-repeat;
-}
-
-.panel {
+.practice {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: var(--space-5);
-  padding: var(--space-6) 0 var(--space-8);
-  text-align: center;
+  min-width: 0;
+  text-align: left;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  text-align: left;
 }
 
 .header { width: 100%; }
@@ -44,12 +46,13 @@
 
 .orbWrap {
   position: relative;
-  width: 220px;
-  height: 220px;
+  width: min(220px, 100%);
+  aspect-ratio: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: var(--space-4) 0;
+  align-self: center;
+  margin: 0;
 }
 
 .ringSvg {
@@ -85,8 +88,8 @@
 }
 
 .disc {
-  width: 140px;
-  height: 140px;
+  width: 150px;
+  height: 150px;
   border-radius: 50%;
   background: var(--sun);
   color: var(--ink);
@@ -111,7 +114,7 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-1);
-  min-height: 96px;
+  min-height: 72px;
   width: 100%;
 }
 .phaseLabel {
@@ -135,8 +138,10 @@
   flex-direction: column;
   gap: var(--space-2);
   align-items: center;
+  align-self: center;
   width: 100%;
   max-width: 420px;
+  text-align: center;
   padding: var(--space-4) var(--space-5);
   background: var(--cream);
   border: 1px solid var(--sand);
@@ -201,29 +206,6 @@
 .stopBtn:hover:not(:disabled) { background: var(--sand); }
 .stopBtn:disabled { opacity: 0.55; cursor: not-allowed; }
 
-.voiceBtn {
-  min-height: 44px;
-  padding: 8px 18px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border);
-  background: var(--cream);
-  color: var(--ink-mid);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--text-sm);
-  transition:
-    background var(--duration-base) var(--ease),
-    color var(--duration-base) var(--ease),
-    border-color var(--duration-base) var(--ease);
-}
-.voiceBtnOn {
-  background: var(--sand);
-  border-color: var(--leaf-deep);
-  color: var(--leaf-deep);
-}
-.voiceBtnIcon { width: 17px; height: 17px; flex-shrink: 0; }
-
 .lengthRow {
   display: flex;
   flex-wrap: wrap;
@@ -265,12 +247,60 @@
   font-variant-numeric: tabular-nums;
 }
 
-.safety {
+.sidebarCard {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+}
+
+.sidebarCardTitle {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  color: var(--ink);
+  margin-bottom: var(--space-3);
+}
+
+.phaseList,
+.beforeList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.phaseItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--ink);
+}
+
+.phaseItemActive {
+  background: var(--sun-light);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.beforeList {
   font-size: 14px;
   color: var(--ink);
-  line-height: 1.6;
-  max-width: 42ch;
-  margin: 0 auto;
+  line-height: 1.5;
+}
+
+.journalLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--terracotta);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .statusNote {
@@ -316,18 +346,17 @@
 .savingLine { color: var(--muted); }
 .saveLine { background: var(--sand); color: var(--leaf-deep); }
 .saveError {
-  background: rgba(185, 28, 28, 0.06);
-  border: 1px solid rgba(185, 28, 28, 0.35);
-  color: #B91C1C;
+  background: var(--danger-soft);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  color: var(--danger);
 }
 
 .techniqueList {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-4);
   text-align: left;
-  margin-top: var(--space-2);
 }
 
 .techniqueItem {
@@ -370,41 +399,8 @@
 .techName { font-size: var(--text-base); font-weight: 600; color: var(--ink); line-height: 1.3; }
 .techDesc { font-size: 14px; color: var(--ink); line-height: 1.4; }
 
-/* Tighten the desktop panel so the controls fit a 768px-tall viewport. */
-@media (min-width: 1024px) {
-  .layout {
-    display: grid;
-    grid-template-columns: minmax(0, 9fr) minmax(0, 11fr);
-    gap: 32px;
-    align-items: start;
-    padding-top: var(--space-4);
-  }
-
-  .photoBand {
-    margin: 0;
-    height: calc(100dvh - var(--nav-height) - var(--space-6));
-    min-height: 480px;
-    border-radius: var(--radius-lg);
-    background-position: center center;
-  }
-
-  .panel {
-    gap: var(--space-2);
-    padding: 0 0 var(--space-6);
-  }
-
-  .orbWrap {
-    width: 140px;
-    height: 140px;
-    margin: var(--space-2) 0;
-  }
-
-  .disc {
-    width: 96px;
-    height: 96px;
-  }
-
-  .phaseDisplay { min-height: 72px; }
+@media (min-width: 768px) {
+  .layout { grid-template-columns: 1fr 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

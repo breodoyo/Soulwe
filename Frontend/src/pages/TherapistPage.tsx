@@ -9,7 +9,7 @@ import styles from './TherapistPage.module.css'
 type Filter = 'All' | 'Swahili' | 'Dholuo' | 'Kikuyu' | 'Online only'
 const FILTERS: Filter[] = ['All', 'Swahili', 'Dholuo', 'Kikuyu', 'Online only']
 
-const AVATAR_COLORS = ['#C4714A', '#4A6741', '#5C3D2E', '#B45309', '#7C6A4D', '#A16207']
+const AVATAR_COLORS = ['#B5482A', '#2E6B4B', '#241810', '#9A5600', '#1F4D36', '#8F3A21']
 
 function initialsOf(name: string): string {
   return name

@@ -1,12 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Volume2, VolumeX } from 'lucide-react'
 import { isApiError, type BreathingExercise, type BreathingSession } from '@/types'
 import { api } from '@/lib/api'
-import '@/styles/sunrise.css'
 import styles from './BreathePage.module.css'
 
-interface Phase { label: string; duration: number; instruction: string }
+interface Phase { label: string; duration: number }
 
 interface BreathingConfig {
   id: string
@@ -16,35 +14,28 @@ interface BreathingConfig {
   phases: Phase[]
 }
 
-// Frontend-only voice copy; each sentence fits the shortest phase.
-interface ScriptSet { inhale: string; hold: string; exhale: string; rest?: string }
-
-const SCRIPTS: Record<string, ScriptSet> = {
-  '478': {
-    inhale: 'Breathe in slowly through your nose.',
-    hold: 'Hold gently. You are safe.',
-    exhale: 'Breathe out slowly. Let everything go.',
-  },
-  box: {
-    inhale: 'Breathe in slowly through your nose.',
-    hold: 'Hold gently. Feel the stillness.',
-    exhale: 'Breathe out slowly. Release the tension.',
-    rest: 'Rest here. You are safe and calm.',
-  },
+const DESCRIPTIONS: Record<string, string> = {
+  '478': 'Inhale 4s, hold 7s, exhale 8s. A longer exhale for a slower pace.',
+  box: 'Inhale 4s, hold 4s, exhale 4s, hold 4s. A steady, even rhythm.',
 }
 
 // Catalog stores three durations; box adds a second hold.
 function buildConfig(ex: BreathingExercise): BreathingConfig {
-  const s = SCRIPTS[ex.slug] ?? SCRIPTS['478']
   const phases: Phase[] = [
-    { label: 'Inhale', duration: ex.inhale_s, instruction: s.inhale },
-    { label: 'Hold',   duration: ex.hold_s,   instruction: s.hold },
-    { label: 'Exhale', duration: ex.exhale_s, instruction: s.exhale },
+    { label: 'Inhale', duration: ex.inhale_s },
+    { label: 'Hold',   duration: ex.hold_s },
+    { label: 'Exhale', duration: ex.exhale_s },
   ]
   if (ex.slug === 'box' && ex.hold_s) {
-    phases.push({ label: 'Hold', duration: ex.hold_s, instruction: s.rest ?? s.hold })
+    phases.push({ label: 'Hold', duration: ex.hold_s })
   }
-  return { id: ex.id, slug: ex.slug, name: ex.name, description: ex.description, phases }
+  return {
+    id: ex.id,
+    slug: ex.slug,
+    name: ex.name,
+    description: DESCRIPTIONS[ex.slug] ?? ex.description,
+    phases,
+  }
 }
 
 function fmtDuration(totalS: number) {
@@ -58,25 +49,6 @@ function fmtClock(totalS: number) {
   const m = Math.floor(clamped / 60)
   const s = clamped % 60
   return `${m}:${String(s).padStart(2, '0')}`
-}
-
-function speak(text: string) {
-  if (!window.speechSynthesis) return
-  window.speechSynthesis.cancel()
-  const utterance = new SpeechSynthesisUtterance(text)
-  utterance.rate = 0.82
-  utterance.pitch = 0.95
-  utterance.volume = 1
-
-  const voices = window.speechSynthesis.getVoices()
-  const preferred = voices.find(v =>
-    v.lang.startsWith('en') && v.name.toLowerCase().includes('female')
-  ) || voices.find(v =>
-    v.lang.startsWith('en')
-  ) || voices[0]
-
-  if (preferred) utterance.voice = preferred
-  window.speechSynthesis.speak(utterance)
 }
 
 function usePrefersReducedMotion() {
@@ -111,7 +83,6 @@ export default function BreathePage() {
   const [sessionRemaining, setSessionRemaining] = useState(0)
   const [runId, setRunId]               = useState(0)
   const [breathCount, setBreathCount]   = useState(0)
-  const [voiceOn, setVoiceOn]           = useState(true)
   const [saving, setSaving]             = useState(false)
   const [saveError, setSaveError]       = useState<string | null>(null)
   const [savedSummary, setSavedSummary] = useState<BreathingSession | null>(null)
@@ -124,10 +95,8 @@ export default function BreathePage() {
   // Latest-value refs so the timer never reads stale data.
   const configRef = useRef<BreathingConfig | null>(null)
   configRef.current = exercises?.find(e => e.id === selectedId) ?? null
-  const voiceOnRef = useRef(voiceOn)
-  voiceOnRef.current = voiceOn
 
-  // Mirror `secs`; deriving the phase in a setState updater would double-count breaths and speech.
+  // Mirror `secs`; deriving the phase in a setState updater would double-count breaths.
   const secsRef = useRef(0)
   // Session clock keeps the total budget across pause/resume.
   const remainingRef = useRef(0)
@@ -177,19 +146,16 @@ export default function BreathePage() {
     startedAtRef.current = Date.now()
     setRunId(r => r + 1)
     setRunning(true)
-    if (voiceOnRef.current) speak(first.instruction)
   }
 
   const pause = () => {
     if (!running || paused) return
     setPaused(true)
-    window.speechSynthesis?.cancel()
   }
 
   const resume = () => {
     if (!running || !paused) return
     setPaused(false)
-    if (voiceOnRef.current && phase) speak(phase.instruction)
   }
 
   const stop = () => {
@@ -203,8 +169,6 @@ export default function BreathePage() {
     setSecs(0)
     remainingRef.current = 0
     setSessionRemaining(0)
-    window.speechSynthesis?.cancel()
-    if (voiceOnRef.current) speak('Well done. Take a moment to notice how you feel.')
   }
 
   const switchTechnique = (id: string) => {
@@ -273,8 +237,6 @@ export default function BreathePage() {
         setRunning(false)
         setPaused(false)
         setCompleted(true)
-        window.speechSynthesis?.cancel()
-        if (voiceOnRef.current) speak('Well done. Take a moment to notice how you feel.')
         return
       }
 
@@ -289,7 +251,6 @@ export default function BreathePage() {
       const nextIdx   = phaseIdx + 1
       const nextPhase = phases[nextIdx % phases.length]
       if (nextPhase.label === 'Inhale') setBreathCount(c => c + 1)
-      if (voiceOnRef.current) speak(nextPhase.instruction)
       // Set here too so the number never flashes to zero.
       secsRef.current = nextPhase.duration
       setSecs(nextPhase.duration)
@@ -300,7 +261,6 @@ export default function BreathePage() {
 
   useEffect(() => () => {
     if (timerRef.current) clearInterval(timerRef.current)
-    window.speechSynthesis?.cancel()
   }, [])
 
   const phases = config?.phases ?? []
@@ -322,12 +282,10 @@ export default function BreathePage() {
       : 'Ready to begin'
 
   return (
-    <div className={[styles.page, 'sunrise'].join(' ')}>
+    <div className={styles.page}>
       <div className={styles.container}>
         <div className={styles.layout}>
-          <div className={styles.photoBand} aria-hidden="true" />
-
-          <div className={styles.panel}>
+          <div className={styles.practice}>
             <div className={styles.header}>
               <h1 className={styles.heading}>Breathe with me</h1>
               <p className={styles.sub}>
@@ -420,20 +378,6 @@ export default function BreathePage() {
                 )}
 
                 <div className={styles.controls}>
-                  <button
-                    className={[styles.voiceBtn, voiceOn ? styles.voiceBtnOn : ''].join(' ')}
-                    onClick={() => {
-                      setVoiceOn(v => !v)
-                      window.speechSynthesis?.cancel()
-                    }}
-                    aria-pressed={voiceOn}
-                    aria-label={voiceOn ? 'Turn voice guidance off' : 'Turn voice guidance on'}
-                  >
-                    {voiceOn
-                      ? <><Volume2 aria-hidden="true" className={styles.voiceBtnIcon} /> Voice on</>
-                      : <><VolumeX aria-hidden="true" className={styles.voiceBtnIcon} /> Voice off</>}
-                  </button>
-
                   {!running && (
                     <button
                       className={styles.startBtn}
@@ -496,10 +440,6 @@ export default function BreathePage() {
                   )}
                 </div>
 
-                <p className={styles.safety}>
-                  If you feel dizzy or uncomfortable, stop and breathe normally.
-                </p>
-
                 {saving && (
                   <div className={styles.savingLine} role="status">Saving your session…</div>
                 )}
@@ -518,6 +458,9 @@ export default function BreathePage() {
               </>
             )}
 
+          </div>
+
+          <div className={styles.sidebar}>
             {exercises !== null && exercises.length > 0 && (
               <div
                 className={styles.techniqueList}
@@ -547,6 +490,43 @@ export default function BreathePage() {
                 ))}
               </div>
             )}
+
+            {config && phase && (
+              <section className={styles.sidebarCard} aria-labelledby="breathe-round-heading">
+                <h2 className={styles.sidebarCardTitle} id="breathe-round-heading">
+                  How this round goes
+                </h2>
+                <ul className={styles.phaseList}>
+                  {config.phases.map((p, i) => (
+                    <li
+                      key={`${p.label}-${i}`}
+                      className={[
+                        styles.phaseItem,
+                        running && i === phaseIdx % config.phases.length ? styles.phaseItemActive : '',
+                      ].join(' ')}
+                    >
+                      <span>{p.label}</span>
+                      <span>{p.duration}s</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            <section className={styles.sidebarCard} aria-labelledby="breathe-before-heading">
+              <h2 className={styles.sidebarCardTitle} id="breathe-before-heading">
+                Before you begin
+              </h2>
+              <ul className={styles.beforeList}>
+                <li>Sit comfortably.</li>
+                <li>Breathe through your nose if you can.</li>
+                <li>If you feel dizzy or uncomfortable, stop and breathe normally.</li>
+              </ul>
+            </section>
+
+            <Link className={styles.journalLink} to="/journal">
+              Finished? Write down how you feel in your journal.
+            </Link>
           </div>
         </div>
       </div>

@@ -24,7 +24,7 @@
 .loaderMark svg {
   width: 24px;
   height: 24px;
-  color: #fff;
+  color: var(--ink);
 }
 
 @keyframes pulse {
@@ -90,10 +90,13 @@
 
 .promptPrimary {
   background: var(--sun);
-  color: #fff;
+  color: var(--ink);
 }
 
-.promptPrimary:hover { background: var(--sun-deep); }
+.promptPrimary:hover {
+  background: var(--sun-deep);
+  color: var(--cream);
+}
 
 .promptSecondary {
   background: transparent;

@@ -71,7 +71,7 @@
 .brandMark svg {
   width: 17px;
   height: 17px;
-  color: #fff;
+  color: var(--ink);
 }
 
 .brandName {
@@ -244,33 +244,68 @@
 }
 
 .crisis {
-  padding: 56px 0;
-  background: #FFF8EC;
+  padding: 64px 0;
+  background: var(--bg);
 }
 
 .crisisInner {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--space-6);
-  max-width: var(--max-site);
+  width: calc(100% - var(--space-12));
+  max-width: calc(var(--max-site) - var(--space-12));
   margin: 0 auto;
-  padding: 0 var(--space-6);
+  padding: var(--space-6);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-sizing: border-box;
+}
+
+.crisisHeadingWrap {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.crisisIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  background: color-mix(in srgb, var(--teal) 12%, transparent);
+  border-radius: 50%;
+  color: var(--teal-deep);
+}
+
+.crisisEyebrow {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--teal-deep);
 }
 
 .crisisHeading {
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: clamp(22px, 2.4vw, 28px);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
   color: var(--ink);
   margin: 0;
   text-align: left;
 }
 
 .crisisBody {
-  border-left: 3px solid #2E6B4B;
+  border-left: 3px solid var(--teal);
   padding-left: var(--space-5);
 }
 
 .crisisText {
+  max-width: 65ch;
   font-size: 16px;
   color: var(--ink);
   line-height: 1.6;
@@ -293,15 +328,17 @@
 
 @media (min-width: 768px) {
   .crisisInner {
-    grid-template-columns: 1fr 1.4fr;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.6fr);
     gap: var(--space-12);
+    padding: var(--space-10) var(--space-12);
   }
 }
 
 .footer {
-  padding: 56px 0 var(--space-8);
-  background: #241810;
-  color: #FFF8EC;
+  padding: var(--space-14) 0 var(--space-8);
+  background: var(--night-mid);
+  color: var(--cream);
+  border-top: 1px solid color-mix(in srgb, var(--cream) 12%, transparent);
 }
 
 .footerInner {
@@ -311,8 +348,8 @@
 }
 
 .footerTop {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: var(--space-8);
 }
 
@@ -324,7 +361,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  color: #FFF8EC;
+  color: var(--cream);
   transition: opacity var(--duration-fast) var(--ease);
 }
 
@@ -333,21 +370,21 @@
 .footerName {
   font-family: var(--font-display);
   font-size: var(--text-lg);
-  color: #FFF8EC;
+  color: var(--cream);
   letter-spacing: -0.02em;
 }
 
 .footerTagline {
   margin-top: var(--space-3);
   font-size: 14px;
-  color: rgba(255, 248, 236, 0.7);
+  color: color-mix(in srgb, var(--cream) 70%, transparent);
   line-height: 1.6;
   text-wrap: balance;
 }
 
 .footerColumns {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-6);
 }
 
@@ -356,12 +393,12 @@
 }
 
 .footerLabel {
-  margin-bottom: var(--space-1);
+  margin-bottom: var(--space-2);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 248, 236, 0.62);
+  color: color-mix(in srgb, var(--cream) 62%, transparent);
 }
 
 .footerList {
@@ -378,7 +415,7 @@
   align-items: center;
   min-height: 44px;
   font-size: 15px;
-  color: #FFF8EC;
+  color: var(--cream);
   text-decoration: underline;
   text-decoration-color: transparent;
   text-decoration-thickness: 1px;
@@ -391,10 +428,21 @@
   text-decoration-color: currentColor;
 }
 
+.footerLinkCrisis {
+  color: var(--sun);
+  font-weight: 500;
+  text-decoration-color: currentColor;
+}
+
+.footerLinkCrisis:hover,
+.footerLinkCrisis:focus-visible {
+  color: var(--sun-light);
+}
+
 .footerDivider {
   height: 1px;
   margin: var(--space-8) 0 var(--space-5);
-  background: rgba(255, 248, 236, 0.15);
+  background: color-mix(in srgb, var(--cream) 15%, transparent);
 }
 
 .footerMeta {
@@ -406,24 +454,22 @@
 
 .footerCopy {
   font-size: 13px;
-  color: rgba(255, 248, 236, 0.62);
+  color: color-mix(in srgb, var(--cream) 62%, transparent);
 }
 
 .sessionLine {
   font-size: 13px;
-  color: rgba(255, 248, 236, 0.62);
+  color: color-mix(in srgb, var(--cream) 62%, transparent);
 }
 
 @media (min-width: 768px) {
   .footerTop {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: flex-start;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    align-items: start;
     gap: var(--space-12);
   }
 
   .footerColumns {
-    flex-direction: row;
     gap: var(--space-12);
   }
 
