@@ -41,7 +41,7 @@
 .brandMark svg {
   width: 19px;
   height: 19px;
-  color: #fff;
+  color: var(--ink);
 }
 
 .brandName {
@@ -107,7 +107,7 @@
 
 .input:focus {
   border-color: var(--sun);
-  box-shadow: 0 0 0 3px rgba(245, 158, 42, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sun) 15%, transparent);
 }
 
 .input::placeholder {
@@ -115,18 +115,18 @@
 }
 
 .error {
-  background: rgba(220, 38, 38, 0.06);
-  border: 1px solid rgba(220, 38, 38, 0.22);
-  color: #B91C1C;
+  background: var(--danger-soft);
+  border: 1px solid color-mix(in srgb, var(--danger) 22%, transparent);
+  color: var(--danger);
   font-size: var(--text-sm);
   border-radius: var(--radius-md);
   padding: 10px var(--space-3);
 }
 
 .success {
-  background: rgba(34, 197, 94, 0.08);
-  border: 1px solid rgba(34, 197, 94, 0.25);
-  color: var(--sage-deep);
+  background: var(--success-soft);
+  border: 1px solid color-mix(in srgb, var(--success) 25%, transparent);
+  color: var(--success);
   font-size: var(--text-sm);
   border-radius: var(--radius-md);
   padding: 10px var(--space-3);
@@ -135,7 +135,7 @@
 .submit {
   width: 100%;
   background: var(--sun);
-  color: #fff;
+  color: var(--ink);
   font-weight: 600;
   padding: 13px;
   border-radius: var(--radius-full);
@@ -146,6 +146,7 @@
 
 .submit:hover:not(:disabled) {
   background: var(--sun-deep);
+  color: var(--cream);
 }
 
 .submit:active:not(:disabled) {

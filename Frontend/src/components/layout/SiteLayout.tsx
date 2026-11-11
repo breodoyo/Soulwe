@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { LifeBuoy } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
 import { crisisHelplines } from '@/landingContent'
 import styles from './SiteLayout.module.css'
@@ -206,9 +207,17 @@ export default function SiteLayout() {
       {/* Plain, always visible; never publish a helpline from memory. */}
       <section className={styles.crisis} id="crisis" aria-labelledby="crisis-heading">
         <div className={styles.crisisInner}>
-          <h2 className={styles.crisisHeading} id="crisis-heading">
-            If you need help right now
-          </h2>
+          <div className={styles.crisisHeadingWrap}>
+            <span className={styles.crisisIcon} aria-hidden="true">
+              <LifeBuoy size={20} strokeWidth={1.8} />
+            </span>
+            <div>
+              <p className={styles.crisisEyebrow}>Crisis support</p>
+              <h2 className={styles.crisisHeading} id="crisis-heading">
+                If you need help right now
+              </h2>
+            </div>
+          </div>
           <div className={styles.crisisBody}>
             <p className={styles.crisisText}>
               If you or someone near you is in immediate danger, please contact
@@ -237,7 +246,7 @@ export default function SiteLayout() {
                 <span className={styles.footerName}>Soulwe</span>
               </Link>
               <p className={styles.footerTagline}>
-                A home for your soul. Built in East Africa, for East Africa.
+                A calm place to check in with yourself.
               </p>
             </div>
 
@@ -255,11 +264,16 @@ export default function SiteLayout() {
                 </ul>
               </div>
               <div className={styles.footerColumn}>
-                <p className={styles.footerLabel}>Soulwe</p>
+                <p className={styles.footerLabel}>Information</p>
                 <ul className={styles.footerList}>
                   {footerSiteLinks.map(item => (
                     <li key={item.to}>
-                      <Link className={styles.footerLink} to={item.to}>
+                      <Link
+                        className={`${styles.footerLink}${
+                          item.to === '#crisis' ? ` ${styles.footerLinkCrisis}` : ''
+                        }`}
+                        to={item.to}
+                      >
                         {item.label}
                       </Link>
                     </li>

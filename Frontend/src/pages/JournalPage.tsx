@@ -6,7 +6,6 @@ import {
 import { api } from '@/lib/api'
 import { useAuth } from '@/auth/AuthContext'
 import { isApiError, type JournalEntry } from '@/types'
-import '@/styles/sunrise.css'
 import styles from './JournalPage.module.css'
 
 type JournalMode = 'journal' | 'prayer'
@@ -359,7 +358,7 @@ export default function JournalPage() {
   const editTagOptions = Array.from(new Set([...moodTags, ...editTags]))
 
   return (
-    <div className={[styles.page, 'sunrise'].join(' ')}>
+    <div className={styles.page}>
       <div className={styles.container}>
         <header className={styles.head}>
           <div className={styles.headText}>

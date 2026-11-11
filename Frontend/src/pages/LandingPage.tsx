@@ -6,7 +6,6 @@ import { moodVerses } from '@/moodVerses'
 import { dailyVerses, dailyVerseIndex } from '@/dailyVerses'
 import type { Therapist } from '@/types'
 import styles from './LandingPage.module.css'
-import '@/styles/sunrise.css'
 
 // TODO(real data): confirm GET /api/v1/therapists returns rows in the deployed
 // environment before relying on this. While it is on, the therapist section
@@ -145,7 +144,7 @@ export default function LandingPage() {
   }, [])
 
   return (
-    <div className={`${styles.page} sunrise`}>
+    <div className={styles.page}>
 
       {/* One flat sun overlay; ink copy must stay legible over the photo. */}
       <section className={styles.hero}>
@@ -164,23 +163,13 @@ export default function LandingPage() {
             <div className={styles.heroText}>
               <div className={styles.heroPanel}>
                 <h1 className={styles.heroHeading}>
-                  Your soul deserves the{' '}
-                  <span className={styles.heroAccent}>same care</span> as your
-                  body.
+                  You don&rsquo;t have to figure everything out{' '}
+                  <span className={styles.heroAccent}>alone</span>.
                 </h1>
 
                 <p className={styles.heroSub}>
-                  {therapists.length > 0 ? (
-                    <>
-                      Peer support circles, a private journal, and Kenyan
-                      therapists who work in Swahili, Dholuo and Kikuyu.
-                    </>
-                  ) : (
-                    <>
-                      Peer support circles, a private journal, and Kenyan
-                      therapists joining soon, in Swahili, Dholuo and Kikuyu.
-                    </>
-                  )}
+                  Find community in peer support circles, reflect privately in
+                  your journal, and breathe when things feel heavy.
                 </p>
 
                 <div className={styles.moodCheck}>
@@ -305,9 +294,6 @@ export default function LandingPage() {
       <section className={styles.features} id="features">
         <div className={styles.inner}>
           <h2 className={styles.sectionHeading} style={{ textAlign: 'center' }}>What Soulwe gives you</h2>
-          <p className={styles.sectionLead} style={{ textAlign: 'center', margin: '0 auto var(--space-6)' }}>
-            Four quiet places to look after yourself, at your own pace. You can begin without an account.
-          </p>
         </div>
         <div className={styles.featuresBand}>
           <div className={styles.inner}>
@@ -437,9 +423,18 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className={styles.finalCta}>
+      <section className={styles.finalCta} aria-labelledby="final-cta-heading">
         <div className={`${styles.inner} ${styles.finalCtaRow}`}>
-          <h2 className={styles.finalCtaHeading}>Start whenever you&rsquo;re ready.</h2>
+          <div className={styles.finalCtaCopy}>
+            <p className={styles.finalCtaEyebrow}>A softer place to land</p>
+            <h2 className={styles.finalCtaHeading} id="final-cta-heading">
+              Start whenever you&rsquo;re ready.
+            </h2>
+            <p className={styles.finalCtaText}>
+              No perfect words or big steps required. Come as you are, and take
+              things at your own pace.
+            </p>
+          </div>
           <Link className={styles.btnPrimary} to="/home">
             Enter Soulwe
           </Link>
