@@ -16,11 +16,13 @@ type Service interface {
 
 	Join(ctx context.Context, owner middleware.Owner, circleID string) error
 
-	Leave(ctx context.Context, owner middleware.Owner, circleID string) error
+	Leave(ctx context.Context, owner middleware.Owner, circleID string, removeMyMessages bool) error
 
 	ListMessages(ctx context.Context, owner middleware.Owner, circleID string, limit int, before *time.Time) ([]CircleMessage, error)
 
 	SendMessage(ctx context.Context, owner middleware.Owner, circleID, content string) (*CircleMessage, error)
+
+	DeleteMessage(ctx context.Context, owner middleware.Owner, circleID, messageID string) error
 }
 
 type service struct {
@@ -67,11 +69,11 @@ func (s *service) Join(ctx context.Context, owner middleware.Owner, circleID str
 	return s.circles.AddMember(ctx, circleID, owner)
 }
 
-func (s *service) Leave(ctx context.Context, owner middleware.Owner, circleID string) error {
+func (s *service) Leave(ctx context.Context, owner middleware.Owner, circleID string, removeMyMessages bool) error {
 	if _, err := s.circles.GetCircle(ctx, circleID); err != nil {
 		return err
 	}
-	return s.circles.RemoveMember(ctx, circleID, owner)
+	return s.circles.RemoveMember(ctx, circleID, owner, removeMyMessages)
 }
 
 func (s *service) ListMessages(ctx context.Context, owner middleware.Owner, circleID string, limit int, before *time.Time) ([]CircleMessage, error) {
@@ -111,6 +113,13 @@ func (s *service) SendMessage(ctx context.Context, owner middleware.Owner, circl
 	message.IsMine = true
 	normalizeMessage(message)
 	return message, nil
+}
+
+func (s *service) DeleteMessage(ctx context.Context, owner middleware.Owner, circleID, messageID string) error {
+	if err := s.requireMember(ctx, owner, circleID); err != nil {
+		return err
+	}
+	return s.circles.DeleteMessage(ctx, circleID, messageID, owner)
 }
 
 // labelMessage replaces whatever label the repository resolved with the

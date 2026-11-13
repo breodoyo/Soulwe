@@ -115,10 +115,19 @@ func (f *fakeRepository) AddMember(ctx context.Context, circleID string, owner m
 	return nil
 }
 
-func (f *fakeRepository) RemoveMember(ctx context.Context, circleID string, owner middleware.Owner) error {
+func (f *fakeRepository) RemoveMember(ctx context.Context, circleID string, owner middleware.Owner, removeMessages bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	delete(f.members[circleID], ownerKey(owner))
+	if removeMessages {
+		kept := make([]CircleMessage, 0, len(f.messages[circleID]))
+		for _, m := range f.messages[circleID] {
+			if m.AuthorIdentityID != owner.ID() {
+				kept = append(kept, m)
+			}
+		}
+		f.messages[circleID] = kept
+	}
 	return nil
 }
 
@@ -162,6 +171,19 @@ func (f *fakeRepository) CreateMessage(ctx context.Context, circleID string, own
 	}
 	f.messages[circleID] = append(f.messages[circleID], m)
 	return &m, nil
+}
+
+func (f *fakeRepository) DeleteMessage(ctx context.Context, circleID, messageID string, owner middleware.Owner) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	all := f.messages[circleID]
+	for i, m := range all {
+		if m.ID == messageID && m.AuthorIdentityID == owner.ID() {
+			f.messages[circleID] = append(all[:i], all[i+1:]...)
+			return nil
+		}
+	}
+	return ErrMessageNotFound
 }
 
 func TestService_List(t *testing.T) {
@@ -246,13 +268,13 @@ func TestService_JoinAndLeave(t *testing.T) {
 
 	t.Run("leave is idempotent", func(t *testing.T) {
 		other := NewService(newFakeRepository(), testNamingKey)
-		if err := other.Leave(ctx, anonTwoOwner, circleA); err != nil {
+		if err := other.Leave(ctx, anonTwoOwner, circleA, false); err != nil {
 			t.Fatalf("leaving a circle never joined must succeed, got %v", err)
 		}
 	})
 
 	t.Run("leave on a missing circle is a not-found error", func(t *testing.T) {
-		if err := svc.Leave(ctx, anonOneOwner, circleX); !errors.Is(err, ErrCircleNotFound) {
+		if err := svc.Leave(ctx, anonOneOwner, circleX, false); !errors.Is(err, ErrCircleNotFound) {
 			t.Errorf("expected ErrCircleNotFound, got %v", err)
 		}
 	})
@@ -268,7 +290,7 @@ func TestService_JoinAndLeave(t *testing.T) {
 		if circle.MemberCount != 2 {
 			t.Errorf("expected 2 members after both joined, got %d", circle.MemberCount)
 		}
-		if err := svc.Leave(ctx, anonTwoOwner, circleA); err != nil {
+		if err := svc.Leave(ctx, anonTwoOwner, circleA, false); err != nil {
 			t.Fatalf("leave: %v", err)
 		}
 		after, err := svc.Get(ctx, anonOneOwner, circleA)
@@ -531,7 +553,7 @@ func TestService_RegisteredAndAnonymousTogether(t *testing.T) {
 		if circle.MemberCount != 3 {
 			t.Errorf("expected 3 members across both identity kinds, got %d", circle.MemberCount)
 		}
-		if err := svc.Leave(ctx, userOneOwner, circleA); err != nil {
+		if err := svc.Leave(ctx, userOneOwner, circleA, false); err != nil {
 			t.Fatalf("registered leave: %v", err)
 		}
 		after, err := svc.Get(ctx, anonOneOwner, circleA)
@@ -541,13 +563,131 @@ func TestService_RegisteredAndAnonymousTogether(t *testing.T) {
 		if after.MemberCount != 2 {
 			t.Errorf("expected 2 members after the registered member left, got %d", after.MemberCount)
 		}
-		if err := svc.Leave(ctx, userOneOwner, circleA); err != nil {
+		if err := svc.Leave(ctx, userOneOwner, circleA, false); err != nil {
 			t.Fatalf("repeat registered leave: %v", err)
 		}
 		if after, err = svc.Get(ctx, anonOneOwner, circleA); err != nil {
 			t.Fatalf("Get: %v", err)
 		} else if after.MemberCount != 2 {
 			t.Errorf("a repeat leave must not remove another owner, got %d members", after.MemberCount)
+		}
+	})
+}
+
+func TestService_DeleteMessage(t *testing.T) {
+	svc := NewService(newFakeRepository(), testNamingKey)
+	ctx := context.Background()
+
+	if err := svc.Join(ctx, anonOneOwner, circleA); err != nil {
+		t.Fatalf("setup join A: %v", err)
+	}
+	if err := svc.Join(ctx, anonTwoOwner, circleA); err != nil {
+		t.Fatalf("setup join B: %v", err)
+	}
+	mine, err := svc.SendMessage(ctx, anonOneOwner, circleA, "my message")
+	if err != nil {
+		t.Fatalf("send mine: %v", err)
+	}
+	theirs, err := svc.SendMessage(ctx, anonTwoOwner, circleA, "their message")
+	if err != nil {
+		t.Fatalf("send theirs: %v", err)
+	}
+
+	t.Run("only the author can delete their message", func(t *testing.T) {
+		if err := svc.DeleteMessage(ctx, anonTwoOwner, circleA, mine.ID); !errors.Is(err, ErrMessageNotFound) {
+			t.Errorf("expected ErrMessageNotFound deleting another author's message, got %v", err)
+		}
+		if err := svc.DeleteMessage(ctx, anonOneOwner, circleA, mine.ID); err != nil {
+			t.Fatalf("DeleteMessage: %v", err)
+		}
+		if err := svc.DeleteMessage(ctx, anonOneOwner, circleA, mine.ID); !errors.Is(err, ErrMessageNotFound) {
+			t.Errorf("expected ErrMessageNotFound on a repeat delete, got %v", err)
+		}
+
+		messages, err := svc.ListMessages(ctx, anonOneOwner, circleA, 10, nil)
+		if err != nil {
+			t.Fatalf("ListMessages: %v", err)
+		}
+		if len(messages) != 1 || messages[0].ID != theirs.ID {
+			t.Errorf("expected only the other author's message to remain, got %+v", messages)
+		}
+	})
+
+	t.Run("non-members and missing circles are rejected", func(t *testing.T) {
+		if err := svc.DeleteMessage(ctx, userOneOwner, circleA, theirs.ID); !errors.Is(err, ErrNotMember) {
+			t.Errorf("expected ErrNotMember, got %v", err)
+		}
+		if err := svc.DeleteMessage(ctx, anonOneOwner, circleX, theirs.ID); !errors.Is(err, ErrCircleNotFound) {
+			t.Errorf("expected ErrCircleNotFound, got %v", err)
+		}
+	})
+}
+
+func TestService_LeaveWithMessages(t *testing.T) {
+	fake := newFakeRepository()
+	svc := NewService(fake, testNamingKey)
+	ctx := context.Background()
+
+	for _, owner := range []middleware.Owner{anonOneOwner, anonTwoOwner} {
+		if err := svc.Join(ctx, owner, circleA); err != nil {
+			t.Fatalf("setup join circle A: %v", err)
+		}
+	}
+	if err := svc.Join(ctx, anonOneOwner, circleB); err != nil {
+		t.Fatalf("setup join circle B: %v", err)
+	}
+
+	leaving, err := svc.SendMessage(ctx, anonOneOwner, circleA, "remove this")
+	if err != nil {
+		t.Fatalf("send in circle A: %v", err)
+	}
+	other, err := svc.SendMessage(ctx, anonTwoOwner, circleA, "keep this")
+	if err != nil {
+		t.Fatalf("send other in circle A: %v", err)
+	}
+	elsewhere, err := svc.SendMessage(ctx, anonOneOwner, circleB, "keep in circle B")
+	if err != nil {
+		t.Fatalf("send in circle B: %v", err)
+	}
+
+	t.Run("leaving with removeMyMessages deletes only the leaver's messages in that circle", func(t *testing.T) {
+		if err := svc.Leave(ctx, anonOneOwner, circleA, true); err != nil {
+			t.Fatalf("Leave: %v", err)
+		}
+		if err := svc.DeleteMessage(ctx, anonTwoOwner, circleA, leaving.ID); !errors.Is(err, ErrMessageNotFound) {
+			t.Errorf("expected the leaver's message to be gone, got %v", err)
+		}
+
+		messages, err := svc.ListMessages(ctx, anonTwoOwner, circleA, 10, nil)
+		if err != nil {
+			t.Fatalf("ListMessages circle A: %v", err)
+		}
+		if len(messages) != 1 || messages[0].ID != other.ID {
+			t.Errorf("expected only the remaining member's message, got %+v", messages)
+		}
+
+		otherCircle, err := svc.ListMessages(ctx, anonOneOwner, circleB, 10, nil)
+		if err != nil {
+			t.Fatalf("ListMessages circle B: %v", err)
+		}
+		if len(otherCircle) != 1 || otherCircle[0].ID != elsewhere.ID {
+			t.Errorf("messages in another circle must be untouched, got %+v", otherCircle)
+		}
+	})
+
+	t.Run("leaving without removeMyMessages keeps the leaver's messages", func(t *testing.T) {
+		if err := svc.Leave(ctx, anonTwoOwner, circleA, false); err != nil {
+			t.Fatalf("Leave: %v", err)
+		}
+		if err := svc.Join(ctx, anonTwoOwner, circleA); err != nil {
+			t.Fatalf("rejoin: %v", err)
+		}
+		messages, err := svc.ListMessages(ctx, anonTwoOwner, circleA, 10, nil)
+		if err != nil {
+			t.Fatalf("ListMessages: %v", err)
+		}
+		if len(messages) != 1 || messages[0].ID != other.ID {
+			t.Errorf("expected the message to survive a plain leave, got %+v", messages)
 		}
 	})
 }

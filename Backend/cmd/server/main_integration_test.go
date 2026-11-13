@@ -724,6 +724,7 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		{http.MethodDelete, "/api/v1/circles/00000000-0000-0000-0000-000000000000/leave", ""},
 		{http.MethodGet, "/api/v1/circles/00000000-0000-0000-0000-000000000000/messages", ""},
 		{http.MethodPost, "/api/v1/circles/00000000-0000-0000-0000-000000000000/messages", `{"content":"x"}`},
+		{http.MethodDelete, "/api/v1/circles/00000000-0000-0000-0000-000000000000/messages/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", ""},
 	}
 
 	t.Run("missing and unrecognized tokens are rejected on every circle route", func(t *testing.T) {
@@ -865,6 +866,41 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("only the author can delete a message", func(t *testing.T) {
+		const text = "This message will be deleted by its author."
+		sent := do(http.MethodPost, "/api/v1/circles/"+circleID+"/messages", tokenB,
+			fmt.Sprintf(`{"content":%q}`, text))
+		if sent.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", sent.Code, sent.Body.String())
+		}
+		var res struct {
+			Message struct {
+				ID string `json:"id"`
+			} `json:"message"`
+		}
+		if err := json.Unmarshal(sent.Body.Bytes(), &res); err != nil {
+			t.Fatalf("failed to decode created message: %v", err)
+		}
+		if res.Message.ID == "" {
+			t.Fatal("expected a message id")
+		}
+		path := "/api/v1/circles/" + circleID + "/messages/" + res.Message.ID
+
+		if w := do(http.MethodDelete, path, tokenA, ""); w.Code != http.StatusNotFound {
+			t.Errorf("expected 404 deleting another author's message, got %d: %s", w.Code, w.Body.String())
+		}
+		if w := do(http.MethodDelete, path, tokenB, ""); w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204 deleting own message, got %d: %s", w.Code, w.Body.String())
+		}
+		if w := do(http.MethodDelete, path, tokenB, ""); w.Code != http.StatusNotFound {
+			t.Errorf("expected 404 on a repeat delete, got %d: %s", w.Code, w.Body.String())
+		}
+		list := do(http.MethodGet, "/api/v1/circles/"+circleID+"/messages", tokenA, "")
+		if strings.Contains(list.Body.String(), text) {
+			t.Errorf("deleted message must not be listed: %s", list.Body.String())
+		}
+	})
+
 	t.Run("detail and counts reflect memberships after both joined", func(t *testing.T) {
 		w := do(http.MethodGet, "/api/v1/circles/"+circleID, tokenA, "")
 		if w.Code != http.StatusOK {
@@ -888,6 +924,30 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		w := do(http.MethodGet, "/api/v1/circles/"+circleID, tokenB, "")
 		if !strings.Contains(w.Body.String(), `"is_member":false`) {
 			t.Errorf("expected is_member false after leaving: %s", w.Body.String())
+		}
+	})
+
+	t.Run("leaving can remove the leaver's messages in that circle", func(t *testing.T) {
+		if w := do(http.MethodPost, "/api/v1/circles/"+circleID+"/join", tokenB, ""); w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204 rejoining, got %d: %s", w.Code, w.Body.String())
+		}
+		const text = "Delete this when I leave."
+		if w := do(http.MethodPost, "/api/v1/circles/"+circleID+"/messages", tokenB,
+			fmt.Sprintf(`{"content":%q}`, text)); w.Code != http.StatusCreated {
+			t.Fatalf("expected 201 sending, got %d: %s", w.Code, w.Body.String())
+		}
+		if w := do(http.MethodDelete, "/api/v1/circles/"+circleID+"/leave?removeMyMessages=true", tokenB, ""); w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204 leaving with removeMyMessages, got %d: %s", w.Code, w.Body.String())
+		}
+		list := do(http.MethodGet, "/api/v1/circles/"+circleID+"/messages", tokenA, "")
+		if list.Code != http.StatusOK {
+			t.Fatalf("expected 200 listing, got %d: %s", list.Code, list.Body.String())
+		}
+		if strings.Contains(list.Body.String(), text) {
+			t.Errorf("leaver's messages must be removed: %s", list.Body.String())
+		}
+		if !strings.Contains(list.Body.String(), "I lost my father") {
+			t.Errorf("other members' messages must remain: %s", list.Body.String())
 		}
 	})
 
@@ -972,6 +1032,9 @@ func TestPhase6CirclesEndToEndIntegration(t *testing.T) {
 		}
 		if w := do(http.MethodPost, ghost+"/messages", tokenA, `{"content":"x"}`); w.Code != http.StatusNotFound {
 			t.Errorf("send: expected 404, got %d", w.Code)
+		}
+		if w := do(http.MethodDelete, ghost+"/messages/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", tokenA, ""); w.Code != http.StatusNotFound {
+			t.Errorf("delete: expected 404, got %d", w.Code)
 		}
 	})
 

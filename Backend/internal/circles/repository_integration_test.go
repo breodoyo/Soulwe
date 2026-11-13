@@ -143,10 +143,10 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		if ok, err := repo.IsMember(ctx, circleID, ownerB); err != nil || ok {
 			t.Errorf("expected IsMember false for the other identity, got %t (%v)", ok, err)
 		}
-		if err := repo.RemoveMember(ctx, circleID, ownerA); err != nil {
+		if err := repo.RemoveMember(ctx, circleID, ownerA, false); err != nil {
 			t.Fatalf("RemoveMember: %v", err)
 		}
-		if err := repo.RemoveMember(ctx, circleID, ownerA); err != nil {
+		if err := repo.RemoveMember(ctx, circleID, ownerA, false); err != nil {
 			t.Errorf("second RemoveMember should be a no-op, got %v", err)
 		}
 	})
@@ -179,13 +179,13 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		if err := repo.AddMember(ctx, circleID, ownerA); err != nil {
 			t.Fatalf("anonymous AddMember alongside a registered one: %v", err)
 		}
-		if err := repo.RemoveMember(ctx, circleID, ownerA); err != nil {
+		if err := repo.RemoveMember(ctx, circleID, ownerA, false); err != nil {
 			t.Fatalf("RemoveMember: %v", err)
 		}
 		if ok, err := repo.IsMember(ctx, circleID, userOwner); err != nil || !ok {
 			t.Errorf("removing an anonymous member must not touch a registered one, got %t (%v)", ok, err)
 		}
-		if err := repo.RemoveMember(ctx, circleID, userOwner); err != nil {
+		if err := repo.RemoveMember(ctx, circleID, userOwner, false); err != nil {
 			t.Fatalf("RemoveMember registered: %v", err)
 		}
 	})
@@ -203,7 +203,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 			if _, err := repo.IsMember(ctx, circleID, bad); err == nil {
 				t.Errorf("expected IsMember to reject owner %+v", bad)
 			}
-			if err := repo.RemoveMember(ctx, circleID, bad); err == nil {
+			if err := repo.RemoveMember(ctx, circleID, bad, false); err == nil {
 				t.Errorf("expected RemoveMember to reject owner %+v", bad)
 			}
 			if _, err := repo.CreateMessage(ctx, circleID, bad, "should not persist"); err == nil {
@@ -330,6 +330,76 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("DeleteMessage only removes the author's message", func(t *testing.T) {
+		mine, err := repo.CreateMessage(ctx, circleID, ownerA, "delete mine")
+		if err != nil {
+			t.Fatalf("CreateMessage mine: %v", err)
+		}
+		theirs, err := repo.CreateMessage(ctx, circleID, userOwner, "keep theirs")
+		if err != nil {
+			t.Fatalf("CreateMessage theirs: %v", err)
+		}
+
+		if err := repo.DeleteMessage(ctx, circleID, mine.ID, ownerB); !errors.Is(err, ErrMessageNotFound) {
+			t.Errorf("expected ErrMessageNotFound for another owner, got %v", err)
+		}
+		if err := repo.DeleteMessage(ctx, circleID, theirs.ID, ownerA); !errors.Is(err, ErrMessageNotFound) {
+			t.Errorf("expected ErrMessageNotFound for another owner's message, got %v", err)
+		}
+		if err := repo.DeleteMessage(ctx, circleID, mine.ID, ownerA); err != nil {
+			t.Fatalf("DeleteMessage: %v", err)
+		}
+		if err := repo.DeleteMessage(ctx, circleID, mine.ID, ownerA); !errors.Is(err, ErrMessageNotFound) {
+			t.Errorf("expected ErrMessageNotFound on a repeat delete, got %v", err)
+		}
+
+		var remaining int
+		if err := pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM circle_messages WHERE circle_id = $1 AND id = $2`,
+			circleID, theirs.ID).Scan(&remaining); err != nil {
+			t.Fatalf("remaining message count: %v", err)
+		}
+		if remaining != 1 {
+			t.Errorf("expected the other author's message to remain, got %d", remaining)
+		}
+	})
+
+	t.Run("RemoveMember with removeMessages deletes only that member's messages", func(t *testing.T) {
+		leaving, err := repo.CreateMessage(ctx, circleID, ownerA, "remove on leave")
+		if err != nil {
+			t.Fatalf("CreateMessage leaving: %v", err)
+		}
+		kept, err := repo.CreateMessage(ctx, circleID, userOwner, "keep after another leaves")
+		if err != nil {
+			t.Fatalf("CreateMessage kept: %v", err)
+		}
+
+		if err := repo.RemoveMember(ctx, circleID, ownerA, true); err != nil {
+			t.Fatalf("RemoveMember: %v", err)
+		}
+
+		for _, tc := range []struct {
+			name      string
+			messageID string
+			want      int
+		}{
+			{"leaver's message", leaving.ID, 0},
+			{"other member's message", kept.ID, 1},
+		} {
+			var count int
+			if err := pool.QueryRow(ctx,
+				`SELECT COUNT(*) FROM circle_messages WHERE id = $1`, tc.messageID).Scan(&count); err != nil {
+				t.Fatalf("%s count: %v", tc.name, err)
+			}
+			if count != tc.want {
+				t.Errorf("%s: expected %d rows, got %d", tc.name, tc.want, count)
+			}
+		}
+		if ok, err := repo.IsMember(ctx, circleID, ownerA); err != nil || ok {
+			t.Errorf("expected the leaver to be removed, got %t (%v)", ok, err)
+		}
+	})
+
 	t.Run("member count reflects joined members", func(t *testing.T) {
 		if err := repo.AddMember(ctx, circleID, ownerB); err != nil {
 			t.Fatalf("AddMember B: %v", err)
@@ -341,7 +411,7 @@ func TestPostgresRepositoryIntegration(t *testing.T) {
 		if c.MemberCount < 1 {
 			t.Errorf("expected at least 1 active membership, got %d", c.MemberCount)
 		}
-		if err := repo.RemoveMember(ctx, circleID, ownerB); err != nil {
+		if err := repo.RemoveMember(ctx, circleID, ownerB, false); err != nil {
 			t.Fatalf("RemoveMember B: %v", err)
 		}
 	})

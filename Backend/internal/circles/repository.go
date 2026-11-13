@@ -23,11 +23,13 @@ type Repository interface {
 
 	AddMember(ctx context.Context, circleID string, owner middleware.Owner) error
 
-	RemoveMember(ctx context.Context, circleID string, owner middleware.Owner) error
+	RemoveMember(ctx context.Context, circleID string, owner middleware.Owner, removeMessages bool) error
 
 	ListMessages(ctx context.Context, circleID string, limit int, before *time.Time) ([]CircleMessage, error)
 
 	CreateMessage(ctx context.Context, circleID string, owner middleware.Owner, content string) (*CircleMessage, error)
+
+	DeleteMessage(ctx context.Context, circleID, messageID string, owner middleware.Owner) error
 }
 
 type PostgresRepository struct {
@@ -76,6 +78,14 @@ const (
 
 	removeMemberSQL = `DELETE FROM circle_members
 		WHERE circle_id = $1 AND ` + ownerPredicate
+
+	removeOwnMessagesSQL = `DELETE FROM circle_messages
+		WHERE circle_id = $1 AND user_id IS NOT DISTINCT FROM $2 AND anon_identity_id IS NOT DISTINCT FROM $3`
+
+	deleteMessageSQL = `DELETE FROM circle_messages
+		WHERE id = $1 AND circle_id = $2
+		AND user_id IS NOT DISTINCT FROM $3 AND anon_identity_id IS NOT DISTINCT FROM $4
+		RETURNING id`
 
 	messageSelect = `SELECT m.id,
 		COALESCE(NULLIF(BTRIM(u.display_name), ''), a.anon_name, ` + sqlDefaultAuthorName + `),
@@ -175,13 +185,28 @@ func (r *PostgresRepository) AddMember(ctx context.Context, circleID string, own
 	return nil
 }
 
-func (r *PostgresRepository) RemoveMember(ctx context.Context, circleID string, owner middleware.Owner) error {
+func (r *PostgresRepository) RemoveMember(ctx context.Context, circleID string, owner middleware.Owner, removeMessages bool) error {
 	userID, anonID, ok := ownerArgs(owner)
 	if !ok {
 		return errors.New("circles remove member: no owner")
 	}
-	if _, err := r.pool.Exec(ctx, removeMemberSQL, circleID, userID, anonID); err != nil {
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("circles remove member: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if removeMessages {
+		if _, err := tx.Exec(ctx, removeOwnMessagesSQL, circleID, userID, anonID); err != nil {
+			return fmt.Errorf("circles remove member: delete messages: %w", err)
+		}
+	}
+	if _, err := tx.Exec(ctx, removeMemberSQL, circleID, userID, anonID); err != nil {
 		return fmt.Errorf("circles remove member: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("circles remove member: commit: %w", err)
 	}
 	return nil
 }
@@ -225,6 +250,22 @@ func (r *PostgresRepository) CreateMessage(ctx context.Context, circleID string,
 		return nil, fmt.Errorf("circles create message: %w", err)
 	}
 	return message, nil
+}
+
+func (r *PostgresRepository) DeleteMessage(ctx context.Context, circleID, messageID string, owner middleware.Owner) error {
+	userID, anonID, ok := ownerArgs(owner)
+	if !ok {
+		return errors.New("circles delete message: no owner")
+	}
+	var id string
+	err := r.pool.QueryRow(ctx, deleteMessageSQL, messageID, circleID, userID, anonID).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrMessageNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("circles delete message: %w", err)
+	}
+	return nil
 }
 
 func scanCircle(s func(dest ...any) error, c *Circle) error {

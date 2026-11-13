@@ -342,11 +342,14 @@ export const api = {
         auth: 'either',
       }),
 
-    leave: (id: string): Promise<void> =>
-      request<void>(`/circles/${encodeURIComponent(id)}/leave`, {
-        method: 'DELETE',
-        auth: 'either',
-      }),
+    leave: (id: string, removeMyMessages = false): Promise<void> =>
+      request<void>(
+        `/circles/${encodeURIComponent(id)}/leave${removeMyMessages ? '?removeMyMessages=true' : ''}`,
+        {
+          method: 'DELETE',
+          auth: 'either',
+        },
+      ),
 
     messages: (
       id: string,
@@ -370,6 +373,15 @@ export const api = {
         auth: 'either',
       })
     },
+
+    deleteMessage: (id: string, messageId: string): Promise<void> =>
+      request<void>(
+        `/circles/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}`,
+        {
+          method: 'DELETE',
+          auth: 'either',
+        },
+      ),
   },
 
   therapists: {
