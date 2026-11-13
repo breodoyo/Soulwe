@@ -243,6 +243,21 @@
   }
 }
 
+@media (min-width: 1024px) and (min-height: 720px) {
+  :global(body[data-circle-open="true"]) {
+    overflow: hidden;
+  }
+
+  :global(body[data-circle-open="true"]) .main {
+    padding-bottom: 0;
+  }
+
+  :global(body[data-circle-open="true"]) .crisis,
+  :global(body[data-circle-open="true"]) .footer {
+    display: none;
+  }
+}
+
 .crisis {
   padding: 64px 0;
   background: var(--bg);
