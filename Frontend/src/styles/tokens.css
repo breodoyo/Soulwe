@@ -45,6 +45,11 @@
   --border:      rgba(36,24,16,0.18);
   --border-soft: rgba(36,24,16,0.14);
 
+  --circle-own-bubble-bg: #F8D7A0;
+  --circle-own-bubble-border: #E9C27E;
+  --circle-column-max: 760px;
+  --circle-thread-offset: 180px;
+
   --shadow-sm:   0 1px 8px rgba(36,24,16,0.08);
   --shadow-card: 0 4px 24px rgba(36,24,16,0.10);
   --shadow-float:0 8px 40px rgba(36,24,16,0.15);

@@ -383,7 +383,7 @@ func (s *stubCircleService) Join(context.Context, middleware.Owner, string) erro
 	return s.err
 }
 
-func (s *stubCircleService) Leave(context.Context, middleware.Owner, string) error {
+func (s *stubCircleService) Leave(context.Context, middleware.Owner, string, bool) error {
 	return s.err
 }
 
@@ -393,6 +393,10 @@ func (s *stubCircleService) ListMessages(context.Context, middleware.Owner, stri
 
 func (s *stubCircleService) SendMessage(context.Context, middleware.Owner, string, string) (*circles.CircleMessage, error) {
 	return s.message, s.err
+}
+
+func (s *stubCircleService) DeleteMessage(context.Context, middleware.Owner, string, string) error {
+	return s.err
 }
 
 type stubTherapistService struct {
@@ -898,6 +902,7 @@ func TestPhase6CircleRoutes(t *testing.T) {
 		{"leave", http.MethodDelete, "/api/v1/circles/" + circleID + "/leave", "", http.StatusNoContent},
 		{"list messages", http.MethodGet, "/api/v1/circles/" + circleID + "/messages", "", http.StatusOK},
 		{"send message", http.MethodPost, "/api/v1/circles/" + circleID + "/messages", `{"content":"hi"}`, http.StatusCreated},
+		{"delete message", http.MethodDelete, "/api/v1/circles/" + circleID + "/messages/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "", http.StatusNoContent},
 	}
 
 	t.Run("routes reject missing tokens", func(t *testing.T) {

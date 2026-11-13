@@ -157,6 +157,7 @@ func setupRouter(cfg *config.Config, pool *pgxpool.Pool, authHandler *user.Handl
 				circlesGroup.DELETE("/:id/leave", circlesHandler.Leave)
 				circlesGroup.GET("/:id/messages", circlesHandler.ListMessages)
 				circlesGroup.POST("/:id/messages", circlesHandler.SendMessage)
+				circlesGroup.DELETE("/:id/messages/:messageId", circlesHandler.DeleteMessage)
 			}
 		}
 		if therapistsHandler != nil {

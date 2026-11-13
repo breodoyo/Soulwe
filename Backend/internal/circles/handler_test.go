@@ -28,12 +28,13 @@ var (
 
 type fakeService struct {
 	Service
-	listFunc         func(ctx context.Context) ([]Circle, error)
-	getFunc          func(ctx context.Context, owner middleware.Owner, circleID string) (*Circle, error)
-	joinFunc         func(ctx context.Context, owner middleware.Owner, circleID string) error
-	leaveFunc        func(ctx context.Context, owner middleware.Owner, circleID string) error
-	listMessagesFunc func(ctx context.Context, owner middleware.Owner, circleID string, limit int, before *time.Time) ([]CircleMessage, error)
-	sendMessageFunc  func(ctx context.Context, owner middleware.Owner, circleID, content string) (*CircleMessage, error)
+	listFunc          func(ctx context.Context) ([]Circle, error)
+	getFunc           func(ctx context.Context, owner middleware.Owner, circleID string) (*Circle, error)
+	joinFunc          func(ctx context.Context, owner middleware.Owner, circleID string) error
+	leaveFunc         func(ctx context.Context, owner middleware.Owner, circleID string, removeMyMessages bool) error
+	listMessagesFunc  func(ctx context.Context, owner middleware.Owner, circleID string, limit int, before *time.Time) ([]CircleMessage, error)
+	sendMessageFunc   func(ctx context.Context, owner middleware.Owner, circleID, content string) (*CircleMessage, error)
+	deleteMessageFunc func(ctx context.Context, owner middleware.Owner, circleID, messageID string) error
 }
 
 func (f *fakeService) List(ctx context.Context) ([]Circle, error) {
@@ -57,11 +58,11 @@ func (f *fakeService) Join(ctx context.Context, owner middleware.Owner, circleID
 	return f.joinFunc(ctx, owner, circleID)
 }
 
-func (f *fakeService) Leave(ctx context.Context, owner middleware.Owner, circleID string) error {
+func (f *fakeService) Leave(ctx context.Context, owner middleware.Owner, circleID string, removeMyMessages bool) error {
 	if f.leaveFunc == nil {
 		return errors.New("leaveFunc not configured")
 	}
-	return f.leaveFunc(ctx, owner, circleID)
+	return f.leaveFunc(ctx, owner, circleID, removeMyMessages)
 }
 
 func (f *fakeService) ListMessages(ctx context.Context, owner middleware.Owner, circleID string, limit int, before *time.Time) ([]CircleMessage, error) {
@@ -76,6 +77,13 @@ func (f *fakeService) SendMessage(ctx context.Context, owner middleware.Owner, c
 		return nil, errors.New("sendMessageFunc not configured")
 	}
 	return f.sendMessageFunc(ctx, owner, circleID, content)
+}
+
+func (f *fakeService) DeleteMessage(ctx context.Context, owner middleware.Owner, circleID, messageID string) error {
+	if f.deleteMessageFunc == nil {
+		return errors.New("deleteMessageFunc not configured")
+	}
+	return f.deleteMessageFunc(ctx, owner, circleID, messageID)
 }
 
 // newTestRouter simulates the identity middleware by stamping an Owner into the
@@ -98,6 +106,7 @@ func newTestRouter(t *testing.T, h *Handler, owner *middleware.Owner) *gin.Engin
 		group.DELETE("/circles/:id/leave", h.Leave)
 		group.GET("/circles/:id/messages", h.ListMessages)
 		group.POST("/circles/:id/messages", h.SendMessage)
+		group.DELETE("/circles/:id/messages/:messageId", h.DeleteMessage)
 	}
 	return router
 }
@@ -162,6 +171,7 @@ func TestHandler_UnauthenticatedRequests(t *testing.T) {
 		{"leave", http.MethodDelete, "/api/v1/circles/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/leave", ""},
 		{"list messages", http.MethodGet, "/api/v1/circles/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/messages", ""},
 		{"send message", http.MethodPost, "/api/v1/circles/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/messages", `{"content":"hi"}`},
+		{"delete message", http.MethodDelete, "/api/v1/circles/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/messages/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", ""},
 	}
 	for _, tc := range cases {
 		w := serve(t, router, tc.method, tc.path, tc.body)
@@ -311,7 +321,7 @@ func TestHandler_Leave(t *testing.T) {
 
 	leaveUnderCaller := func(owner middleware.Owner, err error) *gin.Engine {
 		svc := &fakeService{
-			leaveFunc: func(ctx context.Context, got middleware.Owner, circleID string) error {
+			leaveFunc: func(ctx context.Context, got middleware.Owner, circleID string, removeMyMessages bool) error {
 				if ownerKey(got) != ownerKey(owner) {
 					t.Errorf("service must receive the context owner, got %+v want %+v", got, owner)
 				}
@@ -332,6 +342,53 @@ func TestHandler_Leave(t *testing.T) {
 		w := serve(t, leaveUnderCaller(userTestOwner, nil), http.MethodDelete, id, "")
 		if w.Code != http.StatusNoContent {
 			t.Fatalf("expected 204 for a registered leave, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("removeMyMessages is passed through to the service", func(t *testing.T) {
+		var got bool
+		svc := &fakeService{
+			leaveFunc: func(ctx context.Context, owner middleware.Owner, circleID string, removeMyMessages bool) error {
+				got = removeMyMessages
+				return nil
+			},
+		}
+		router := newTestRouter(t, NewHandler(svc), &anonTestOwner)
+		w := serve(t, router, http.MethodDelete, id+"?removeMyMessages=true", "")
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+		}
+		if !got {
+			t.Error("expected removeMyMessages true to reach the service")
+		}
+	})
+
+	t.Run("removeMyMessages can also arrive in the body", func(t *testing.T) {
+		var got bool
+		svc := &fakeService{
+			leaveFunc: func(ctx context.Context, owner middleware.Owner, circleID string, removeMyMessages bool) error {
+				got = removeMyMessages
+				return nil
+			},
+		}
+		router := newTestRouter(t, NewHandler(svc), &anonTestOwner)
+		w := serve(t, router, http.MethodDelete, id, `{"removeMyMessages":true}`)
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+		}
+		if !got {
+			t.Error("expected removeMyMessages true from the body to reach the service")
+		}
+	})
+
+	t.Run("an invalid removeMyMessages value is a 400", func(t *testing.T) {
+		invalid := newTestRouter(t, NewHandler(&fakeService{}), &anonTestOwner)
+		w := serve(t, invalid, http.MethodDelete, id+"?removeMyMessages=maybe", "")
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"field":"removeMyMessages"`) {
+			t.Errorf("expected the removeMyMessages field on the error: %s", w.Body.String())
 		}
 	})
 
@@ -417,6 +474,74 @@ func TestHandler_ListMessages(t *testing.T) {
 		w := serve(t, router, http.MethodGet, id+"?before=not-a-timestamp", "")
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+func TestHandler_DeleteMessage(t *testing.T) {
+	const (
+		circleID  = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+		messageID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+		path      = "/api/v1/circles/" + circleID + "/messages/" + messageID
+	)
+
+	deleteUnderCaller := func(owner middleware.Owner, err error) *gin.Engine {
+		svc := &fakeService{
+			deleteMessageFunc: func(ctx context.Context, got middleware.Owner, gotCircleID, gotMessageID string) error {
+				if ownerKey(got) != ownerKey(owner) {
+					t.Errorf("service must receive the context owner, got %+v want %+v", got, owner)
+				}
+				if gotCircleID != circleID || gotMessageID != messageID {
+					t.Errorf("unexpected ids: circle %q message %q", gotCircleID, gotMessageID)
+				}
+				return err
+			},
+		}
+		return newTestRouter(t, NewHandler(svc), &owner)
+	}
+
+	t.Run("the author deletes their message with 204", func(t *testing.T) {
+		w := serve(t, deleteUnderCaller(anonTestOwner, nil), http.MethodDelete, path, "")
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("a registered author can delete too", func(t *testing.T) {
+		w := serve(t, deleteUnderCaller(userTestOwner, nil), http.MethodDelete, path, "")
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("a message that is missing or not the caller's is a 404", func(t *testing.T) {
+		w := serve(t, deleteUnderCaller(anonTestOwner, ErrMessageNotFound), http.MethodDelete, path, "")
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("non-members are forbidden", func(t *testing.T) {
+		w := serve(t, deleteUnderCaller(anonTestOwner, ErrNotMember), http.MethodDelete, path, "")
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), `"code":"NOT_A_MEMBER"`) {
+			t.Errorf("expected the NOT_A_MEMBER code: %s", w.Body.String())
+		}
+	})
+
+	t.Run("missing circle is a 404", func(t *testing.T) {
+		w := serve(t, deleteUnderCaller(anonTestOwner, ErrCircleNotFound), http.MethodDelete, path, "")
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("service failure is a safe 500", func(t *testing.T) {
+		w := serve(t, deleteUnderCaller(anonTestOwner, errors.New("boom")), http.MethodDelete, path, "")
+		if w.Code != http.StatusInternalServerError {
+			t.Fatalf("expected 500, got %d: %s", w.Code, w.Body.String())
 		}
 	})
 }

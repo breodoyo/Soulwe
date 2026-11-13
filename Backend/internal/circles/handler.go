@@ -89,7 +89,14 @@ func (h *Handler) Leave(c *gin.Context) {
 		return
 	}
 
-	err := h.svc.Leave(c.Request.Context(), owner, c.Param("id"))
+	removeMyMessages, err := parseRemoveMyMessages(c)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "INVALID_INPUT",
+			"removeMyMessages must be a boolean", "removeMyMessages")
+		return
+	}
+
+	err = h.svc.Leave(c.Request.Context(), owner, c.Param("id"), removeMyMessages)
 	switch {
 	case errors.Is(err, ErrCircleNotFound):
 		respondError(c, http.StatusNotFound, "NOT_FOUND", "circle not found", "")
@@ -171,6 +178,31 @@ func (h *Handler) SendMessage(c *gin.Context) {
 	}
 }
 
+func (h *Handler) DeleteMessage(c *gin.Context) {
+	owner, ok := middleware.OwnerFromContext(c)
+	if !ok {
+		respondError(c, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required", "")
+		return
+	}
+
+	err := h.svc.DeleteMessage(c.Request.Context(), owner, c.Param("id"), c.Param("messageId"))
+	switch {
+	case errors.Is(err, ErrCircleNotFound):
+		respondError(c, http.StatusNotFound, "NOT_FOUND", "circle not found", "")
+	case errors.Is(err, ErrNotMember):
+		respondError(c, http.StatusForbidden, "NOT_A_MEMBER",
+			"you must join the circle before deleting messages", "")
+	case errors.Is(err, ErrMessageNotFound):
+		respondError(c, http.StatusNotFound, "NOT_FOUND", "message not found", "")
+	case err != nil:
+		slog.Error("circles delete message failed", slog.String("error", err.Error()))
+		respondError(c, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR",
+			"An unexpected server error occurred", "")
+	default:
+		c.Status(http.StatusNoContent)
+	}
+}
+
 func nextCursor(messages []CircleMessage, limit int) *time.Time {
 	if len(messages) == 0 {
 		return nil
@@ -207,6 +239,22 @@ func parseBefore(c *gin.Context) (*time.Time, error) {
 		return nil, err
 	}
 	return &before, nil
+}
+
+func parseRemoveMyMessages(c *gin.Context) (bool, error) {
+	if raw := c.Query("removeMyMessages"); raw != "" {
+		return strconv.ParseBool(raw)
+	}
+	if c.Request.Body == nil || c.Request.ContentLength == 0 {
+		return false, nil
+	}
+	var req struct {
+		RemoveMyMessages *bool `json:"removeMyMessages"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		return false, err
+	}
+	return req.RemoveMyMessages != nil && *req.RemoveMyMessages, nil
 }
 
 func respondError(c *gin.Context, status int, code, message, field string) {
