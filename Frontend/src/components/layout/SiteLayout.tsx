@@ -32,7 +32,6 @@ const footerExploreLinks: NavItem[] = [
 const footerSiteLinks: NavItem[] = [
   { to: '/privacy', label: 'Privacy' },
   { to: '/terms',   label: 'Terms'   },
-  { to: '/contact', label: 'Contact' },
   crisisLink,
 ]
 
