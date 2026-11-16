@@ -7,38 +7,41 @@ export default function PrivacyPage() {
     <div className={styles.page}>
       <div className={styles.inner}>
         <h1 className={styles.heading}>Privacy</h1>
-        <p className={styles.meta}>Last updated: TODO(real data: launch date)</p>
+        {/* TODO(real data): launch date for this page. */}
 
         <div className={styles.body}>
           <h2>Your journal</h2>
           <p>
-            Your journal is private to you. Nobody else can read your entries.
+            Your journal is for you. Entries are stored encrypted, and only you can see them in the app.
+            You can edit or delete an entry whenever you like. Deleting an entry removes it from Soulwe.
           </p>
           <p>
-            Optional AI reflections send the entry you choose to an AI provider.
-            You can skip reflections and keep an entry entirely to yourself.
+            When you save an entry, its text is sent to an AI provider, Anthropic or Google (Gemini),
+            which writes a reflection. The reflection is saved with your entry, also encrypted.
           </p>
-          <p className={styles.todo}>
-            TODO(real data): name the AI provider(s), state what is sent, how
-            long it is retained, and whether it is used for training. Do not
-            publish this page until that is written and reviewed.
-          </p>
+          {/* TODO(real data): provider retention and training use; do not publish until reviewed. */}
 
           <h2>Circles</h2>
           <p>
             Circles are anonymous. You get a different anonymous name in each circle, and other members see
             that name, not your real name or account.
           </p>
-          <p className={styles.todo}>
-            TODO(real data): state exactly what circle activity is stored, for
-            how long, and how reporting and moderation work.
+          <p>
+            Everything you post in a circle can be seen by everyone who has joined it. Please share only
+            what you are comfortable with others reading.
           </p>
+          <p>
+            You can delete your own messages. When you leave a circle you can choose to delete your
+            messages there as well. If you don't, they stay in the circle under your anonymous name.
+            Messages cannot be edited.
+          </p>
+          {/* TODO(real data): circle message retention, reporting and moderation. */}
 
-          <h2>Accounts</h2>
-          <p className={styles.todo}>
-            TODO(real data): what account data is collected (email, language
-            preference), where it is hosted, and how a user deletes it.
-          </p>
+          <h2>Where Soulwe runs</h2>
+          <p>Soulwe is hosted on Vercel and Render.</p>
+          {/* TODO(real data): data storage region. */}
+
+          {/* TODO(real data): account data collected, hosting, and account deletion. */}
 
           <h2>Contact</h2>
           <p>

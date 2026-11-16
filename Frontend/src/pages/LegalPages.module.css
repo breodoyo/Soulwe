@@ -38,12 +38,6 @@
   margin: var(--space-8) 0 var(--space-3);
 }
 
-.todo {
-  font-size: 14px;
-  color: var(--clay);
-  line-height: 1.6;
-}
-
 .back {
   display: inline-flex;
   align-items: center;

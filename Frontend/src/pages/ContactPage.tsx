@@ -13,10 +13,7 @@ export default function ContactPage() {
             For questions about Soulwe, your data, or therapist listings, reach
             the team at:
           </p>
-          <p className={styles.todo}>
-            TODO(real data): contact email address, phone line, or contact form
-            endpoint. Do not invent one.
-          </p>
+          {/* TODO(real data): real contact email, phone line, or contact form endpoint; do not invent one. */}
           <p>
             If you are in crisis, Soulwe is not an emergency service. See the
             crisis information at the bottom of every page.
