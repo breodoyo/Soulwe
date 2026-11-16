@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import { NotebookPen } from 'lucide-react'
 import { isApiError, type BreathingExercise, type BreathingSession } from '@/types'
 import { api } from '@/lib/api'
 import styles from './BreathePage.module.css'
@@ -81,7 +82,6 @@ export default function BreathePage() {
   const [phaseIdx, setPhaseIdx]         = useState(0)
   const [secs, setSecs]                 = useState(0)
   const [sessionRemaining, setSessionRemaining] = useState(0)
-  const [runId, setRunId]               = useState(0)
   const [breathCount, setBreathCount]   = useState(0)
   const [saving, setSaving]             = useState(false)
   const [saveError, setSaveError]       = useState<string | null>(null)
@@ -144,7 +144,6 @@ export default function BreathePage() {
     setSaveError(null)
     setSavedSummary(null)
     startedAtRef.current = Date.now()
-    setRunId(r => r + 1)
     setRunning(true)
   }
 
@@ -275,112 +274,137 @@ export default function BreathePage() {
   }
   if (reducedMotion) discScale = 1
 
-  const phaseText = running
-    ? phase?.label ?? ''
-    : breathCount > 0
-      ? 'Well done.'
-      : 'Ready to begin'
+  const totalSessionSeconds = minutes * 60
+  const elapsedSessionSeconds = Math.max(0, totalSessionSeconds - sessionRemaining)
+  const sessionProgress = totalSessionSeconds > 0
+    ? Math.min(100, (elapsedSessionSeconds / totalSessionSeconds) * 100)
+    : 0
 
   return (
     <div className={styles.page}>
-      <div className={styles.container}>
-        <div className={styles.layout}>
-          <div className={styles.practice}>
-            <div className={styles.header}>
-              <h1 className={styles.heading}>Breathe with me</h1>
-              <p className={styles.sub}>
-                A moment of stillness. Even a few breaths change everything — <em>pumzika</em>
-              </p>
-            </div>
+      <div className={styles.shell}>
+        {exercises !== null && exercises.length > 0 && (
+          <div
+            className={styles.techniqueBar}
+            role="radiogroup"
+            aria-label="Breathing technique"
+          >
+            {exercises.map(t => (
+              <label
+                key={t.id}
+                className={[
+                  styles.techniqueTab,
+                  selectedId === t.id ? styles.techniqueTabActive : '',
+                ].join(' ')}
+              >
+                <input
+                  type="radio"
+                  name="breathe-technique"
+                  value={t.id}
+                  checked={selectedId === t.id}
+                  onChange={() => switchTechnique(t.id)}
+                  className="sr-only"
+                />
+                {t.name}
+              </label>
+            ))}
+          </div>
+        )}
 
-            {!config && !exercisesError && exercises === null && (
-              <p className={styles.statusNote} role="status">Loading breathing exercises…</p>
-            )}
+        {!config && !exercisesError && exercises === null && (
+          <p className={styles.statusNote} role="status">Loading breathing exercises…</p>
+        )}
 
-            {!config && exercisesError && (
-              <div className={styles.errorNote} role="alert">
-                <p>Couldn’t load breathing exercises. {exercisesError}</p>
-                <button
-                  className={styles.retryBtn}
-                  onClick={() => setReloadTick(t => t + 1)}
-                >
-                  Try again
-                </button>
+        {!config && exercisesError && (
+          <div className={styles.errorNote} role="alert">
+            <p>Couldn’t load breathing exercises. {exercisesError}</p>
+            <button
+              type="button"
+              className={styles.retryBtn}
+              onClick={() => setReloadTick(t => t + 1)}
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {!config && !exercisesError && exercises !== null && exercises.length === 0 && (
+          <p className={styles.statusNote} role="status">
+            No breathing exercises are available right now. Please check back soon.
+          </p>
+        )}
+
+        {config && phase && (
+          <>
+            <div className={styles.hero}>
+              <div className={styles.titleBlock}>
+                <h1 className={styles.heading}>Breathe with me</h1>
+                <p className={styles.sub}>
+                  A moment of stillness. Even a few breaths change everything.
+                </p>
               </div>
-            )}
 
-            {!config && !exercisesError && exercises !== null && exercises.length === 0 && (
-              <p className={styles.statusNote} role="status">
-                No breathing exercises are available right now. Please check back soon.
-              </p>
-            )}
+              <div className={styles.orbWrap}>
+                <div
+                  className={styles.orbPulse}
+                  style={{
+                    transform: `scale(${discScale})`,
+                    transitionDuration: reducedMotion ? '0s' : running ? `${phase.duration}s` : '0.4s',
+                  }}
+                  aria-hidden="true"
+                >
+                  <div className={styles.orbGlow} />
+                  <div className={styles.orbBody} />
+                </div>
+                <div className={styles.orbContent}>
+                  {running ? (
+                    <>
+                      <p className={styles.phaseLabel} aria-live="polite" aria-atomic="true">
+                        {phase.label}
+                      </p>
+                      <p className={styles.phaseCount}>{secs}</p>
+                    </>
+                  ) : (
+                    <p className={styles.idlePrompt}>Ready to breathe</p>
+                  )}
+                </div>
+              </div>
 
-            {config && phase && (
-              <>
-                <div className={styles.orbWrap}>
-                  <svg className={styles.ringSvg} viewBox="0 0 200 200" aria-hidden="true">
-                    <circle className={styles.ringTrack} cx="100" cy="100" r="92" />
-                    {running && !reducedMotion && (
-                      <circle
-                        key={`${selectedId}-${runId}-${phaseIdx}`}
-                        className={styles.ringProgress}
-                        cx="100"
-                        cy="100"
-                        r="92"
-                        style={{
-                          animationDuration: `${phase.duration}s`,
-                          animationPlayState: paused ? 'paused' : 'running',
-                        }}
+              <div className={styles.controls}>
+                <div
+                  className={styles.lengthGroup}
+                  role="radiogroup"
+                  aria-labelledby="breathe-length-label"
+                >
+                  <span id="breathe-length-label" className="sr-only">Session length</span>
+                  {LENGTHS.map(m => (
+                    <label
+                      key={m}
+                      className={[
+                        styles.lengthOption,
+                        minutes === m ? styles.lengthOptionActive : '',
+                        running ? styles.lengthOptionDisabled : '',
+                      ].join(' ')}
+                    >
+                      <input
+                        type="radio"
+                        name="breathe-length"
+                        value={m}
+                        checked={minutes === m}
+                        onChange={() => setMinutes(m)}
+                        disabled={running}
+                        className="sr-only"
                       />
-                    )}
-                  </svg>
-                  <div
-                    className={styles.disc}
-                    style={{
-                      transform: `scale(${discScale})`,
-                      transitionDuration: running ? `${phase.duration}s` : '0.3s',
-                    }}
-                  >
-                    <span className={styles.discTech}>
-                      {config.slug === '478' ? '4·7·8' : 'Box'}
-                    </span>
-                  </div>
+                      {m} min
+                    </label>
+                  ))}
                 </div>
 
-                {/* Only the phase name is announced, not the countdown. */}
-                {completed ? (
-                  <div className={styles.completion}>
-                    <p className={styles.completionTitle} role="status">
-                      Well done. Take a moment.
-                    </p>
-                    <p className={styles.completionLinks}>
-                      <Link to="/home">Check in with your mood</Link>
-                      <span aria-hidden="true"> · </span>
-                      <Link to="/journal">write in your journal</Link>
-                    </p>
-                  </div>
-                ) : (
-                  <div className={styles.phaseDisplay}>
-                    <p className={styles.phaseLabel} aria-live="polite" aria-atomic="true">
-                      {phaseText}
-                    </p>
-                    {running ? (
-                      <p className={styles.phaseCount}>{secs}</p>
-                    ) : (
-                      <p className={styles.phaseCountSmall}>
-                        {breathCount > 0
-                          ? `${breathCount} breath${breathCount !== 1 ? 's' : ''} completed`
-                          : 'Press start'
-                        }
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                <div className={styles.controls}>
+                <div className={styles.actionRow}>
                   {!running && (
                     <button
-                      className={styles.startBtn}
+                      type="button"
+                      className={styles.primaryBtn}
                       onClick={start}
                       disabled={saving}
                       aria-label="Start breathing exercise"
@@ -389,56 +413,57 @@ export default function BreathePage() {
                     </button>
                   )}
                   {running && !paused && (
-                    <button className={styles.pauseBtn} onClick={pause}>Pause</button>
+                    <button type="button" className={styles.primaryBtn} onClick={pause}>
+                      Pause
+                    </button>
                   )}
                   {running && paused && (
-                    <button className={styles.startBtn} onClick={resume}>Resume</button>
+                    <button type="button" className={styles.primaryBtn} onClick={resume}>
+                      Resume
+                    </button>
                   )}
                   {running && (
                     <button
-                      className={styles.stopBtn}
+                      type="button"
+                      className={styles.resetBtn}
                       onClick={handleStopClick}
                       disabled={saving}
-                      aria-label="Stop breathing exercise"
+                      aria-label="Reset breathing exercise"
                     >
-                      Stop
+                      Reset
                     </button>
                   )}
                 </div>
 
-                <div className={styles.lengthRow}>
-                  <span id="breathe-length-label" className={styles.lengthLabel}>Length</span>
-                  <div
-                    className={styles.lengthGroup}
-                    role="radiogroup"
-                    aria-labelledby="breathe-length-label"
-                  >
-                    {LENGTHS.map(m => (
-                      <label
-                        key={m}
-                        className={[
-                          styles.lengthOption,
-                          minutes === m ? styles.lengthOptionActive : '',
-                          running ? styles.lengthOptionDisabled : '',
-                        ].join(' ')}
-                      >
-                        <input
-                          type="radio"
-                          name="breathe-length"
-                          value={m}
-                          checked={minutes === m}
-                          onChange={() => setMinutes(m)}
-                          disabled={running}
-                          className="sr-only"
-                        />
-                        {m} min
-                      </label>
-                    ))}
-                  </div>
-                  {running && (
-                    <span className={styles.remainingText}>{fmtClock(sessionRemaining)} left</span>
-                  )}
+                <div className={styles.footer}>
+                  <p className={styles.safetyNote}>
+                    Breathe gently. If you feel dizzy or uncomfortable, stop and breathe normally.
+                  </p>
+                  <Link className={styles.journalLink} to="/journal">
+                    <NotebookPen size={15} aria-hidden="true" />
+                    <span>Finished? Write down how you feel in your journal.</span>
+                  </Link>
                 </div>
+
+                {running && (
+                  <div className={styles.progressRow}>
+                    <div
+                      className={styles.progressTrack}
+                      role="progressbar"
+                      aria-label="Session progress"
+                      aria-valuemin={0}
+                      aria-valuemax={totalSessionSeconds}
+                      aria-valuenow={Math.round(elapsedSessionSeconds)}
+                      aria-valuetext={`${fmtClock(sessionRemaining)} left`}
+                    >
+                      <span
+                        className={styles.progressFill}
+                        style={{ width: `${sessionProgress}%` }}
+                      />
+                    </div>
+                    <span className={styles.remainingText}>{fmtClock(sessionRemaining)} left</span>
+                  </div>
+                )}
 
                 {saving && (
                   <div className={styles.savingLine} role="status">Saving your session…</div>
@@ -455,80 +480,17 @@ export default function BreathePage() {
                     {savedSummary.breaths !== 1 ? 's' : ''} · {fmtDuration(savedSummary.duration_s)}
                   </div>
                 )}
-              </>
-            )}
 
-          </div>
-
-          <div className={styles.sidebar}>
-            {exercises !== null && exercises.length > 0 && (
-              <div
-                className={styles.techniqueList}
-                role="radiogroup"
-                aria-labelledby="breathe-techniques-label"
-              >
-                <span id="breathe-techniques-label" className="sr-only">Breathing techniques</span>
-                {exercises.map((t, i) => (
-                  <label
-                    key={t.id}
-                    className={[styles.techniqueItem, selectedId === t.id ? styles.techniqueItemActive : ''].join(' ')}
-                  >
-                    <input
-                      type="radio"
-                      name="breathe-technique"
-                      value={t.id}
-                      checked={selectedId === t.id}
-                      onChange={() => switchTechnique(t.id)}
-                      className="sr-only"
-                    />
-                    <span className={styles.techNum}>{i + 1}</span>
-                    <span className={styles.techInfo}>
-                      <span className={styles.techName}>{t.name}</span>
-                      <span className={styles.techDesc}>{t.description}</span>
-                    </span>
-                  </label>
-                ))}
+                {completed && (
+                  <div className={styles.completion} role="status">
+                    <p>Well done. Take a moment.</p>
+                    <Link to="/home">Check in with your mood</Link>
+                  </div>
+                )}
               </div>
-            )}
-
-            {config && phase && (
-              <section className={styles.sidebarCard} aria-labelledby="breathe-round-heading">
-                <h2 className={styles.sidebarCardTitle} id="breathe-round-heading">
-                  How this round goes
-                </h2>
-                <ul className={styles.phaseList}>
-                  {config.phases.map((p, i) => (
-                    <li
-                      key={`${p.label}-${i}`}
-                      className={[
-                        styles.phaseItem,
-                        running && i === phaseIdx % config.phases.length ? styles.phaseItemActive : '',
-                      ].join(' ')}
-                    >
-                      <span>{p.label}</span>
-                      <span>{p.duration}s</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            <section className={styles.sidebarCard} aria-labelledby="breathe-before-heading">
-              <h2 className={styles.sidebarCardTitle} id="breathe-before-heading">
-                Before you begin
-              </h2>
-              <ul className={styles.beforeList}>
-                <li>Sit comfortably.</li>
-                <li>Breathe through your nose if you can.</li>
-                <li>If you feel dizzy or uncomfortable, stop and breathe normally.</li>
-              </ul>
-            </section>
-
-            <Link className={styles.journalLink} to="/journal">
-              Finished? Write down how you feel in your journal.
-            </Link>
-          </div>
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
