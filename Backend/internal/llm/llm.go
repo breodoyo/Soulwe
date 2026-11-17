@@ -46,8 +46,8 @@ const (
 	// consume the whole output budget and return an empty candidate.
 	GeminiMaxTokens = 1024
 
-	// RequestTimeout bounds one reflection call; a shorter caller deadline wins.
-	RequestTimeout = 45 * time.Second
+	// RequestTimeout bounds one reflection call; it must stay below WriteTimeout.
+	RequestTimeout = 60 * time.Second
 
 	// ProviderClaude and ProviderGemini are the accepted LLM_PROVIDER values.
 	ProviderClaude = "claude"
