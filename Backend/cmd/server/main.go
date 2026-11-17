@@ -267,7 +267,7 @@ func main() {
 		Addr:           serverAddr,
 		Handler:        router,
 		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   10 * time.Second,
+		WriteTimeout:   90 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
 
