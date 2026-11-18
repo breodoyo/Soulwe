@@ -95,8 +95,12 @@
   height: min(calc(100vh - var(--nav-height)), 640px);
   display: flex;
   align-items: center;
-  background: var(--bg);
+  background: var(--sand);
   overflow: hidden;
+}
+
+.heroPicture {
+  display: contents;
 }
 
 /* Full-bleed true-colour photo; no tint or fade. */
@@ -510,7 +514,7 @@
     align-items: stretch;
     min-height: 0;
     height: auto;
-    background: var(--bg);
+    background: var(--sand);
   }
 
   .heroImg {

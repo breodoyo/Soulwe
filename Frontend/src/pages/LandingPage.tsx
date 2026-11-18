@@ -148,15 +148,24 @@ export default function LandingPage() {
 
       {/* One flat sun overlay; ink copy must stay legible over the photo. */}
       <section className={styles.hero}>
-        <img
-          className={styles.heroImg}
-          src="/hero.jpg"
-          alt="Two women sit close together in tall golden grass, eyes closed, resting their heads together"
-          width={5760}
-          height={3840}
-          fetchPriority="high"
-          decoding="async"
-        />
+        <picture className={styles.heroPicture}>
+          <source media="(max-width: 767px)" srcSet="/hero-800.webp" type="image/webp" />
+          <source
+            type="image/webp"
+            srcSet="/hero-800.webp 800w, /hero-1600.webp 1600w"
+            sizes="100vw"
+          />
+          <img
+            className={styles.heroImg}
+            src="/hero-1600.webp"
+            alt="Two women sit close together in tall golden grass, eyes closed, resting their heads together"
+            width={1600}
+            height={1067}
+            fetchPriority="high"
+            loading="eager"
+            decoding="async"
+          />
+        </picture>
         <div className={styles.heroOverlay} aria-hidden="true" />
         <div className={styles.heroLayer}>
           <div className={styles.inner}>
