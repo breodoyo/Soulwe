@@ -17,7 +17,7 @@ func captureLogs(t *testing.T, fn func()) string {
 	t.Helper()
 	var buf bytes.Buffer
 	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	defer slog.SetDefault(previous)
 	fn()
 	return buf.String()
@@ -70,13 +70,84 @@ func TestReflectFailureLogHasNoEntryTextAndNoKey(t *testing.T) {
 func TestLogCallTruncatesTheProviderErrorMessage(t *testing.T) {
 	long := strings.Repeat("z", maxLoggedError+90)
 	logs := captureLogs(t, func() {
-		logCall(ProviderClaude, DefaultClaudeModel, time.Now(), errString(long))
+		logAttempt(ProviderClaude, DefaultClaudeModel, time.Now(), 1, errString(long))
 	})
 	if strings.Contains(logs, long) {
 		t.Errorf("the provider message was logged untruncated: %s", logs)
 	}
 	if !strings.Contains(logs, strings.Repeat("z", maxLoggedError)) {
 		t.Errorf("expected the first %d characters of the message: %s", maxLoggedError, logs)
+	}
+}
+
+func TestProvider400LogsOnlyStatusAndMessage(t *testing.T) {
+	longMessage := strings.Repeat("m", maxLoggedError+50)
+	message := "bad request for " + testAPIKey + " " + longMessage
+
+	t.Run(ProviderGemini, func(t *testing.T) {
+		const model = "gemini-3.5-flash-lite"
+		body := `{"type":"error","error":{"status":"INVALID_ARGUMENT","message":"` + message +
+			`","type":"request-body-secret","details":"journal-secret reflection-secret"}}`
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(body))
+		}))
+		defer srv.Close()
+
+		client := newGemini(testAPIKey, model, srv.URL+"/v1beta/models/"+model+":generateContent")
+		assertProvider400Log(t, client)
+	})
+
+	t.Run(ProviderClaude, func(t *testing.T) {
+		response := map[string]any{
+			"type": "error",
+			"error": map[string]any{
+				"status":  "INVALID_ARGUMENT",
+				"message": message,
+				"type":    "request-body-secret",
+				"details": "journal-secret reflection-secret",
+			},
+		}
+		srv := newFakeClaude(t, http.StatusBadRequest, response)
+		defer srv.Close()
+
+		client := newClaude(testAPIKey, testModel, srv.URL+"/v1/messages")
+		assertProvider400Log(t, client)
+	})
+}
+
+func assertProvider400Log(t *testing.T, client Reflector) {
+	t.Helper()
+	logs := captureLogs(t, func() {
+		if _, err := client.Reflect(context.Background(), testContent, nil); err == nil {
+			t.Fatal("expected the 400 to surface as an error")
+		}
+	})
+
+	for _, want := range []string{
+		`category="http status"`,
+		"http_status=400",
+		"provider_message=",
+		"status=INVALID_ARGUMENT",
+		"message=bad request for [redacted]",
+		strings.Repeat("m", 50),
+	} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("400 log missing %q: %s", want, logs)
+		}
+	}
+	for _, forbidden := range []string{
+		testContent,
+		testAPIKey,
+		"request-body-secret",
+		"journal-secret",
+		"reflection-secret",
+		strings.Repeat("m", maxLoggedError),
+	} {
+		if strings.Contains(logs, forbidden) {
+			t.Errorf("400 log must never contain %q: %s", forbidden, logs)
+		}
 	}
 }
 

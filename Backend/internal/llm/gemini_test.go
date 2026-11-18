@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -215,6 +216,100 @@ func TestGeminiRequestOmitsThinkingBudgetForUnsupportedModels(t *testing.T) {
 	}
 	if sawThinkingConfig {
 		t.Error("thinkingConfig must not be sent for a model that does not support thinkingBudget 0")
+	}
+}
+
+func TestSupportsZeroThinkingBudget(t *testing.T) {
+	tests := []struct {
+		model string
+		want  bool
+	}{
+		{"gemini-3.5-flash", true},
+		{"gemini-3.5-flash-lite", false},
+		{"gemini-3.1-flash-lite", false},
+		{"gemini-3.5-flash-image", false},
+		{"gemini-3.5-flash-tts", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.model, func(t *testing.T) {
+			if got := supportsZeroThinkingBudget(tc.model); got != tc.want {
+				t.Errorf("supportsZeroThinkingBudget(%q) = %v, want %v", tc.model, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGeminiReflectDropsThinkingConfigAfter400(t *testing.T) {
+	const model = "gemini-3.5-flash"
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&calls, 1)
+		if want := "/v1beta/models/" + model + ":generateContent"; r.URL.Path != want {
+			t.Errorf("expected path %s, got %s", want, r.URL.Path)
+		}
+		if got := r.Header.Get("x-goog-api-key"); got != testAPIKey {
+			t.Errorf("expected x-goog-api-key %q, got %q", testAPIKey, got)
+		}
+		var req struct {
+			GenerationConfig struct {
+				ThinkingConfig *struct {
+					ThinkingBudget *int `json:"thinkingBudget"`
+				} `json:"thinkingConfig"`
+			} `json:"generationConfig"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("could not decode request body: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		switch n {
+		case 1:
+			if req.GenerationConfig.ThinkingConfig == nil || req.GenerationConfig.ThinkingConfig.ThinkingBudget == nil {
+				t.Error("expected thinkingConfig on the first request")
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"status":"INVALID_ARGUMENT","message":"thinkingBudget not supported"}}`))
+		case 2:
+			if req.GenerationConfig.ThinkingConfig != nil {
+				t.Error("retry must omit thinkingConfig")
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}]}`))
+		default:
+			t.Errorf("unexpected request number %d", n)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer srv.Close()
+
+	g := newGemini(testAPIKey, model, srv.URL+"/v1beta/models/"+model+":generateContent")
+	var got string
+	var err error
+	logs := captureLogs(t, func() {
+		got, err = g.Reflect(context.Background(), testContent, nil)
+	})
+	if err != nil {
+		t.Fatalf("Reflect returned error: %v", err)
+	}
+	if got != "ok" {
+		t.Errorf("expected reflection %q, got %q", "ok", got)
+	}
+	if calls != 2 {
+		t.Errorf("expected 2 requests, got %d", calls)
+	}
+	for _, want := range []string{
+		"provider=" + ProviderGemini,
+		"model=" + model,
+		"thinkingConfig dropped",
+	} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("retry log missing %q: %s", want, logs)
+		}
+	}
+	for _, forbidden := range []string{testContent, testAPIKey} {
+		if strings.Contains(logs, forbidden) {
+			t.Errorf("retry log must never contain %q: %s", forbidden, logs)
+		}
 	}
 }
 
