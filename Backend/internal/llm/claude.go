@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // claudeResponse mirrors the slice of the Messages API response we read.
@@ -22,39 +21,54 @@ type claudeResponse struct {
 // Claude is the Anthropic implementation of Reflector. It holds only the API
 // key and model; it never stores or logs content.
 type Claude struct {
-	apiKey string
-	model  string
-	url    string
-	http   *http.Client
+	apiKey   string
+	model    string
+	fallback string
+	url      string
+	http     *http.Client
 }
 
 // NewClaude returns a Claude client for the given API key and model. An empty
 // key still produces a usable client whose calls fail with ErrNotConfigured.
 func NewClaude(apiKey, model string) *Claude {
-	return newClaude(apiKey, model, ClaudeMessagesURL)
+	return NewClaudeWithFallback(apiKey, model, "")
+}
+
+// NewClaudeWithFallback adds the optional fallback model used after repeated
+// 429 or 503 responses.
+func NewClaudeWithFallback(apiKey, model, fallback string) *Claude {
+	return newClaudeWithFallback(apiKey, model, fallback, ClaudeMessagesURL)
 }
 
 func newClaude(apiKey, model, url string) *Claude {
+	return newClaudeWithFallback(apiKey, model, "", url)
+}
+
+func newClaudeWithFallback(apiKey, model, fallback, url string) *Claude {
 	return &Claude{
-		apiKey: apiKey,
-		model:  model,
-		url:    url,
-		http:   &http.Client{},
+		apiKey:   apiKey,
+		model:    model,
+		fallback: fallback,
+		url:      url,
+		http:     &http.Client{},
 	}
 }
 
 // Reflect returns the trimmed reflection, or ErrNotConfigured when no API key is
 // set. Journal content never appears in the returned error.
-func (c *Claude) Reflect(ctx context.Context, entry string, moodTags []string) (out string, err error) {
-	start := time.Now()
-	defer func() { logCall(ProviderClaude, c.model, start, err) }()
+func (c *Claude) Reflect(ctx context.Context, entry string, moodTags []string) (string, error) {
+	return runReflection(ctx, ProviderClaude, c.model, c.fallback, func(callCtx context.Context, model string) (string, error) {
+		return c.reflectOnce(callCtx, model, entry, moodTags)
+	})
+}
 
+func (c *Claude) reflectOnce(ctx context.Context, model, entry string, moodTags []string) (string, error) {
 	if strings.TrimSpace(c.apiKey) == "" {
 		return "", ErrNotConfigured
 	}
 
 	body, err := json.Marshal(map[string]any{
-		"model":      c.model,
+		"model":      model,
 		"max_tokens": MaxTokens,
 		"system":     SystemPrompt,
 		"messages": []map[string]string{
@@ -68,10 +82,7 @@ func (c *Claude) Reflect(ctx context.Context, entry string, moodTags []string) (
 		return "", fmt.Errorf("llm: build claude request: %w", err)
 	}
 
-	callCtx, cancel := context.WithTimeout(ctx, RequestTimeout)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(callCtx, http.MethodPost, c.url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url, bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("llm: create claude request: %w", err)
 	}
@@ -86,9 +97,11 @@ func (c *Claude) Reflect(ctx context.Context, entry string, moodTags []string) (
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		// Drain a little so the connection can be reused, but never echo the body.
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			return "", newStatusErrorFromBody(ProviderClaude, resp.StatusCode, resp.Header, resp.Body, c.apiKey)
+		}
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		return "", &statusError{provider: ProviderClaude, status: resp.StatusCode}
+		return "", newStatusError(ProviderClaude, resp.StatusCode, resp.Header)
 	}
 
 	var parsed claudeResponse

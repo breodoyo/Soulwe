@@ -9,7 +9,7 @@ import (
 // envVars are all the variables NewFromEnv consults. Clearing them first keeps
 // the table cases independent of the developer's shell.
 var envVars = []string{
-	"LLM_PROVIDER", "LLM_MODEL",
+	"LLM_PROVIDER", "LLM_MODEL", "LLM_FALLBACK_MODEL",
 	"ANTHROPIC_API_KEY", "GEMINI_API_KEY",
 	"GEMINI_PAID", "APP_ENV", "ENV",
 }
@@ -28,12 +28,13 @@ func TestNewFromEnv(t *testing.T) {
 	const key = "test-key"
 
 	tests := []struct {
-		name      string
-		env       map[string]string
-		wantErr   bool
-		wantNil   bool
-		wantType  string
-		wantModel string
+		name         string
+		env          map[string]string
+		wantErr      bool
+		wantNil      bool
+		wantType     string
+		wantModel    string
+		wantFallback string
 	}{
 		{
 			name:      "defaults to claude when LLM_PROVIDER is unset",
@@ -51,6 +52,13 @@ func TestNewFromEnv(t *testing.T) {
 			env:       map[string]string{"ANTHROPIC_API_KEY": key, "LLM_MODEL": "claude-3-opus-latest"},
 			wantType:  "claude",
 			wantModel: "claude-3-opus-latest",
+		},
+		{
+			name:         "claude reads the optional fallback model",
+			env:          map[string]string{"ANTHROPIC_API_KEY": key, "LLM_FALLBACK_MODEL": "claude-3-opus-latest"},
+			wantType:     "claude",
+			wantModel:    DefaultClaudeModel,
+			wantFallback: "claude-3-opus-latest",
 		},
 		{
 			name:      "gemini in development is selected",
@@ -131,6 +139,9 @@ func TestNewFromEnv(t *testing.T) {
 				if c.model != tc.wantModel {
 					t.Errorf("expected model %q, got %q", tc.wantModel, c.model)
 				}
+				if c.fallback != tc.wantFallback {
+					t.Errorf("expected fallback %q, got %q", tc.wantFallback, c.fallback)
+				}
 			case "gemini":
 				g, ok := got.(*Gemini)
 				if !ok {
@@ -138,6 +149,9 @@ func TestNewFromEnv(t *testing.T) {
 				}
 				if g.model != tc.wantModel {
 					t.Errorf("expected model %q, got %q", tc.wantModel, g.model)
+				}
+				if g.fallback != tc.wantFallback {
+					t.Errorf("expected fallback %q, got %q", tc.wantFallback, g.fallback)
 				}
 			}
 		})

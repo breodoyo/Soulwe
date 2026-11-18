@@ -4,18 +4,22 @@
 //
 // Only the journal text a reflection needs is sent; credentials, database
 // details and user identity never leave the backend, and journal content is
-// never logged. A failed call logs only the provider, model, latency, a coarse
-// error category, the HTTP status when there is one, and our own error message
-// capped at 200 characters.
+// never logged. A failed attempt logs only the provider, model, attempt,
+// elapsed time, a coarse error category, the HTTP status, a safe 4xx error
+// summary when present, and our own error message capped at 200 characters.
 package llm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -46,8 +50,11 @@ const (
 	// consume the whole output budget and return an empty candidate.
 	GeminiMaxTokens = 1024
 
-	// RequestTimeout bounds one reflection call; it must stay below WriteTimeout.
+	// RequestTimeout bounds a whole reflection, including retries and fallback.
 	RequestTimeout = 60 * time.Second
+
+	attemptTimeout      = 18 * time.Second
+	defaultRetryBackoff = time.Second
 
 	// ProviderClaude and ProviderGemini are the accepted LLM_PROVIDER values.
 	ProviderClaude = "claude"
@@ -72,14 +79,81 @@ var ErrEmpty = errors.New("llm: response contained no text")
 const maxLoggedError = 200
 
 // statusError is a non-200 answer from a provider. Its message carries the
-// status code only: the response body is drained and dropped, never echoed.
+// status code only; a safe 4xx summary is kept for logging.
 type statusError struct {
-	provider string
-	status   int
+	provider        string
+	status          int
+	retryAfter      time.Duration
+	providerMessage string
 }
 
 func (e *statusError) Error() string {
 	return fmt.Sprintf("llm: %s returned status %d", e.provider, e.status)
+}
+
+func newStatusError(provider string, status int, header http.Header) *statusError {
+	err := &statusError{provider: provider, status: status}
+	if status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable {
+		err.retryAfter = parseRetryAfter(header)
+	}
+	return err
+}
+
+func newStatusErrorFromBody(provider string, status int, header http.Header, body io.Reader, apiKey string) *statusError {
+	err := newStatusError(provider, status, header)
+	err.providerMessage = parseProviderMessage(body, apiKey)
+	return err
+}
+
+func parseProviderMessage(body io.Reader, apiKey string) string {
+	var parsed struct {
+		Error struct {
+			Status  json.RawMessage `json:"status"`
+			Message string          `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(io.LimitReader(body, 4096)).Decode(&parsed); err != nil {
+		return ""
+	}
+
+	var status string
+	if raw := string(parsed.Error.Status); raw != "" && raw != "null" {
+		if err := json.Unmarshal(parsed.Error.Status, &status); err != nil {
+			status = raw
+		}
+	}
+	parts := make([]string, 0, 2)
+	if status != "" {
+		parts = append(parts, "status="+status)
+	}
+	if parsed.Error.Message != "" {
+		parts = append(parts, "message="+parsed.Error.Message)
+	}
+	message := strings.Join(parts, " ")
+	if apiKey != "" {
+		message = strings.ReplaceAll(message, apiKey, "[redacted]")
+	}
+	return message
+}
+
+func parseRetryAfter(header http.Header) time.Duration {
+	raw := strings.TrimSpace(header.Get("Retry-After"))
+	if raw == "" {
+		return defaultRetryBackoff
+	}
+	var delay time.Duration
+	if seconds, err := strconv.Atoi(raw); err == nil && seconds >= 0 {
+		delay = time.Duration(seconds) * time.Second
+	} else if when, err := http.ParseTime(raw); err == nil {
+		delay = time.Until(when)
+	}
+	if delay < defaultRetryBackoff {
+		return defaultRetryBackoff
+	}
+	if delay > RequestTimeout {
+		return RequestTimeout
+	}
+	return delay
 }
 
 // statusOf reports the HTTP status behind an error, or 0 when there was none.
@@ -104,6 +178,8 @@ func statusMeaning(status int) string {
 		return "404 not found: the provider has no such endpoint or model"
 	case http.StatusTooManyRequests:
 		return "429 too many requests: the provider rate limit was hit"
+	case http.StatusServiceUnavailable:
+		return "503 service unavailable: the provider is overloaded"
 	default:
 		return ""
 	}
@@ -138,6 +214,7 @@ func NewFromEnv() (Reflector, error) {
 		provider = ProviderClaude
 	}
 	model := strings.TrimSpace(os.Getenv("LLM_MODEL"))
+	fallback := strings.TrimSpace(os.Getenv("LLM_FALLBACK_MODEL"))
 
 	switch provider {
 	case ProviderClaude:
@@ -150,7 +227,7 @@ func NewFromEnv() (Reflector, error) {
 			return nil, nil
 		}
 		logStartup(provider, model, true)
-		return NewClaude(key, model), nil
+		return NewClaudeWithFallback(key, model, fallback), nil
 	case ProviderGemini:
 		if model == "" {
 			model = DefaultGeminiModel
@@ -164,7 +241,7 @@ func NewFromEnv() (Reflector, error) {
 			return nil, fmt.Errorf("llm: gemini is enabled in production but GEMINI_PAID is not \"true\"")
 		}
 		logStartup(provider, model, true)
-		return NewGemini(key, model), nil
+		return NewGeminiWithFallback(key, model, fallback), nil
 	default:
 		return nil, fmt.Errorf("llm: unknown LLM_PROVIDER %q", provider)
 	}
@@ -210,29 +287,101 @@ func reflectionPrompt(entry string, moodTags []string) string {
 	return b.String()
 }
 
-// logCall records a failed provider call. It is meant to be deferred with the
-// named error return.
-//
-// It never logs the request or response body, the API key, the journal entry or
-// any user identity: the only text it emits is our own error string, which
-// carries a status code or a transport failure, capped at maxLoggedError
-// characters.
-func logCall(provider, model string, start time.Time, err error) {
-	if err == nil {
-		return
+func runReflection(ctx context.Context, provider, model, fallback string, call func(context.Context, string) (string, error)) (string, error) {
+	parent, cancel := context.WithTimeout(ctx, RequestTimeout)
+	defer cancel()
+	start := time.Now()
+
+	do := func(attempt int, currentModel string) (string, error) {
+		attemptCtx, attemptCancel := context.WithTimeout(parent, attemptTimeout)
+		defer attemptCancel()
+		out, err := call(attemptCtx, currentModel)
+		logAttempt(provider, currentModel, start, attempt, err)
+		return out, err
 	}
+
+	out, err := do(1, model)
+	if err == nil || !retryable(err) {
+		return out, err
+	}
+	if err := waitForRetry(parent, backoffFor(err)); err != nil {
+		return "", err
+	}
+
+	out, err = do(2, model)
+	if err == nil || fallback == "" || fallback == model || !statusRetryable(err) {
+		return out, err
+	}
+	if err := waitForRetry(parent, backoffFor(err)); err != nil {
+		return "", err
+	}
+
+	return do(3, fallback)
+}
+
+func waitForRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func retryable(err error) bool {
+	if statusRetryable(err) {
+		return true
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+func statusRetryable(err error) bool {
+	status := statusOf(err)
+	return status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable
+}
+
+func backoffFor(err error) time.Duration {
+	var statusErr *statusError
+	if errors.As(err, &statusErr) && statusErr.retryAfter > 0 {
+		return statusErr.retryAfter
+	}
+	return defaultRetryBackoff
+}
+
+// logAttempt records one provider attempt.
+//
+// It never logs the request body, the API key, the journal entry or any user
+// identity: the only text it emits is our own error string and a 4xx summary
+// built solely from error.status and error.message, both capped at
+// maxLoggedError characters.
+func logAttempt(provider, model string, start time.Time, attempt int, err error) {
 	attrs := []any{
 		slog.String("provider", provider),
 		slog.String("model", model),
-		slog.Duration("latency", time.Since(start)),
+		slog.Int("attempt", attempt),
+		slog.Duration("elapsed", time.Since(start)),
 		slog.String("category", errorType(err)),
-		slog.String("error", truncateForLog(err.Error())),
 	}
+	if err == nil {
+		slog.Debug("llm request succeeded", attrs...)
+		return
+	}
+	attrs = append(attrs, slog.String("error", truncateForLog(err.Error())))
 	if status := statusOf(err); status != 0 {
 		attrs = append(attrs, slog.Int("http_status", status))
 		if plain := statusMeaning(status); plain != "" {
 			attrs = append(attrs, slog.String("http_status_plain", plain))
 		}
+	}
+	var statusErr *statusError
+	if errors.As(err, &statusErr) && statusErr.providerMessage != "" {
+		attrs = append(attrs, slog.String("provider_message", truncateForLog(statusErr.providerMessage)))
 	}
 	var failure *geminiFailure
 	if errors.As(err, &failure) {
@@ -262,6 +411,8 @@ func truncateForLog(s string) string {
 // without ever carrying content or raw upstream bodies.
 func errorType(err error) string {
 	switch {
+	case err == nil:
+		return "ok"
 	case errors.Is(err, ErrNotConfigured):
 		return "config missing"
 	case statusOf(err) != 0:
